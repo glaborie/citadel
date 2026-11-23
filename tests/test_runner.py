@@ -82,10 +82,17 @@ def test_extra_fields_are_rejected(client: TestClient) -> None:
 
 def test_child_environment_is_scrubbed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "should-not-leak")
+    monkeypatch.setenv("GH_TOKEN", "ghp_secret")
     monkeypatch.setenv("DOCKER_HOST", "tcp://docker-socket-proxy:2375")
-    env = runner._child_env()
+    env = runner._child_env("docker")
     assert "AWS_SECRET_ACCESS_KEY" not in env
+    assert "GH_TOKEN" not in env, "only gh may see the token"
     assert env["DOCKER_HOST"] == "tcp://docker-socket-proxy:2375"
+
+
+def test_gh_is_given_the_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GH_TOKEN", "ghp_secret")
+    assert runner._child_env("gh")["GH_TOKEN"] == "ghp_secret"
 
 
 def test_large_output_is_truncated() -> None:

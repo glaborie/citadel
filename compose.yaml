@@ -18,6 +18,7 @@ x-logging: &logging
 x-app: &app
   build:
     context: .
+    target: app
   image: citadel-app:0.1.0
   env_file: .env
   restart: unless-stopped
@@ -331,7 +332,8 @@ services:
   operator:
     build:
       context: .
-    image: citadel-app:0.1.0
+      target: operator
+    image: citadel-operator:0.1.0
     # The only component that writes. It never sees model output; it accepts a
     # validated (tenant, run, tool, arguments) tuple plus a signed approval
     # token. See ADR-023 item 3.
@@ -371,6 +373,26 @@ services:
     networks:
       - internal
 
+  github-egress:
+    image: ubuntu/squid:latest@sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029
+    volumes:
+      - ./squid/github-egress.conf:/etc/squid/squid.conf:ro
+    # Squid's entrypoint drops to the proxy user, which needs SETUID/SETGID, so
+    # this one service keeps its default capabilities. It is a fixed-config
+    # proxy whose only reachable destination is api.github.com.
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/3128"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging: *logging
+    networks:
+      - internal
+      - edge
+
   docker-socket-proxy:
     image: tecnativa/docker-socket-proxy:latest@sha256:be1ac64f33bd82043beb504822a17ba6b71668ea1ad7cf51a9a01d27bb7ab047
     # Read-only surface only: listing, inspection and logs. POST stays off so
@@ -403,7 +425,8 @@ services:
   tool-runner:
     build:
       context: .
-    image: citadel-app:0.1.0
+      target: sandbox
+    image: citadel-sandbox:0.1.0
     # Hardened sandbox per ADR-012/ADR-023. gVisor runsc is unavailable on this
     # host, so these flags plus the proxy split are the whole isolation boundary.
     command:
@@ -423,6 +446,13 @@ services:
     mem_limit: 512m
     environment:
       DOCKER_HOST: tcp://docker-socket-proxy:2375
+      # All sandbox egress goes through the domain-allowlisted proxy.
+      HTTPS_PROXY: http://github-egress:3128
+      HTTP_PROXY: http://github-egress:3128
+      # Loopback and in-stack calls must never traverse the egress proxy.
+      NO_PROXY: localhost,127.0.0.1,docker-socket-proxy
+      no_proxy: localhost,127.0.0.1,docker-socket-proxy
+      GH_TOKEN: ${GH_TOKEN:-unset}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8020/healthz', timeout=3)"]
       interval: 15s

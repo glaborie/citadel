@@ -21,8 +21,10 @@ from citadel.tools import CommandDenied, build_argv, requires_redaction
 COMMAND_TIMEOUT_SECONDS = 30
 MAX_OUTPUT_BYTES = 64_000
 
-# Nothing from the ambient environment reaches the child process.
-SAFE_ENV_KEYS = ("PATH", "DOCKER_HOST", "HOME")
+# Nothing from the ambient environment reaches the child process. The GitHub
+# token is only exposed to `gh`, so `docker ps` cannot read it.
+SAFE_ENV_KEYS = ("PATH", "DOCKER_HOST", "HOME", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY")
+BINARY_ENV_KEYS = {"gh": ("GH_TOKEN",)}
 
 app = FastAPI(title="Citadel Tool Runner", version=__version__)
 
@@ -43,8 +45,9 @@ class ExecuteResponse(BaseModel):
     truncated: bool
 
 
-def _child_env() -> dict[str, str]:
-    env = {key: os.environ[key] for key in SAFE_ENV_KEYS if key in os.environ}
+def _child_env(binary: str = "") -> dict[str, str]:
+    keys = SAFE_ENV_KEYS + BINARY_ENV_KEYS.get(binary, ())
+    env = {key: os.environ[key] for key in keys if key in os.environ}
     env.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
     env.setdefault("HOME", "/tmp")
     return env
@@ -57,7 +60,7 @@ def run(argv: list[str]) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         timeout=COMMAND_TIMEOUT_SECONDS,
-        env=_child_env(),
+        env=_child_env(argv[0] if argv else ""),
         shell=False,
         check=False,
     )
