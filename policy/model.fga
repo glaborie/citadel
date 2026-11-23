@@ -1,0 +1,21 @@
+model
+  schema 1.1
+
+type user
+
+type tenant
+  relations
+    define member: [user]
+
+type agent
+  relations
+    define tenant: [tenant]
+    # Anyone who is a member of the agent's tenant may invoke it.
+    define invoker: [user] or member from tenant
+
+type tool
+  relations
+    define tenant: [tenant]
+    # Which agent owns this tool. A tool with no agent relation is callable by nobody.
+    define agent: [agent]
+    define can_call: [user] or invoker from agent

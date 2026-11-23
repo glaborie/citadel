@@ -164,3 +164,46 @@ def test_app_role_cannot_bypass_rls() -> None:
         "SELECT rolsuper || ',' || rolbypassrls FROM pg_roles WHERE rolname='citadel_app';"
     )
     assert row == "false,false"
+
+
+def _new_run(token: str, agent: str = "docker") -> str:
+    status, created = api_call("POST", "/runs", token, {"agent_id": agent, "risk_tier": "T0"})
+    assert status == 201, created
+    run_id: str = created["run_id"]
+    return run_id
+
+
+def _authorize(token: str, tool: str, run_id: str, agent: str = "docker") -> tuple[int, Any]:
+    return api_call(
+        "POST", "/policy/authorize", token, {"agent_id": agent, "tool": tool, "run_id": run_id}
+    )
+
+
+def test_policy_allows_a_t0_tool_in_own_tenant() -> None:
+    token = user_token("alice")
+    status, decision = _authorize(token, "read_logs", _new_run(token))
+    assert status == 200
+    assert decision["outcome"] == "allow"
+    assert decision["tier"] == "T0"
+
+
+def test_policy_gates_a_t1_tool_behind_approval() -> None:
+    token = user_token("alice")
+    _status, decision = _authorize(token, "restart_service", _new_run(token))
+    assert decision["outcome"] == "requires_approval"
+    assert decision["tier"] == "T1"
+
+
+def test_policy_denies_t2_and_unknown_tools() -> None:
+    token = user_token("alice")
+    run_id = _new_run(token)
+    assert _authorize(token, "delete_volume", run_id)[1]["outcome"] == "deny"
+    assert _authorize(token, "exfiltrate_secrets", run_id)[1]["rule_id"] == "tool.unknown"
+
+
+def test_policy_denies_another_tenants_run() -> None:
+    """Red team: bob cannot authorise a tool call against alice's run."""
+    alice_run = _new_run(user_token("alice"))
+    _status, decision = _authorize(user_token("bob"), "read_logs", alice_run)
+    assert decision["outcome"] == "deny"
+    assert decision["rule_id"] == "identity.unknown_run"

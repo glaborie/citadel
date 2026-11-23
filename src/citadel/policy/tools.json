@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "comment": "Tool catalog. Classification is enforced by policy, never by a SKILL.md. See docs/security/tool-tiers.md.",
+  "tiers": {
+    "T0": "allow",
+    "T1": "requires_approval",
+    "T2": "deny"
+  },
+  "tools": {
+    "inspect_containers": { "tier": "T0", "agent": "docker" },
+    "read_logs": { "tier": "T0", "agent": "docker" },
+    "get_service_health": { "tier": "T0", "agent": "docker" },
+    "restart_service": { "tier": "T1", "agent": "docker" },
+    "search_code": { "tier": "T0", "agent": "github" },
+    "get_pr_status": { "tier": "T0", "agent": "github" },
+    "open_remediation_pr": { "tier": "T1", "agent": "github" },
+    "delete_volume": { "tier": "T2", "agent": "docker" },
+    "force_push": { "tier": "T2", "agent": "github" }
+  }
+}

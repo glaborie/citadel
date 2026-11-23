@@ -14,6 +14,7 @@ FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb
 RUN useradd --create-home --uid 10001 citadel
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
+COPY policy /app/policy
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 USER citadel

@@ -1,0 +1,121 @@
+"""Policy chokepoint: every path must fail closed.
+
+The checker is faked so these run without OpenFGA; the live equivalents are in
+tests/test_tenancy_live.py.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import pytest
+
+from citadel.policy import AuthorizationRequest, Decision, authorize, load_catalog
+
+
+@dataclass
+class FakeChecker:
+    allowed: bool = True
+    error: Exception | None = None
+    calls: int = 0
+
+    def can_call(self, *, user: str, obj: str) -> bool:
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return self.allowed
+
+
+def request(**overrides: str) -> AuthorizationRequest:
+    base = {
+        "user_id": "user-alice",
+        "tenant_id": "lab-a",
+        "run_id": "run-1",
+        "agent_id": "docker",
+        "tool": "read_logs",
+    }
+    base.update(overrides)
+    return AuthorizationRequest(**base)
+
+
+def test_t0_allowed_for_authorised_user() -> None:
+    checker = FakeChecker()
+    assert authorize(request(), checker) == Decision(
+        outcome="allow", rule_id="policy.allowed", reason="allowed", tier="T0"
+    )
+    assert checker.calls == 1
+
+
+def test_t1_requires_approval() -> None:
+    decision = authorize(request(tool="restart_service"), FakeChecker())
+    assert decision.outcome == "requires_approval"
+    assert decision.tier == "T1"
+
+
+@pytest.mark.parametrize("tool", ["delete_volume", "force_push"])
+def test_t2_is_denied_without_consulting_policy(tool: str) -> None:
+    checker = FakeChecker()
+    decision = authorize(request(tool=tool), checker)
+    assert decision.outcome == "deny"
+    assert decision.rule_id == "tool.tier_denied"
+    assert checker.calls == 0, "T2 must be refused before any relationship lookup"
+
+
+def test_unknown_tool_is_denied() -> None:
+    decision = authorize(request(tool="exfiltrate_secrets"), FakeChecker())
+    assert decision.rule_id == "tool.unknown"
+
+
+def test_agent_cannot_call_another_agents_tool() -> None:
+    """Red team: the docker agent asking for a GitHub tool."""
+    decision = authorize(request(agent_id="docker", tool="search_code"), FakeChecker())
+    assert decision.outcome == "deny"
+    assert decision.rule_id == "tool.agent_mismatch"
+
+
+@pytest.mark.parametrize(
+    ("field", "rule"),
+    [
+        ("tenant_id", "identity.missing_tenant"),
+        ("user_id", "identity.missing_user"),
+        ("run_id", "identity.missing_run"),
+        ("agent_id", "identity.missing_agent"),
+    ],
+)
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_missing_identity_fields_are_denied(field: str, rule: str, blank: str) -> None:
+    assert authorize(request(**{field: blank}), FakeChecker()).rule_id == rule
+
+
+def test_policy_says_no() -> None:
+    decision = authorize(request(), FakeChecker(allowed=False))
+    assert decision.outcome == "deny"
+    assert decision.rule_id == "policy.denied"
+
+
+def test_policy_service_error_fails_closed() -> None:
+    """Red team: an unreachable policy service must never allow."""
+    checker = FakeChecker(error=RuntimeError("connection refused"))
+    decision = authorize(request(), checker)
+    assert decision.outcome == "deny"
+    assert decision.rule_id == "policy.unavailable"
+
+
+def test_empty_catalog_denies_everything() -> None:
+    for tool in load_catalog():
+        assert authorize(request(tool=tool), FakeChecker(), catalog={}).outcome == "deny"
+
+
+def test_catalog_covers_the_documented_tiers() -> None:
+    catalog = load_catalog()
+    assert catalog["read_logs"].tier == "T0"
+    assert catalog["restart_service"].tier == "T1"
+    assert catalog["open_remediation_pr"].tier == "T1"
+    assert catalog["delete_volume"].tier == "T2"
+    assert {spec.agent for spec in catalog.values()} == {"docker", "github"}
+
+
+def test_t1_tools_are_exactly_the_two_allowed() -> None:
+    """v0.1 permits exactly two write tools; a third must not slip in."""
+    t1 = sorted(name for name, spec in load_catalog().items() if spec.tier == "T1")
+    assert t1 == ["open_remediation_pr", "restart_service"]
