@@ -2,12 +2,12 @@
 
 from fastapi.testclient import TestClient
 
-from citadel.api.app import app as api_app
+from citadel.api.app import create_app
 from citadel.ui.app import app as ui_app
 
 
 def test_api_healthz() -> None:
-    response = TestClient(api_app).get("/healthz")
+    response = TestClient(create_app()).get("/healthz")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 

@@ -10,6 +10,8 @@ requires-python = ">=3.12"
 dynamic = ["version"]
 dependencies = [
     "fastapi>=0.115",
+    "psycopg[binary]>=3.2",
+    "pyjwt[crypto]>=2.10",
     "uvicorn>=0.32",
 ]
 

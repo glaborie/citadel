@@ -40,10 +40,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      CITADEL_DB_PASSWORD: ${CITADEL_DB_PASSWORD}
     volumes:
       # Postgres 18 keeps PGDATA under /var/lib/postgresql/<major>/docker.
       - postgres-data:/var/lib/postgresql
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./migrations:/migrations:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -60,6 +62,7 @@ services:
       - --http-enabled=true
       - --hostname-strict=false
       - --health-enabled=true
+      - --import-realm
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
@@ -68,6 +71,11 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       KC_HEALTH_ENABLED: "true"
+      # Fixed issuer so tokens validate the same way from the host and from
+      # inside the network; the API fetches JWKS over the internal URL.
+      KC_HOSTNAME: http://localhost:18081
+    volumes:
+      - ./docker/keycloak:/opt/keycloak/data/import:ro
     ports:
       - "18081:8080"
     depends_on:
@@ -219,7 +227,18 @@ services:
 
   api:
     <<: *app
-    command: ["uvicorn", "citadel.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    command:
+      - uvicorn
+      - citadel.api.app:create_app
+      - --factory
+      - --host=0.0.0.0
+      - --port=8000
+    environment:
+      KEYCLOAK_ISSUER: http://localhost:18081/realms/citadel
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/citadel/protocol/openid-connect/certs
+      KEYCLOAK_AUDIENCE: citadel-agent
+      CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CITADEL_RUN_TOKEN_PRIVATE_KEY: ${CITADEL_RUN_TOKEN_PRIVATE_KEY}
     ports:
       - "18000:8000"
     depends_on:
@@ -258,6 +277,7 @@ services:
     command: ["python", "-m", "citadel.worker"]
     environment:
       CITADEL_WORKER_ROLE: orchestrator
+      CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
     depends_on:
       temporal:
         condition: service_healthy
@@ -270,6 +290,7 @@ services:
     command: ["python", "-m", "citadel.worker"]
     environment:
       CITADEL_WORKER_ROLE: docker
+      CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
     depends_on:
       temporal:
         condition: service_healthy
@@ -282,6 +303,7 @@ services:
     command: ["python", "-m", "citadel.worker"]
     environment:
       CITADEL_WORKER_ROLE: github
+      CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
     depends_on:
       temporal:
         condition: service_healthy
