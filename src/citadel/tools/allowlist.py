@@ -32,6 +32,8 @@ class AllowedCommand:
     flags: frozenset[str]
     flags_with_value: frozenset[str]
     max_positional: int
+    # "definitive" = output discloses secrets by design, "possible" = may.
+    content_risk: str | None = None
 
 
 def load_allowlist() -> tuple[AllowedCommand, ...]:
@@ -47,6 +49,7 @@ def load_allowlist() -> tuple[AllowedCommand, ...]:
             flags=frozenset(entry.get("flags", [])),
             flags_with_value=frozenset(entry.get("flags_with_value", [])),
             max_positional=int(entry.get("max_positional", 0)),
+            content_risk=entry.get("content_risk"),
         )
         for entry in raw["commands"]
     )
@@ -121,10 +124,16 @@ def match(tokens: Sequence[str], *, agent: str) -> AllowedCommand:
     raise CommandDenied(f"command not allowlisted for {agent}: {' '.join(tokens[:3])}")
 
 
+def requires_redaction(command: AllowedCommand) -> bool:
+    """True when the command's output is not safe to show without DLP."""
+    return command.content_risk is not None
+
+
 def audit_view(command: AllowedCommand, tokens: Sequence[str]) -> dict[str, Any]:
     return {
         "allowlist_id": command.id,
         "agent": command.agent,
         "tier": command.tier,
+        "content_risk": command.content_risk,
         "argv": list(tokens),
     }

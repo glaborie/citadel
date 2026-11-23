@@ -1,4 +1,4 @@
-"""Tool execution: allowlisted commands, run without a shell."""
+"""Tool invocation: from a policy-approved tool name to a verified argv."""
 
 from citadel.tools.allowlist import (
     AllowedCommand,
@@ -6,6 +6,16 @@ from citadel.tools.allowlist import (
     audit_view,
     load_allowlist,
     match,
+    requires_redaction,
 )
+from citadel.tools.invoke import build_argv
 
-__all__ = ["AllowedCommand", "CommandDenied", "audit_view", "load_allowlist", "match"]
+__all__ = [
+    "AllowedCommand",
+    "CommandDenied",
+    "audit_view",
+    "build_argv",
+    "load_allowlist",
+    "match",
+    "requires_redaction",
+]

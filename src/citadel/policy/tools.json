@@ -1,20 +1,55 @@
 {
-  "version": 1,
-  "comment": "Tool catalog. Classification is enforced by policy, never by a SKILL.md. See docs/security/tool-tiers.md.",
+  "version": 2,
+  "comment": "Tool catalog. Classification is enforced by policy, never by a SKILL.md. 'command' links a tool to a command allowlist entry; a tool without one is authorisable but not executable. See docs/security/tool-tiers.md and docs/adr/ADR-023.md.",
   "tiers": {
     "T0": "allow",
     "T1": "requires_approval",
     "T2": "deny"
   },
   "tools": {
-    "inspect_containers": { "tier": "T0", "agent": "docker" },
-    "read_logs": { "tier": "T0", "agent": "docker" },
-    "get_service_health": { "tier": "T0", "agent": "docker" },
-    "restart_service": { "tier": "T1", "agent": "docker" },
-    "search_code": { "tier": "T0", "agent": "github" },
-    "get_pr_status": { "tier": "T0", "agent": "github" },
-    "open_remediation_pr": { "tier": "T1", "agent": "github" },
-    "delete_volume": { "tier": "T2", "agent": "docker" },
-    "force_push": { "tier": "T2", "agent": "github" }
+    "inspect_containers": {
+      "tier": "T0",
+      "agent": "docker",
+      "command": "docker.ps",
+      "params": []
+    },
+    "read_logs": {
+      "tier": "T0",
+      "agent": "docker",
+      "command": "docker.compose.logs",
+      "params": [{ "name": "service", "in": "positional", "max_length": 64 }]
+    },
+    "get_service_health": {
+      "tier": "T0",
+      "agent": "docker",
+      "command": "docker.ps",
+      "params": []
+    },
+    "restart_service": {
+      "tier": "T1",
+      "agent": "docker",
+      "command": "docker.compose.restart",
+      "params": [{ "name": "service", "in": "positional", "max_length": 64, "required": true }]
+    },
+    "search_code": {
+      "tier": "T0",
+      "agent": "github",
+      "command": null,
+      "params": []
+    },
+    "get_pr_status": {
+      "tier": "T0",
+      "agent": "github",
+      "command": "gh.pr.list",
+      "params": [{ "name": "repo", "in": "flag", "flag": "--repo", "max_length": 128 }]
+    },
+    "open_remediation_pr": {
+      "tier": "T1",
+      "agent": "github",
+      "command": null,
+      "params": []
+    },
+    "delete_volume": { "tier": "T2", "agent": "docker", "command": null, "params": [] },
+    "force_push": { "tier": "T2", "agent": "github", "command": null, "params": [] }
   }
 }

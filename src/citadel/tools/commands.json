@@ -1,114 +1,267 @@
 {
   "version": 1,
-  "comment": "Pre-approved CLI commands. Anything not matched is denied. Executed as an argv list with shell=False; no shell, pipes or redirection.",
+  "comment": "Pre-approved CLI commands. Anything not matched is denied. Executed as an argv list with shell=False; no shell, pipes or redirection. content_risk marks commands whose OUTPUT can disclose secrets: 'definitive' means by design (env dumps, interpolated config), 'possible' means it may appear in normal content. The allowlist constrains actions, not content; 'definitive' commands must not be registered in the tool catalog until the DLP wrapper redacts their output.",
   "commands": [
     {
       "id": "docker.compose.ps",
       "agent": "docker",
       "tier": "T0",
-      "argv": ["docker", "compose", "ps"],
-      "flags": ["--all", "--quiet", "-a", "-q"],
-      "flags_with_value": ["--format", "--filter"],
-      "max_positional": 1
+      "argv": [
+        "docker",
+        "compose",
+        "ps"
+      ],
+      "flags": [
+        "--all",
+        "--quiet",
+        "-a",
+        "-q"
+      ],
+      "flags_with_value": [
+        "--format",
+        "--filter"
+      ],
+      "max_positional": 1,
+      "content_risk": null
     },
     {
       "id": "docker.compose.logs",
       "agent": "docker",
       "tier": "T0",
-      "argv": ["docker", "compose", "logs"],
-      "flags": ["--no-color", "--timestamps", "--follow", "-f", "-t"],
-      "flags_with_value": ["--tail", "--since", "--until"],
-      "max_positional": 2
+      "argv": [
+        "docker",
+        "compose",
+        "logs"
+      ],
+      "flags": [
+        "--no-color",
+        "--timestamps",
+        "--follow",
+        "-f",
+        "-t"
+      ],
+      "flags_with_value": [
+        "--tail",
+        "--since",
+        "--until"
+      ],
+      "max_positional": 2,
+      "content_risk": "possible",
+      "content_note": "Applications routinely log secrets. Allowed for troubleshooting; output must pass DLP at step 7."
     },
     {
       "id": "docker.compose.config",
       "agent": "docker",
       "tier": "T0",
-      "argv": ["docker", "compose", "config"],
-      "flags": ["--quiet", "--services", "--volumes", "--no-interpolate", "-q"],
-      "flags_with_value": ["--format"],
-      "max_positional": 0
+      "argv": [
+        "docker",
+        "compose",
+        "config"
+      ],
+      "flags": [
+        "--quiet",
+        "--services",
+        "--volumes",
+        "--no-interpolate",
+        "-q"
+      ],
+      "flags_with_value": [
+        "--format"
+      ],
+      "max_positional": 0,
+      "content_risk": "definitive",
+      "content_note": "Prints the fully interpolated compose file, including values supplied from .env. Not registered in the tool catalog until DLP redacts output."
     },
     {
       "id": "docker.ps",
       "agent": "docker",
       "tier": "T0",
-      "argv": ["docker", "ps"],
-      "flags": ["--all", "--quiet", "--no-trunc", "-a", "-q"],
-      "flags_with_value": ["--filter", "--format", "--last"],
-      "max_positional": 0
+      "argv": [
+        "docker",
+        "ps"
+      ],
+      "flags": [
+        "--all",
+        "--quiet",
+        "--no-trunc",
+        "-a",
+        "-q"
+      ],
+      "flags_with_value": [
+        "--filter",
+        "--format",
+        "--last"
+      ],
+      "max_positional": 0,
+      "content_risk": null
     },
     {
       "id": "docker.inspect",
       "agent": "docker",
       "tier": "T0",
-      "argv": ["docker", "inspect"],
-      "flags": ["--size", "--type", "-s"],
-      "flags_with_value": ["--format"],
-      "max_positional": 2
+      "argv": [
+        "docker",
+        "inspect"
+      ],
+      "flags": [
+        "--size",
+        "--type",
+        "-s"
+      ],
+      "flags_with_value": [
+        "--format"
+      ],
+      "max_positional": 2,
+      "content_risk": "definitive",
+      "content_note": "Prints .Config.Env and full container metadata, which carries secrets. Not registered in the tool catalog until DLP redacts output."
     },
     {
       "id": "docker.compose.restart",
       "agent": "docker",
       "tier": "T1",
-      "argv": ["docker", "compose", "restart"],
-      "flags": ["--no-deps"],
+      "argv": [
+        "docker",
+        "compose",
+        "restart"
+      ],
+      "flags": [
+        "--no-deps"
+      ],
       "flags_with_value": [],
-      "max_positional": 2
+      "max_positional": 2,
+      "content_risk": null
     },
     {
       "id": "gh.pr.list",
       "agent": "github",
       "tier": "T0",
-      "argv": ["gh", "pr", "list"],
-      "flags": ["--draft", "--merged", "--closed", "--open"],
-      "flags_with_value": ["--repo", "--base", "--head", "--label", "--limit", "--search", "--state"],
-      "max_positional": 0
+      "argv": [
+        "gh",
+        "pr",
+        "list"
+      ],
+      "flags": [
+        "--draft",
+        "--merged",
+        "--closed",
+        "--open"
+      ],
+      "flags_with_value": [
+        "--repo",
+        "--base",
+        "--head",
+        "--label",
+        "--limit",
+        "--search",
+        "--state"
+      ],
+      "max_positional": 0,
+      "content_risk": null
     },
     {
       "id": "gh.pr.view",
       "agent": "github",
       "tier": "T0",
-      "argv": ["gh", "pr", "view"],
-      "flags": ["--comments", "--web=false"],
-      "flags_with_value": ["--repo", "--json", "--template"],
-      "max_positional": 1
+      "argv": [
+        "gh",
+        "pr",
+        "view"
+      ],
+      "flags": [
+        "--comments",
+        "--web=false"
+      ],
+      "flags_with_value": [
+        "--repo",
+        "--json",
+        "--template"
+      ],
+      "max_positional": 1,
+      "content_risk": "possible",
+      "content_note": "May contain secrets pasted into PR bodies or comments."
     },
     {
       "id": "gh.pr.diff",
       "agent": "github",
       "tier": "T0",
-      "argv": ["gh", "pr", "diff"],
-      "flags": ["--patch", "--name-only", "--color=never"],
-      "flags_with_value": ["--repo"],
-      "max_positional": 1
+      "argv": [
+        "gh",
+        "pr",
+        "diff"
+      ],
+      "flags": [
+        "--patch",
+        "--name-only",
+        "--color=never"
+      ],
+      "flags_with_value": [
+        "--repo"
+      ],
+      "max_positional": 1,
+      "content_risk": "possible",
+      "content_note": "Diffs routinely contain credentials and tokens."
     },
     {
       "id": "gh.repo.view",
       "agent": "github",
       "tier": "T0",
-      "argv": ["gh", "repo", "view"],
-      "flags": ["--web=false"],
-      "flags_with_value": ["--json", "--template"],
-      "max_positional": 1
+      "argv": [
+        "gh",
+        "repo",
+        "view"
+      ],
+      "flags": [
+        "--web=false"
+      ],
+      "flags_with_value": [
+        "--json",
+        "--template"
+      ],
+      "max_positional": 1,
+      "content_risk": null
     },
     {
       "id": "gh.run.list",
       "agent": "github",
       "tier": "T0",
-      "argv": ["gh", "run", "list"],
+      "argv": [
+        "gh",
+        "run",
+        "list"
+      ],
       "flags": [],
-      "flags_with_value": ["--repo", "--branch", "--limit", "--status", "--workflow"],
-      "max_positional": 0
+      "flags_with_value": [
+        "--repo",
+        "--branch",
+        "--limit",
+        "--status",
+        "--workflow"
+      ],
+      "max_positional": 0,
+      "content_risk": null
     },
     {
       "id": "gh.issue.list",
       "agent": "github",
       "tier": "T0",
-      "argv": ["gh", "issue", "list"],
-      "flags": ["--web=false"],
-      "flags_with_value": ["--repo", "--label", "--limit", "--search", "--state"],
-      "max_positional": 0
+      "argv": [
+        "gh",
+        "issue",
+        "list"
+      ],
+      "flags": [
+        "--web=false"
+      ],
+      "flags_with_value": [
+        "--repo",
+        "--label",
+        "--limit",
+        "--search",
+        "--state"
+      ],
+      "max_positional": 0,
+      "content_risk": "possible",
+      "content_note": "Issue text may contain secrets."
     }
   ]
 }
