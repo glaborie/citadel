@@ -1,0 +1,8 @@
+# Encrypted-secret creation rules.
+#
+# The age private key lives in ~/.config/sops/age/keys.txt (mode 0600) and is
+# never committed; .gitignore guards *.age.key. Encrypted files under secrets/
+# ARE committed — that is the point.
+creation_rules:
+  - path_regex: secrets/.*\.(env|yaml|json)$
+    age: age19xfcjetvpuj3xjsr6rdar2j2r094zlalxgfnrqrpw3jnmhvpfc5qumzpjs

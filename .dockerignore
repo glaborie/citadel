@@ -11,3 +11,4 @@ scripts
 .mypy_cache
 .pytest_cache
 .ruff_cache
+secrets
