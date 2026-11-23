@@ -8,10 +8,14 @@ description = "Zero-trust agentic runtime for homelab DevOps"
 readme = "README.md"
 requires-python = ">=3.12"
 dynamic = ["version"]
-dependencies = []
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28",
     "mypy>=1.14",
     "pytest>=8.3",
     "ruff>=0.9",

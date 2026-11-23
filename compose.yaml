@@ -1,0 +1,323 @@
+# Citadel v0.1 Compose skeleton.
+# Every third-party image is pinned by digest; see
+# docs/implementation-notes/v0.1-verification.md for how each pin was chosen.
+#
+# Network model: `internal` has no route off the host. Services that must be
+# reachable from the host (published ports) or that need the internet also sit
+# on `edge`. Data, policy, worker and model tiers stay internal-only, so the
+# tool runner and workers cannot reach the internet. OmniRoute is the only
+# component that holds provider keys (architecture §1).
+
+name: citadel
+
+x-logging: &logging
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app: &app
+  build:
+    context: .
+  image: citadel-app:0.1.0
+  env_file: .env
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  logging: *logging
+  networks:
+    - internal
+
+x-http-health: &http-health
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 20s
+
+services:
+  postgres:
+    image: postgres:18-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      # Postgres 18 keeps PGDATA under /var/lib/postgresql/<major>/docker.
+      - postgres-data:/var/lib/postgresql
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    logging: *logging
+    networks:
+      - internal
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.2@sha256:7e66a96e4739239070aeaf72e4c5decf0f7f682cfc725b9f7ea2b336eaba38b3
+    command:
+      - start
+      - --http-enabled=true
+      - --hostname-strict=false
+      - --health-enabled=true
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "18081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Keycloak ships no HTTP client, so probe the management port with bash.
+      test:
+        - CMD
+        - bash
+        - -c
+        - "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q 200"
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    logging: *logging
+    networks:
+      - internal
+      - edge
+
+  temporal:
+    image: temporalio/auto-setup:1.29.7@sha256:f14912b699cf73015ad5c4fc18d522d4b014db90e794039214dfb7c022c2644f
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PWD: ${POSTGRES_PASSWORD}
+      POSTGRES_SEEDS: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Temporal binds the container IP, not loopback, so probe by hostname.
+      test: ["CMD-SHELL", "temporal operator cluster health --address $$(hostname):7233"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    logging: *logging
+    networks:
+      - internal
+
+  temporal-ui:
+    image: temporalio/ui:2.58.1@sha256:ac3c13eddb4547d830991bb5eee93a5d97140134522b7297fdb2be1fe25ef925
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:18080
+    ports:
+      - "18080:8080"
+    depends_on:
+      temporal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    logging: *logging
+    networks:
+      - internal
+      - edge
+
+  openfga-migrate:
+    image: openfga/openfga:v1.23.0@sha256:2a1b4ef95f2f27e6d420f11cf14390b4f537e699de8d18b6a07d8b355e11cf02
+    # One-shot schema migration; the distroless image has no shell to chain it.
+    command:
+      - migrate
+      - --datastore-engine=postgres
+      - --datastore-uri=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/openfga?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    logging: *logging
+    networks:
+      - internal
+
+  openfga:
+    image: openfga/openfga:v1.23.0@sha256:2a1b4ef95f2f27e6d420f11cf14390b4f537e699de8d18b6a07d8b355e11cf02
+    command:
+      - run
+      - --datastore-engine=postgres
+      - --datastore-uri=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/openfga?sslmode=disable
+      - --playground-enabled=false
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully
+    # No healthcheck: the image is distroless and carries no shell or HTTP client.
+    logging: *logging
+    networks:
+      - internal
+
+  omniroute:
+    image: ghcr.io/cheaper-inference/omniroute:3.8.54@sha256:2c4c755a54f8ce5341bc1856580b71f47a0f16a9afab4a55f84d540810631f68
+    environment:
+      PORT: "20128"
+      DATA_DIR: /app/data
+      JWT_SECRET: ${OMNIROUTE_JWT_SECRET}
+      API_KEY_SECRET: ${OMNIROUTE_API_KEY_SECRET}
+      STORAGE_ENCRYPTION_KEY: ${OMNIROUTE_STORAGE_ENCRYPTION_KEY}
+      INITIAL_PASSWORD: ${OMNIROUTE_ADMIN_PASSWORD}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+    volumes:
+      - omniroute-data:/app/data
+    ports:
+      - "20128:20128"
+    # The image ships its own HEALTHCHECK on /healthz.
+    logging: *logging
+    networks:
+      - internal
+      - edge
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.18.0@sha256:257204c77980b0f3450a26eb6089e487603fcdd4509529eadaf88f90669f5c13
+    command:
+      - mlflow
+      - server
+      - --host=0.0.0.0
+      - --port=5000
+      - --backend-store-uri=sqlite:////mlflow/mlflow.db
+      - --artifacts-destination=/mlflow/artifacts
+    volumes:
+      - mlflow-data:/mlflow
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    logging: *logging
+    networks:
+      - internal
+
+  presidio:
+    image: mcr.microsoft.com/presidio-analyzer:2.2.362@sha256:286e3fa7f3a7426e775e8564fe1870f1ba8f999d3ab8bbb8cc46a44355d9d6e9
+    environment:
+      PORT: "3000"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    logging: *logging
+    networks:
+      - internal
+
+  api:
+    <<: *app
+    command: ["uvicorn", "citadel.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "18000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      openfga:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      <<: *http-health
+    networks:
+      - internal
+      - edge
+
+
+  approval-ui:
+    <<: *app
+    command: ["uvicorn", "citadel.ui.app:app", "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      - "18001:8001"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=3)"]
+      <<: *http-health
+    networks:
+      - internal
+      - edge
+
+
+  worker-orchestrator:
+    <<: *app
+    command: ["python", "-m", "citadel.worker"]
+    environment:
+      CITADEL_WORKER_ROLE: orchestrator
+    depends_on:
+      temporal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib,sys,time; p=pathlib.Path('/tmp/citadel-heartbeat'); sys.exit(0 if p.exists() and time.time()-p.stat().st_mtime < 30 else 1)"]
+      <<: *http-health
+
+  worker-docker:
+    <<: *app
+    command: ["python", "-m", "citadel.worker"]
+    environment:
+      CITADEL_WORKER_ROLE: docker
+    depends_on:
+      temporal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib,sys,time; p=pathlib.Path('/tmp/citadel-heartbeat'); sys.exit(0 if p.exists() and time.time()-p.stat().st_mtime < 30 else 1)"]
+      <<: *http-health
+
+  worker-github:
+    <<: *app
+    command: ["python", "-m", "citadel.worker"]
+    environment:
+      CITADEL_WORKER_ROLE: github
+    depends_on:
+      temporal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib,sys,time; p=pathlib.Path('/tmp/citadel-heartbeat'); sys.exit(0 if p.exists() and time.time()-p.stat().st_mtime < 30 else 1)"]
+      <<: *http-health
+
+  tool-runner:
+    image: python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
+    # Hardened sandbox per ADR-012. gVisor runsc is unavailable on this host,
+    # so these flags are the whole isolation boundary. Step 6 gives it work.
+    command: ["sleep", "infinity"]
+    user: "65534:65534"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    pids_limit: 256
+    mem_limit: 512m
+    network_mode: none
+    healthcheck:
+      test: ["CMD", "python", "-c", "pass"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *logging
+
+volumes:
+  postgres-data:
+  omniroute-data:
+  mlflow-data:
+
+networks:
+  internal:
+    internal: true
+  edge: {}
