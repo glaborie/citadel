@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "citadel"
+description = "Zero-trust agentic runtime for homelab DevOps"
+readme = "README.md"
+requires-python = ">=3.12"
+dynamic = ["version"]
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "mypy>=1.14",
+    "pytest>=8.3",
+    "ruff>=0.9",
+]
+
+[tool.hatch.version]
+path = "src/citadel/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/citadel"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+files = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
