@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "comment": "Pre-approved CLI commands. Anything not matched is denied. Executed as an argv list with shell=False; no shell, pipes or redirection.",
+  "commands": [
+    {
+      "id": "docker.compose.ps",
+      "agent": "docker",
+      "tier": "T0",
+      "argv": ["docker", "compose", "ps"],
+      "flags": ["--all", "--quiet", "-a", "-q"],
+      "flags_with_value": ["--format", "--filter"],
+      "max_positional": 1
+    },
+    {
+      "id": "docker.compose.logs",
+      "agent": "docker",
+      "tier": "T0",
+      "argv": ["docker", "compose", "logs"],
+      "flags": ["--no-color", "--timestamps", "--follow", "-f", "-t"],
+      "flags_with_value": ["--tail", "--since", "--until"],
+      "max_positional": 2
+    },
+    {
+      "id": "docker.compose.config",
+      "agent": "docker",
+      "tier": "T0",
+      "argv": ["docker", "compose", "config"],
+      "flags": ["--quiet", "--services", "--volumes", "--no-interpolate", "-q"],
+      "flags_with_value": ["--format"],
+      "max_positional": 0
+    },
+    {
+      "id": "docker.ps",
+      "agent": "docker",
+      "tier": "T0",
+      "argv": ["docker", "ps"],
+      "flags": ["--all", "--quiet", "--no-trunc", "-a", "-q"],
+      "flags_with_value": ["--filter", "--format", "--last"],
+      "max_positional": 0
+    },
+    {
+      "id": "docker.inspect",
+      "agent": "docker",
+      "tier": "T0",
+      "argv": ["docker", "inspect"],
+      "flags": ["--size", "--type", "-s"],
+      "flags_with_value": ["--format"],
+      "max_positional": 2
+    },
+    {
+      "id": "docker.compose.restart",
+      "agent": "docker",
+      "tier": "T1",
+      "argv": ["docker", "compose", "restart"],
+      "flags": ["--no-deps"],
+      "flags_with_value": [],
+      "max_positional": 2
+    },
+    {
+      "id": "gh.pr.list",
+      "agent": "github",
+      "tier": "T0",
+      "argv": ["gh", "pr", "list"],
+      "flags": ["--draft", "--merged", "--closed", "--open"],
+      "flags_with_value": ["--repo", "--base", "--head", "--label", "--limit", "--search", "--state"],
+      "max_positional": 0
+    },
+    {
+      "id": "gh.pr.view",
+      "agent": "github",
+      "tier": "T0",
+      "argv": ["gh", "pr", "view"],
+      "flags": ["--comments", "--web=false"],
+      "flags_with_value": ["--repo", "--json", "--template"],
+      "max_positional": 1
+    },
+    {
+      "id": "gh.pr.diff",
+      "agent": "github",
+      "tier": "T0",
+      "argv": ["gh", "pr", "diff"],
+      "flags": ["--patch", "--name-only", "--color=never"],
+      "flags_with_value": ["--repo"],
+      "max_positional": 1
+    },
+    {
+      "id": "gh.repo.view",
+      "agent": "github",
+      "tier": "T0",
+      "argv": ["gh", "repo", "view"],
+      "flags": ["--web=false"],
+      "flags_with_value": ["--json", "--template"],
+      "max_positional": 1
+    },
+    {
+      "id": "gh.run.list",
+      "agent": "github",
+      "tier": "T0",
+      "argv": ["gh", "run", "list"],
+      "flags": [],
+      "flags_with_value": ["--repo", "--branch", "--limit", "--status", "--workflow"],
+      "max_positional": 0
+    },
+    {
+      "id": "gh.issue.list",
+      "agent": "github",
+      "tier": "T0",
+      "argv": ["gh", "issue", "list"],
+      "flags": ["--web=false"],
+      "flags_with_value": ["--repo", "--label", "--limit", "--search", "--state"],
+      "max_positional": 0
+    }
+  ]
+}
