@@ -17,7 +17,7 @@ def test_read_logs_builds_the_compose_logs_command() -> None:
 
 def test_restart_service_builds_the_restart_command() -> None:
     argv, command = build_argv("restart_service", {"service": "checkout-api"})
-    assert argv == ["docker", "compose", "restart", "checkout-api"]
+    assert argv == ["docker", "restart", "checkout-api"]
     assert command.tier == "T1"
 
 

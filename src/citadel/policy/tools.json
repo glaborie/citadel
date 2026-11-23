@@ -17,7 +17,13 @@
       "tier": "T0",
       "agent": "docker",
       "command": "docker.compose.logs",
-      "params": [{ "name": "service", "in": "positional", "max_length": 64 }]
+      "params": [
+        {
+          "name": "service",
+          "in": "positional",
+          "max_length": 64
+        }
+      ]
     },
     "get_service_health": {
       "tier": "T0",
@@ -28,8 +34,15 @@
     "restart_service": {
       "tier": "T1",
       "agent": "docker",
-      "command": "docker.compose.restart",
-      "params": [{ "name": "service", "in": "positional", "max_length": 64, "required": true }]
+      "command": "docker.restart",
+      "params": [
+        {
+          "name": "service",
+          "in": "positional",
+          "max_length": 64,
+          "required": true
+        }
+      ]
     },
     "search_code": {
       "tier": "T0",
@@ -41,7 +54,14 @@
       "tier": "T0",
       "agent": "github",
       "command": "gh.pr.list",
-      "params": [{ "name": "repo", "in": "flag", "flag": "--repo", "max_length": 128 }]
+      "params": [
+        {
+          "name": "repo",
+          "in": "flag",
+          "flag": "--repo",
+          "max_length": 128
+        }
+      ]
     },
     "open_remediation_pr": {
       "tier": "T1",
@@ -49,7 +69,17 @@
       "command": null,
       "params": []
     },
-    "delete_volume": { "tier": "T2", "agent": "docker", "command": null, "params": [] },
-    "force_push": { "tier": "T2", "agent": "github", "command": null, "params": [] }
+    "delete_volume": {
+      "tier": "T2",
+      "agent": "docker",
+      "command": null,
+      "params": []
+    },
+    "force_push": {
+      "tier": "T2",
+      "agent": "github",
+      "command": null,
+      "params": []
+    }
   }
 }

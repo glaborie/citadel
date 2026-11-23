@@ -116,22 +116,6 @@
       "content_note": "Prints .Config.Env and full container metadata, which carries secrets. Not registered in the tool catalog until DLP redacts output."
     },
     {
-      "id": "docker.compose.restart",
-      "agent": "docker",
-      "tier": "T1",
-      "argv": [
-        "docker",
-        "compose",
-        "restart"
-      ],
-      "flags": [
-        "--no-deps"
-      ],
-      "flags_with_value": [],
-      "max_positional": 2,
-      "content_risk": null
-    },
-    {
       "id": "gh.pr.list",
       "agent": "github",
       "tier": "T0",
@@ -262,6 +246,22 @@
       "max_positional": 0,
       "content_risk": "possible",
       "content_note": "Issue text may contain secrets."
+    },
+    {
+      "id": "docker.restart",
+      "agent": "docker",
+      "tier": "T1",
+      "argv": [
+        "docker",
+        "restart"
+      ],
+      "flags": [],
+      "flags_with_value": [
+        "--time"
+      ],
+      "max_positional": 1,
+      "content_risk": null,
+      "content_note": "Executed only by the operator service (ADR-023 item 3), never by the sandbox."
     }
   ]
 }

@@ -23,6 +23,7 @@ class ToolCall:
     agent_id: str
     tool: str
     arguments: dict[str, Any] = field(default_factory=dict)
+    approval_token: str | None = None
 
 
 @dataclass
@@ -38,6 +39,7 @@ class ApprovalDecision:
     approved: bool
     approver: str
     reason: str
+    token: str | None = None
 
 
 @dataclass

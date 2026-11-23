@@ -54,6 +54,7 @@ async def serve(role: str) -> None:
             run_store=PostgresRunStore(dsn),
             dsn=dsn,
             runner_url=os.environ.get("CITADEL_TOOL_RUNNER_URL", "http://tool-runner:8020"),
+            operator_url=os.environ.get("CITADEL_OPERATOR_URL", "http://operator:8030"),
         )
 
     stop = asyncio.Event()

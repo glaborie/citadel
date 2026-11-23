@@ -84,6 +84,11 @@ def execute(request: ExecuteRequest) -> ExecuteResponse:
 
     if command.agent != request.agent:
         raise HTTPException(status_code=403, detail="agent may not run this command")
+    if command.tier != "T0":
+        # Writes belong to the operator service, never to the sandbox.
+        raise HTTPException(
+            status_code=403, detail=f"{command.id} is {command.tier}; use the operator service"
+        )
     if requires_redaction(command):
         # Step 7 adds DLP. Until then risky output never leaves the sandbox.
         raise HTTPException(

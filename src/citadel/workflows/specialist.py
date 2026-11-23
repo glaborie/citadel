@@ -65,6 +65,16 @@ class SpecialistWorkflow:
                     rule_id="approval.denied",
                     detail=self._approval.reason,
                 )
+            # Only a signed approval may reach a writer.
+            call = ToolCall(
+                run_id=call.run_id,
+                tenant_id=call.tenant_id,
+                user_id=call.user_id,
+                agent_id=call.agent_id,
+                tool=call.tool,
+                arguments=call.arguments,
+                approval_token=self._approval.token,
+            )
 
         return await workflow.execute_activity_method(
             activities.ToolActivities.execute_tool,

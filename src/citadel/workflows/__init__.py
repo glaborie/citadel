@@ -20,11 +20,23 @@ def workflows_for(role: str) -> list[Any]:
 
 
 def activities_for(
-    role: str, *, checker: RelationChecker, run_store: RunStore, dsn: str, runner_url: str
+    role: str,
+    *,
+    checker: RelationChecker,
+    run_store: RunStore,
+    dsn: str,
+    runner_url: str,
+    operator_url: str,
 ) -> list[Any]:
     if role == "orchestrator":
         return []
-    impl = ToolActivities(checker=checker, run_store=run_store, dsn=dsn, runner_url=runner_url)
+    impl = ToolActivities(
+        checker=checker,
+        run_store=run_store,
+        dsn=dsn,
+        runner_url=runner_url,
+        operator_url=operator_url,
+    )
     return [impl.authorize_tool, impl.execute_tool]
 
 

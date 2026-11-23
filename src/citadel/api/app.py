@@ -7,6 +7,7 @@ provider all fail closed.
 
 # No `from __future__ import annotations`: FastAPI must see the real Depends
 # objects, and the dependency is a closure over create_app's arguments.
+import asyncio
 import os
 import uuid
 from typing import Annotated, Any
@@ -17,6 +18,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from citadel import __version__
+from citadel.approvals import mint_approval_token
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
 from citadel.identity import IdentityError, KeycloakVerifier, Principal, mint_run_token
@@ -24,6 +26,9 @@ from citadel.identity.run_token import private_key_from_env
 from citadel.policy import AuthorizationRequest, RelationChecker, authorize
 from citadel.policy.openfga import build_checker
 from citadel.runs import PostgresRunStore
+from citadel.workflows.orchestrator import child_workflow_id
+from citadel.workflows.specialist import SpecialistWorkflow
+from citadel.workflows.types import ApprovalDecision
 
 
 class AuthorizeRequest(BaseModel):
@@ -32,6 +37,17 @@ class AuthorizeRequest(BaseModel):
     agent_id: str
     tool: str
     run_id: str
+
+
+class ApprovalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    tool: str
+    agent_id: str
+    arguments: dict[str, Any] = {}
+    approved: bool
+    reason: str
 
 
 class RunRequest(BaseModel):
@@ -133,6 +149,67 @@ def create_app(
                 {"id": str(r[0]), "tenant_id": r[1], "agent_id": r[2], "status": r[3]} for r in rows
             ],
         }
+
+    async def _signal_decision(workflow_id: str, decision: ApprovalDecision) -> None:
+        from temporalio.client import Client as TemporalClient
+
+        client = await TemporalClient.connect(
+            os.environ.get("TEMPORAL_ADDRESS", "temporal:7233"),
+            namespace=os.environ.get("TEMPORAL_NAMESPACE", "default"),
+        )
+        await client.get_workflow_handle(workflow_id).signal(SpecialistWorkflow.approve, decision)
+
+    @app.post("/approvals")
+    def approve(
+        body: ApprovalRequest,
+        principal: Annotated[Principal, Depends(current_principal)],
+    ) -> dict[str, Any]:
+        if "approver" not in principal.roles:
+            raise HTTPException(status_code=403, detail="approver role required")
+
+        with tenant_connection(_dsn(), principal.tenant_id) as conn:
+            run = conn.execute("SELECT user_id FROM runs WHERE id = %s", (body.run_id,)).fetchone()
+        if run is None:
+            raise HTTPException(status_code=404, detail="run not found in this tenant")
+        if str(run[0]) == principal.user_id:
+            # Separation of duties: nobody approves their own request.
+            raise HTTPException(status_code=403, detail="cannot approve your own run")
+
+        token: str | None = None
+        if body.approved:
+            token = mint_approval_token(
+                tenant_id=principal.tenant_id,
+                run_id=body.run_id,
+                tool=body.tool,
+                arguments=body.arguments,
+                approver=principal.user_id,
+                private_key=_key(),
+            )
+
+        ref = AuditLedger(_dsn()).append(
+            tenant_id=principal.tenant_id,
+            event_type="approval.decision",
+            actor_type="user",
+            actor_id=principal.user_id,
+            payload={
+                "run_id": body.run_id,
+                "tool": body.tool,
+                "agent_id": body.agent_id,
+                "approved": body.approved,
+                "reason": body.reason,
+            },
+        )
+
+        decision = ApprovalDecision(
+            approved=body.approved,
+            approver=principal.user_id,
+            reason=body.reason,
+            token=token,
+        )
+        # Audit is written before the workflow is resumed.
+        asyncio.run(_signal_decision(child_workflow_id(body.run_id, body.tool), decision))
+
+        return {"audit_id": ref.audit_id, "approved": body.approved}
 
     @app.post("/policy/authorize")
     def policy_authorize(

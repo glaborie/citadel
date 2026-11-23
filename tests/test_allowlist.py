@@ -49,7 +49,7 @@ def test_allowed_github_commands(tokens: list[str]) -> None:
 
 def test_restart_is_the_only_docker_write() -> None:
     t1 = [entry.id for entry in load_allowlist() if entry.tier == "T1"]
-    assert t1 == ["docker.compose.restart"]
+    assert t1 == ["docker.restart"]
 
 
 @pytest.mark.parametrize(

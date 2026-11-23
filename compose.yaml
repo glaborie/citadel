@@ -282,6 +282,7 @@ services:
       TEMPORAL_ADDRESS: temporal:7233
       OPENFGA_API_URL: http://openfga:8080
       CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
+      CITADEL_OPERATOR_URL: http://operator:8030
       CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
     depends_on:
@@ -299,6 +300,7 @@ services:
       TEMPORAL_ADDRESS: temporal:7233
       OPENFGA_API_URL: http://openfga:8080
       CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
+      CITADEL_OPERATOR_URL: http://operator:8030
       CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
     depends_on:
@@ -316,6 +318,7 @@ services:
       TEMPORAL_ADDRESS: temporal:7233
       OPENFGA_API_URL: http://openfga:8080
       CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
+      CITADEL_OPERATOR_URL: http://operator:8030
       CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
     depends_on:
@@ -324,6 +327,49 @@ services:
     healthcheck:
       test: ["CMD", "python", "-c", "import pathlib,sys,time; p=pathlib.Path('/tmp/citadel-heartbeat'); sys.exit(0 if p.exists() and time.time()-p.stat().st_mtime < 30 else 1)"]
       <<: *http-health
+
+  operator:
+    build:
+      context: .
+    image: citadel-app:0.1.0
+    # The only component that writes. It never sees model output; it accepts a
+    # validated (tenant, run, tool, arguments) tuple plus a signed approval
+    # token. See ADR-023 item 3.
+    command:
+      - uvicorn
+      - citadel.operator.app:app
+      - --host=0.0.0.0
+      - --port=8030
+    user: "10001:10001"
+    group_add:
+      - "${DOCKER_GID}"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    pids_limit: 128
+    mem_limit: 256m
+    environment:
+      CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
+      DOCKER_HOST: unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8030/healthz', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging: *logging
+    networks:
+      - internal
 
   docker-socket-proxy:
     image: tecnativa/docker-socket-proxy:latest@sha256:be1ac64f33bd82043beb504822a17ba6b71668ea1ad7cf51a9a01d27bb7ab047

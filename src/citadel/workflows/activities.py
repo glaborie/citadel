@@ -17,6 +17,7 @@ from temporalio import activity
 
 from citadel.db import tenant_connection
 from citadel.policy import AuthorizationRequest, RelationChecker, RunStore, authorize
+from citadel.policy.catalog import load_catalog
 from citadel.workflows.types import PolicyOutcome, ToolCall, ToolResult
 
 
@@ -39,11 +40,13 @@ class ToolActivities:
         run_store: RunStore,
         dsn: str,
         runner_url: str,
+        operator_url: str,
     ) -> None:
         self._checker = checker
         self._run_store = run_store
         self._dsn = dsn
         self._runner_url = runner_url
+        self._operator_url = operator_url
 
     @activity.defn
     def authorize_tool(self, call: ToolCall) -> PolicyOutcome:
@@ -113,11 +116,39 @@ class ToolActivities:
         )
 
     def _invoke(self, call: ToolCall) -> ToolResult:
+        spec = load_catalog().get(call.tool)
+        if spec is not None and spec.tier == "T1":
+            return self._invoke_operator(call)
+        return self._invoke_sandbox(call)
+
+    def _invoke_operator(self, call: ToolCall) -> ToolResult:
+        if not call.approval_token:
+            return ToolResult(
+                status="denied",
+                tool=call.tool,
+                rule_id="approval.missing_token",
+                detail="T1 execution requires a signed approval token",
+            )
+        body = json.dumps(
+            {
+                "tenant_id": call.tenant_id,
+                "run_id": call.run_id,
+                "tool": call.tool,
+                "arguments": call.arguments,
+                "approval_token": call.approval_token,
+            }
+        ).encode()
+        return self._post(f"{self._operator_url}/restart", body, call)
+
+    def _invoke_sandbox(self, call: ToolCall) -> ToolResult:
         body = json.dumps(
             {"agent": call.agent_id, "tool": call.tool, "arguments": call.arguments}
         ).encode()
+        return self._post(f"{self._runner_url}/execute", body, call)
+
+    def _post(self, url: str, body: bytes, call: ToolCall) -> ToolResult:
         request = urllib.request.Request(
-            f"{self._runner_url}/execute",
+            url,
             data=body,
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -127,7 +158,7 @@ class ToolActivities:
                 payload: dict[str, Any] = json.loads(response.read())
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")[:300]
-            rule = "tool.refused" if exc.code == 403 else "tool.error"
+            rule = "tool.refused" if exc.code in (403, 409) else "tool.error"
             return ToolResult(
                 status="failed",
                 tool=call.tool,
