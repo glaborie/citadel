@@ -281,6 +281,7 @@ services:
       CITADEL_WORKER_ROLE: orchestrator
       TEMPORAL_ADDRESS: temporal:7233
       OPENFGA_API_URL: http://openfga:8080
+      CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
       CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
     depends_on:
@@ -297,6 +298,7 @@ services:
       CITADEL_WORKER_ROLE: docker
       TEMPORAL_ADDRESS: temporal:7233
       OPENFGA_API_URL: http://openfga:8080
+      CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
       CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
     depends_on:
@@ -313,6 +315,7 @@ services:
       CITADEL_WORKER_ROLE: github
       TEMPORAL_ADDRESS: temporal:7233
       OPENFGA_API_URL: http://openfga:8080
+      CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
       CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
     depends_on:
@@ -322,12 +325,47 @@ services:
       test: ["CMD", "python", "-c", "import pathlib,sys,time; p=pathlib.Path('/tmp/citadel-heartbeat'); sys.exit(0 if p.exists() and time.time()-p.stat().st_mtime < 30 else 1)"]
       <<: *http-health
 
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest@sha256:be1ac64f33bd82043beb504822a17ba6b71668ea1ad7cf51a9a01d27bb7ab047
+    # Read-only surface only: listing, inspection and logs. POST stays off so
+    # the proxy cannot create, exec, delete or restart anything (ADR-023).
+    environment:
+      CONTAINERS: "1"
+      POST: "0"
+      EXEC: "0"
+      IMAGES: "0"
+      NETWORKS: "0"
+      VOLUMES: "0"
+      SYSTEM: "0"
+      EVENTS: "0"
+      BUILD: "0"
+      SWARM: "0"
+      SECRETS: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs:
+      # The entrypoint renders haproxy.cfg in /tmp and writes a pidfile in /run.
+      - /tmp
+      - /run
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+    networks:
+      - sandbox
+
   tool-runner:
-    image: python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
-    # Hardened sandbox per ADR-012. gVisor runsc is unavailable on this host,
-    # so these flags are the whole isolation boundary. Step 6 gives it work.
-    command: ["sleep", "infinity"]
-    user: "65534:65534"
+    build:
+      context: .
+    image: citadel-app:0.1.0
+    # Hardened sandbox per ADR-012/ADR-023. gVisor runsc is unavailable on this
+    # host, so these flags plus the proxy split are the whole isolation boundary.
+    command:
+      - uvicorn
+      - citadel.tools.runner:app
+      - --host=0.0.0.0
+      - --port=8020
+    user: "10001:10001"
     read_only: true
     cap_drop:
       - ALL
@@ -337,13 +375,20 @@ services:
       - /tmp
     pids_limit: 256
     mem_limit: 512m
-    network_mode: none
+    environment:
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
     healthcheck:
-      test: ["CMD", "python", "-c", "pass"]
-      interval: 30s
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8020/healthz', timeout=3)"]
+      interval: 15s
       timeout: 5s
-      retries: 3
+      retries: 5
+      start_period: 20s
     logging: *logging
+    networks:
+      # `internal` so workers can reach it; `sandbox` only it and the proxy.
+      - internal
+      - sandbox
+
 
 volumes:
   postgres-data:
@@ -354,3 +399,6 @@ networks:
   internal:
     internal: true
   edge: {}
+  # The proxy must never be reachable from the general internal network.
+  sandbox:
+    internal: true

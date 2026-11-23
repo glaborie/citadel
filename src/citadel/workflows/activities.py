@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import urllib.error
+import urllib.request
 from typing import Any
 
 from temporalio import activity
@@ -30,10 +32,18 @@ def idempotency_key(call: ToolCall) -> str:
 
 
 class ToolActivities:
-    def __init__(self, *, checker: RelationChecker, run_store: RunStore, dsn: str) -> None:
+    def __init__(
+        self,
+        *,
+        checker: RelationChecker,
+        run_store: RunStore,
+        dsn: str,
+        runner_url: str,
+    ) -> None:
         self._checker = checker
         self._run_store = run_store
         self._dsn = dsn
+        self._runner_url = runner_url
 
     @activity.defn
     def authorize_tool(self, call: ToolCall) -> PolicyOutcome:
@@ -86,19 +96,55 @@ class ToolActivities:
                     output=stored,
                 )
 
-            # shortcut: tool bodies arrive in step 6; the audit trail and
-            # idempotency guarantees already behave exactly as they will then.
-            output: dict[str, Any] = {"tool": call.tool, "arguments": call.arguments}
+            # The sandbox validates again and refuses risky output, so a
+            # compromised worker cannot widen what may run.
+            outcome = self._invoke(call)
             conn.execute(
-                "UPDATE tool_calls SET status = 'succeeded', result = %s"
-                " WHERE idempotency_key = %s",
-                (json.dumps(output), key),
+                "UPDATE tool_calls SET status = %s, result = %s WHERE idempotency_key = %s",
+                (outcome.status, json.dumps(outcome.output), key),
+            )
+        return ToolResult(
+            status=outcome.status,
+            tool=call.tool,
+            rule_id=outcome.rule_id,
+            detail=outcome.detail,
+            idempotency_key=key,
+            output=outcome.output,
+        )
+
+    def _invoke(self, call: ToolCall) -> ToolResult:
+        body = json.dumps(
+            {"agent": call.agent_id, "tool": call.tool, "arguments": call.arguments}
+        ).encode()
+        request = urllib.request.Request(
+            f"{self._runner_url}/execute",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                payload: dict[str, Any] = json.loads(response.read())
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:300]
+            rule = "tool.refused" if exc.code == 403 else "tool.error"
+            return ToolResult(
+                status="failed",
+                tool=call.tool,
+                rule_id=rule,
+                detail=f"sandbox refused the call: {detail}",
+            )
+        except OSError as exc:
+            return ToolResult(
+                status="failed",
+                tool=call.tool,
+                rule_id="tool.unavailable",
+                detail=f"sandbox unreachable: {exc}",
             )
         return ToolResult(
             status="executed",
             tool=call.tool,
             rule_id="tool.executed",
-            detail=f"{call.tool} executed",
-            idempotency_key=key,
-            output=output,
+            detail=f"{call.tool} executed as {payload.get('allowlist_id')}",
+            output=payload,
         )

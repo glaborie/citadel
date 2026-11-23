@@ -48,7 +48,13 @@ async def serve(role: str) -> None:
             os.environ.get("OPENFGA_STORE_NAME", "citadel"),
         )
         dsn = os.environ["CITADEL_DB_DSN"]
-        activities = activities_for(role, checker=checker, run_store=PostgresRunStore(dsn), dsn=dsn)
+        activities = activities_for(
+            role,
+            checker=checker,
+            run_store=PostgresRunStore(dsn),
+            dsn=dsn,
+            runner_url=os.environ.get("CITADEL_TOOL_RUNNER_URL", "http://tool-runner:8020"),
+        )
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
