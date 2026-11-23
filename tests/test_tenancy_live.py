@@ -207,3 +207,22 @@ def test_policy_denies_another_tenants_run() -> None:
     _status, decision = _authorize(user_token("bob"), "read_logs", alice_run)
     assert decision["outcome"] == "deny"
     assert decision["rule_id"] == "identity.unknown_run"
+
+
+def test_policy_decision_is_audited() -> None:
+    """Every decision must carry an audit id the trace can reference later."""
+    token = user_token("alice")
+    run_id = _new_run(token)
+    _status, decision = _authorize(token, "read_logs", run_id)
+    assert decision["outcome"] == "allow"
+    assert decision["audit_id"], "no audit_id on the decision"
+
+
+def test_app_role_cannot_rewrite_audit_history() -> None:
+    """Append-only must be a privilege fact, not a convention."""
+    row = psql_as_app(
+        "SELECT has_table_privilege('citadel_app','audit_events','UPDATE')"
+        " || ',' || has_table_privilege('citadel_app','audit_events','DELETE')"
+        " || ',' || has_table_privilege('citadel_app','audit_events','INSERT');"
+    )
+    assert row == "false,false,true"

@@ -17,6 +17,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from citadel import __version__
+from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
 from citadel.identity import IdentityError, KeycloakVerifier, Principal, mint_run_token
 from citadel.identity.run_token import private_key_from_env
@@ -148,11 +149,28 @@ def create_app(
             _checker(),
             PostgresRunStore(_dsn()),
         )
+        # Audited before the caller can act on the decision; a ledger failure
+        # fails the request rather than returning an unrecorded answer.
+        ref = AuditLedger(_dsn()).append(
+            tenant_id=principal.tenant_id,
+            event_type="policy.decision",
+            actor_type="user",
+            actor_id=principal.user_id,
+            payload={
+                "outcome": decision.outcome,
+                "rule_id": decision.rule_id,
+                "tier": decision.tier,
+                "tool": body.tool,
+                "agent_id": body.agent_id,
+                "run_id": body.run_id,
+            },
+        )
         return {
             "outcome": decision.outcome,
             "rule_id": decision.rule_id,
             "reason": decision.reason,
             "tier": decision.tier,
+            "audit_id": ref.audit_id,
             "audit": {
                 "tenant_id": principal.tenant_id,
                 "user_id": principal.user_id,
