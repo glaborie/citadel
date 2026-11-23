@@ -41,10 +41,16 @@ FROM runtime AS app
 EXPOSE 8000
 CMD ["uvicorn", "citadel.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
 
-# The only T1 writer. Holds the docker CLI, never gh.
+# The only T1 writer. Holds the docker and gh CLIs; the write token lives here.
 FROM runtime AS operator
 USER root
+# gh shells out to git even when --repo/--base/--head are all explicit. It is
+# only used for that lookup: no checkout exists and `git` is not allowlisted.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git \
+ && rm -rf /var/lib/apt/lists/*
 COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=ghcli /usr/local/bin/gh /usr/local/bin/gh
 USER citadel
 EXPOSE 8030
 CMD ["uvicorn", "citadel.operator.app:app", "--host", "0.0.0.0", "--port", "8030"]

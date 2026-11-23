@@ -56,6 +56,32 @@ def test_agent_cannot_run_another_agents_tool(client: TestClient) -> None:
     assert response.status_code == 403
 
 
+@pytest.mark.parametrize(
+    ("agent", "tool", "arguments"),
+    [
+        ("docker", "restart_service", {"service": "checkout-api"}),
+        (
+            "github",
+            "open_remediation_pr",
+            {
+                "repo": "a/b",
+                "base": "main",
+                "head": "x",
+                "title": "t",
+                "body": "b",
+            },
+        ),
+    ],
+)
+def test_sandbox_refuses_t1_whatever_the_caller_asks(
+    client: TestClient, agent: str, tool: str, arguments: dict[str, Any]
+) -> None:
+    """Writes belong to the operator; the sandbox never runs one."""
+    response = client.post("/execute", json={"agent": agent, "tool": tool, "arguments": arguments})
+    assert response.status_code == 403
+    assert "use the operator service" in response.json()["detail"]
+
+
 @pytest.mark.parametrize("tool", ["read_logs", "get_pr_status"])
 def test_risky_output_is_refused_until_dlp_exists(client: TestClient, tool: str) -> None:
     """definitive and possible risk are both blocked here for now."""

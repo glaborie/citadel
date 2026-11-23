@@ -138,7 +138,7 @@ class ToolActivities:
                 "approval_token": call.approval_token,
             }
         ).encode()
-        return self._post(f"{self._operator_url}/restart", body, call)
+        return self._post(f"{self._operator_url}/execute", body, call)
 
     def _invoke_sandbox(self, call: ToolCall) -> ToolResult:
         body = json.dumps(

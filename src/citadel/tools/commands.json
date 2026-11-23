@@ -262,6 +262,28 @@
       "max_positional": 1,
       "content_risk": null,
       "content_note": "Executed only by the operator service (ADR-023 item 3), never by the sandbox."
+    },
+    {
+      "id": "gh.pr.create",
+      "agent": "github",
+      "tier": "T1",
+      "argv": [
+        "gh",
+        "pr",
+        "create",
+        "--draft"
+      ],
+      "flags": [],
+      "flags_with_value": [
+        "--repo",
+        "--base",
+        "--head",
+        "--title",
+        "--body"
+      ],
+      "max_positional": 0,
+      "content_risk": null,
+      "content_note": "Draft PR from a branch that already exists. The title and body are caller text, so they are part of the approved arguments and are hashed into the approval token; the operator can only post the text a human approved. Executed only by the operator service (ADR-023 item 3), never by the sandbox."
     }
   ]
 }

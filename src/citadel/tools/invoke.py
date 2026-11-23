@@ -60,10 +60,20 @@ def build_argv(
 def _render(name: str, param: Any, value: Any) -> Sequence[str]:
     if not isinstance(value, str):
         raise CommandDenied(f"argument {name!r} must be a string")
-    if not _VALUE.match(value):
-        raise CommandDenied(f"argument {name!r} has disallowed characters")
     if len(value) > param.max_length:
         raise CommandDenied(f"argument {name!r} exceeds {param.max_length} characters")
+    if param.kind == "text":
+        # Prose (a PR title or body). One line, printable; the allowlist
+        # matcher still rejects shell metacharacters on the built argv.
+        # shortcut: the matcher also rejects ".." anywhere, so a body cannot
+        # contain an ellipsis; switch to --fill from a checkout if that matters.
+        if param.flag is None:
+            raise CommandDenied(f"argument {name!r} is text without a flag name")
+        if not value.strip() or any(ch < " " or ch == "\x7f" for ch in value):
+            raise CommandDenied(f"argument {name!r} must be one printable line")
+        return [param.flag, value]
+    if not _VALUE.match(value):
+        raise CommandDenied(f"argument {name!r} has disallowed characters")
     if param.kind == "flag":
         if param.flag is None:
             raise CommandDenied(f"argument {name!r} is a flag without a flag name")

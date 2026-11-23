@@ -66,8 +66,44 @@
     "open_remediation_pr": {
       "tier": "T1",
       "agent": "github",
-      "command": null,
-      "params": []
+      "command": "gh.pr.create",
+      "params": [
+        {
+          "name": "repo",
+          "in": "flag",
+          "flag": "--repo",
+          "max_length": 128,
+          "required": true
+        },
+        {
+          "name": "base",
+          "in": "flag",
+          "flag": "--base",
+          "max_length": 128,
+          "required": true
+        },
+        {
+          "name": "head",
+          "in": "flag",
+          "flag": "--head",
+          "max_length": 128,
+          "required": true
+        },
+        {
+          "name": "title",
+          "in": "text",
+          "flag": "--title",
+          "max_length": 200,
+          "required": true
+        },
+        {
+          "name": "body",
+          "in": "text",
+          "flag": "--body",
+          "max_length": 1000,
+          "required": true
+        }
+      ]
     },
     "delete_volume": {
       "tier": "T2",

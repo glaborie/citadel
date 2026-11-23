@@ -358,6 +358,14 @@ services:
       CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
       DOCKER_HOST: unix:///var/run/docker.sock
+      # The write token is injected here and nowhere else; gh reads GH_TOKEN.
+      GH_TOKEN: ${GH_WRITE_TOKEN:-unset}
+      # gh reaches GitHub only through the domain-allowlisted proxy. Loopback
+      # and the Docker proxy must bypass it or the healthcheck breaks.
+      HTTPS_PROXY: http://github-egress:3128
+      HTTP_PROXY: http://github-egress:3128
+      NO_PROXY: localhost,127.0.0.1,docker-socket-proxy
+      no_proxy: localhost,127.0.0.1,docker-socket-proxy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:

@@ -47,9 +47,49 @@ def test_allowed_github_commands(tokens: list[str]) -> None:
     assert match(tokens, agent="github").agent == "github"
 
 
-def test_restart_is_the_only_docker_write() -> None:
-    t1 = [entry.id for entry in load_allowlist() if entry.tier == "T1"]
-    assert t1 == ["docker.restart"]
+def test_exactly_two_t1_commands_one_per_agent() -> None:
+    t1 = sorted(entry.id for entry in load_allowlist() if entry.tier == "T1")
+    assert t1 == ["docker.restart", "gh.pr.create"]
+
+
+def test_pr_create_is_pinned_to_a_draft_from_a_named_branch() -> None:
+    """The write's shape is fixed in the argv prefix, not chosen by the caller."""
+    tokens = [
+        "gh",
+        "pr",
+        "create",
+        "--draft",
+        "--repo",
+        "acme/infra",
+        "--base",
+        "main",
+        "--head",
+        "fix/oom",
+        "--title",
+        "Restart checkout-api on OOM",
+        "--body",
+        "Adds a restart policy so the container recovers on its own",
+    ]
+    command = match(tokens, agent="github")
+    assert command.id == "gh.pr.create"
+    assert command.tier == "T1"
+    assert command.argv == ("gh", "pr", "create", "--draft")
+
+
+@pytest.mark.parametrize(
+    "tokens",
+    [
+        # The fixed prefix is mandatory: no un-drafted PR.
+        ["gh", "pr", "create", "--repo", "acme/infra", "--head", "x"],
+        ["gh", "pr", "create", "--draft", "--base", "main", "extra"],
+        ["gh", "pr", "create", "--draft", "--head", "x", "--admin"],
+        ["gh", "pr", "create", "--draft", "--head", "x", "--fill"],
+        ["gh", "pr", "create", "--draft", "--head", "x", "--body-file", "/tmp/x"],
+    ],
+)
+def test_pr_create_does_not_accept_extra_flags(tokens: list[str]) -> None:
+    with pytest.raises(CommandDenied):
+        match(tokens, agent="github")
 
 
 @pytest.mark.parametrize(
