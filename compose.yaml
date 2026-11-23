@@ -452,7 +452,9 @@ services:
       # Loopback and in-stack calls must never traverse the egress proxy.
       NO_PROXY: localhost,127.0.0.1,docker-socket-proxy
       no_proxy: localhost,127.0.0.1,docker-socket-proxy
-      GH_TOKEN: ${GH_TOKEN:-unset}
+      # gh reads GH_TOKEN; the secret is named for what it is, so the
+      # write token can never be passed here by accident.
+      GH_TOKEN: ${GH_READ_TOKEN:-unset}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8020/healthz', timeout=3)"]
       interval: 15s
