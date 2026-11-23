@@ -25,6 +25,8 @@ Citadel records one ADR per architectural decision. Numbers are sequential; ADR-
 | 019 | Secrets and supply-chain hygiene | Accepted |
 | 020 | Isolated untrusted web research pipeline | Accepted |
 | 021 | MCP and A2A behind adapter seams | Accepted |
+| 022 | Agent approvers for T1 calls | Proposed |
+| 023 | CLI access from the sandbox, never from a worker | Proposed |
 
 ## ADR-008 evolution roadmap
 
