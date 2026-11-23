@@ -9,10 +9,11 @@ Fail-closed rules, in the order they are enforced (docs/security/tool-tiers.md):
 2. tool absent from the catalog             -> deny
 3. T2 tier                                  -> deny
 4. requesting agent != owning agent         -> deny
-5. policy service unreachable or erroring   -> deny
-6. OpenFGA says no                          -> deny
-7. allowed and T1                           -> requires_approval
-8. allowed and T0                           -> allow
+5. run id does not exist in this tenant     -> deny
+6. policy service unreachable or erroring   -> deny
+7. OpenFGA says no                          -> deny
+8. allowed and T1                           -> requires_approval
+9. allowed and T0                           -> allow
 """
 
 from __future__ import annotations
@@ -55,6 +56,15 @@ class RelationChecker(Protocol):
     def can_call(self, *, user: str, obj: str) -> bool: ...
 
 
+class RunStore(Protocol):
+    """Proves the run belongs to the caller's tenant before anything is authorised.
+
+    Required, not optional: an optional check is a bypass waiting to happen.
+    """
+
+    def exists(self, *, tenant_id: str, run_id: str) -> bool: ...
+
+
 def _deny(rule_id: str, reason: str, tier: str = "unknown") -> Decision:
     return Decision(outcome="deny", rule_id=rule_id, reason=reason, tier=tier)
 
@@ -62,6 +72,7 @@ def _deny(rule_id: str, reason: str, tier: str = "unknown") -> Decision:
 def authorize(
     request: AuthorizationRequest,
     checker: RelationChecker,
+    run_store: RunStore,
     catalog: dict[str, ToolSpec] | None = None,
 ) -> Decision:
     tools = catalog if catalog is not None else load_catalog()
@@ -89,6 +100,13 @@ def authorize(
             f"{request.tool} belongs to the {spec.agent} agent, not {request.agent_id}",
             spec.tier,
         )
+
+    try:
+        known_run = run_store.exists(tenant_id=request.tenant_id, run_id=request.run_id)
+    except Exception as exc:  # noqa: BLE001 - a broken lookup must not authorise
+        return _deny("identity.unknown_run", f"run lookup failed: {exc}", spec.tier)
+    if not known_run:
+        return _deny("identity.unknown_run", "run does not exist in this tenant", spec.tier)
 
     try:
         allowed = checker.can_call(

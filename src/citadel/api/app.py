@@ -22,6 +22,7 @@ from citadel.identity import IdentityError, KeycloakVerifier, Principal, mint_ru
 from citadel.identity.run_token import private_key_from_env
 from citadel.policy import AuthorizationRequest, RelationChecker, authorize
 from citadel.policy.openfga import build_checker
+from citadel.runs import PostgresRunStore
 
 
 class AuthorizeRequest(BaseModel):
@@ -136,28 +137,6 @@ def create_app(
     def policy_authorize(
         body: AuthorizeRequest, principal: Annotated[Principal, Depends(current_principal)]
     ) -> dict[str, Any]:
-        # The run must exist inside the caller's tenant. RLS does the filtering,
-        # so another tenant's run_id is simply not found and the call is denied.
-        try:
-            with tenant_connection(_dsn(), principal.tenant_id) as conn:
-                known = conn.execute("SELECT 1 FROM runs WHERE id = %s", (body.run_id,)).fetchone()
-        except Exception:  # noqa: BLE001 - a broken lookup must not authorise
-            known = None
-        if known is None:
-            return {
-                "outcome": "deny",
-                "rule_id": "identity.unknown_run",
-                "reason": "run does not exist in this tenant",
-                "tier": "unknown",
-                "audit": {
-                    "tenant_id": principal.tenant_id,
-                    "user_id": principal.user_id,
-                    "run_id": body.run_id,
-                    "agent_id": body.agent_id,
-                    "tool": body.tool,
-                },
-            }
-
         decision = authorize(
             AuthorizationRequest(
                 user_id=principal.user_id,
@@ -167,6 +146,7 @@ def create_app(
                 tool=body.tool,
             ),
             _checker(),
+            PostgresRunStore(_dsn()),
         )
         return {
             "outcome": decision.outcome,

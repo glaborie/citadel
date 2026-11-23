@@ -14,6 +14,20 @@ from citadel.policy import AuthorizationRequest, Decision, authorize, load_catal
 
 
 @dataclass
+class FakeRunStore:
+    known: bool = True
+    error: Exception | None = None
+
+    def exists(self, *, tenant_id: str, run_id: str) -> bool:
+        if self.error is not None:
+            raise self.error
+        return self.known
+
+
+STORE = FakeRunStore()
+
+
+@dataclass
 class FakeChecker:
     allowed: bool = True
     error: Exception | None = None
@@ -40,14 +54,14 @@ def request(**overrides: str) -> AuthorizationRequest:
 
 def test_t0_allowed_for_authorised_user() -> None:
     checker = FakeChecker()
-    assert authorize(request(), checker) == Decision(
+    assert authorize(request(), checker, STORE) == Decision(
         outcome="allow", rule_id="policy.allowed", reason="allowed", tier="T0"
     )
     assert checker.calls == 1
 
 
 def test_t1_requires_approval() -> None:
-    decision = authorize(request(tool="restart_service"), FakeChecker())
+    decision = authorize(request(tool="restart_service"), FakeChecker(), STORE)
     assert decision.outcome == "requires_approval"
     assert decision.tier == "T1"
 
@@ -55,20 +69,20 @@ def test_t1_requires_approval() -> None:
 @pytest.mark.parametrize("tool", ["delete_volume", "force_push"])
 def test_t2_is_denied_without_consulting_policy(tool: str) -> None:
     checker = FakeChecker()
-    decision = authorize(request(tool=tool), checker)
+    decision = authorize(request(tool=tool), checker, STORE)
     assert decision.outcome == "deny"
     assert decision.rule_id == "tool.tier_denied"
     assert checker.calls == 0, "T2 must be refused before any relationship lookup"
 
 
 def test_unknown_tool_is_denied() -> None:
-    decision = authorize(request(tool="exfiltrate_secrets"), FakeChecker())
+    decision = authorize(request(tool="exfiltrate_secrets"), FakeChecker(), STORE)
     assert decision.rule_id == "tool.unknown"
 
 
 def test_agent_cannot_call_another_agents_tool() -> None:
     """Red team: the docker agent asking for a GitHub tool."""
-    decision = authorize(request(agent_id="docker", tool="search_code"), FakeChecker())
+    decision = authorize(request(agent_id="docker", tool="search_code"), FakeChecker(), STORE)
     assert decision.outcome == "deny"
     assert decision.rule_id == "tool.agent_mismatch"
 
@@ -84,11 +98,11 @@ def test_agent_cannot_call_another_agents_tool() -> None:
 )
 @pytest.mark.parametrize("blank", ["", "   "])
 def test_missing_identity_fields_are_denied(field: str, rule: str, blank: str) -> None:
-    assert authorize(request(**{field: blank}), FakeChecker()).rule_id == rule
+    assert authorize(request(**{field: blank}), FakeChecker(), STORE).rule_id == rule
 
 
 def test_policy_says_no() -> None:
-    decision = authorize(request(), FakeChecker(allowed=False))
+    decision = authorize(request(), FakeChecker(allowed=False), STORE)
     assert decision.outcome == "deny"
     assert decision.rule_id == "policy.denied"
 
@@ -96,14 +110,14 @@ def test_policy_says_no() -> None:
 def test_policy_service_error_fails_closed() -> None:
     """Red team: an unreachable policy service must never allow."""
     checker = FakeChecker(error=RuntimeError("connection refused"))
-    decision = authorize(request(), checker)
+    decision = authorize(request(), checker, STORE)
     assert decision.outcome == "deny"
     assert decision.rule_id == "policy.unavailable"
 
 
 def test_empty_catalog_denies_everything() -> None:
     for tool in load_catalog():
-        assert authorize(request(tool=tool), FakeChecker(), catalog={}).outcome == "deny"
+        assert authorize(request(tool=tool), FakeChecker(), STORE, catalog={}).outcome == "deny"
 
 
 def test_catalog_covers_the_documented_tiers() -> None:
@@ -119,3 +133,22 @@ def test_t1_tools_are_exactly_the_two_allowed() -> None:
     """v0.1 permits exactly two write tools; a third must not slip in."""
     t1 = sorted(name for name, spec in load_catalog().items() if spec.tier == "T1")
     assert t1 == ["open_remediation_pr", "restart_service"]
+
+
+def test_unknown_run_is_denied() -> None:
+    """The run must exist in the caller's tenant before any tool is authorised."""
+    decision = authorize(request(), FakeChecker(), FakeRunStore(known=False))
+    assert decision.outcome == "deny"
+    assert decision.rule_id == "identity.unknown_run"
+
+
+def test_broken_run_lookup_fails_closed() -> None:
+    decision = authorize(request(), FakeChecker(), FakeRunStore(error=RuntimeError("db down")))
+    assert decision.rule_id == "identity.unknown_run"
+
+
+def test_run_lookup_is_skipped_for_t2() -> None:
+    """T2 is refused on the tier alone, before touching the database."""
+    store = FakeRunStore(error=RuntimeError("must not be called"))
+    decision = authorize(request(tool="delete_volume"), FakeChecker(), store)
+    assert decision.rule_id == "tool.tier_denied"

@@ -5,6 +5,7 @@ from citadel.policy.authorize import (
     Decision,
     Outcome,
     RelationChecker,
+    RunStore,
     authorize,
     tool_object,
 )
@@ -15,6 +16,7 @@ __all__ = [
     "Decision",
     "Outcome",
     "RelationChecker",
+    "RunStore",
     "ToolSpec",
     "authorize",
     "load_catalog",
