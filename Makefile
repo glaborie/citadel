@@ -19,3 +19,14 @@ policy-model:
 
 policy-bootstrap:
 	docker compose exec -T api python -m citadel.policy.bootstrap
+
+.PHONY: migrate
+
+# Migrations are applied by the postgres init scripts on a fresh volume; this
+# target re-applies them to an existing database. Statements are idempotent.
+migrate:
+	set -a; . ./.env; set +a; \
+	for f in migrations/*.sql; do \
+		echo "applying $$f"; \
+		docker compose exec -T postgres psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -f "/$$f" || exit 1; \
+	done

@@ -13,6 +13,7 @@ dependencies = [
     "openfga-sdk>=0.10.6",
     "psycopg[binary]>=3.2",
     "pyjwt[crypto]>=2.10",
+    "temporalio>=1.9",
     "uvicorn>=0.32",
 ]
 

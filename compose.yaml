@@ -279,6 +279,9 @@ services:
     command: ["python", "-m", "citadel.worker"]
     environment:
       CITADEL_WORKER_ROLE: orchestrator
+      TEMPORAL_ADDRESS: temporal:7233
+      OPENFGA_API_URL: http://openfga:8080
+      CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
     depends_on:
       temporal:
@@ -292,6 +295,9 @@ services:
     command: ["python", "-m", "citadel.worker"]
     environment:
       CITADEL_WORKER_ROLE: docker
+      TEMPORAL_ADDRESS: temporal:7233
+      OPENFGA_API_URL: http://openfga:8080
+      CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
     depends_on:
       temporal:
@@ -305,6 +311,9 @@ services:
     command: ["python", "-m", "citadel.worker"]
     environment:
       CITADEL_WORKER_ROLE: github
+      TEMPORAL_ADDRESS: temporal:7233
+      OPENFGA_API_URL: http://openfga:8080
+      CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
     depends_on:
       temporal:
