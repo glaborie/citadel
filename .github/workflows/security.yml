@@ -179,10 +179,30 @@ jobs:
           advanced-security: false   # ← forces --format=github / annotations
           annotations: true          # ← enables annotations and non-zero exit on findings
 
+  # ─────────────────────────── SBOM creation ───────────────────────
+  sbom:
+    name: Supply Chain · SBOM
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read            # to read the repo
+      # contents: write         # uncomment only if you want SBOMs attached to GitHub Releases
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0
+        with:
+          format: spdx-json
+          artifact-name: citadel-sbom.spdx.json
+          # upload-release-assets: true   # default is true; see note below
+          
   # ─────────────────────────── Gate ──────────────────────────────
   security-check:
     name: Security · Gate
-    needs: [bandit, semgrep, codeql, pip-audit, gitleaks, zizmor]
+    needs: [bandit, semgrep, codeql, pip-audit, gitleaks, zizmor, sbom]
     if: always()
     runs-on: ubuntu-24.04
     steps:
