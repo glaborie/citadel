@@ -59,3 +59,11 @@ redteam-report:
 .PHONY: redteam-live
 redteam-live:
 	CITADEL_LIVE=1 .venv/bin/python -m pytest -m live -v
+
+# One real completion through the gateway. Runs inside the compose network,
+# where OmniRoute and Presidio are both reachable, and prints tokens and cost.
+.PHONY: model-smoke
+model-smoke:
+	cd $$HOME/projects/citadel && docker compose run --rm --no-deps \
+		-v $(CURDIR):/repo:ro -e PYTHONPATH=/repo/src \
+		api python /repo/scripts/model_smoke.py

@@ -172,10 +172,16 @@ def inspect(
     return Verdict(action="redact", text=_redact(text, merged), findings=tuple(merged))
 
 
-def gate(text: str, *, surface: str, analyzer_url: str) -> tuple[str, dict[str, Any]]:
+def gate(
+    text: str,
+    *,
+    surface: str,
+    analyzer_url: str,
+    opener: Opener | None = None,
+) -> tuple[str, dict[str, Any]]:
     """`inspect` plus the shared failure shape both tool services report."""
     try:
-        verdict = inspect(text, surface=surface, analyzer_url=analyzer_url)
+        verdict = inspect(text, surface=surface, analyzer_url=analyzer_url, opener=opener)
     except DlpUnavailable as exc:
         raise DlpBlocked(
             "dlp_unavailable",
