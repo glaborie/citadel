@@ -18,9 +18,10 @@ from pydantic import BaseModel, ConfigDict
 
 from citadel import __version__, dlp
 from citadel.tools import CommandDenied, build_argv
+from citadel.tools.bounds import DEFAULT_OUTPUT_LIMIT, bound
 
 COMMAND_TIMEOUT_SECONDS = 30
-MAX_OUTPUT_BYTES = 64_000
+MAX_OUTPUT_BYTES = int(os.environ.get("CITADEL_TOOL_OUTPUT_MAX_BYTES", DEFAULT_OUTPUT_LIMIT))
 DLP_URL = os.environ.get("CITADEL_DLP_URL", "http://presidio:3000")
 
 # Nothing from the ambient environment reaches the child process. The GitHub
@@ -45,6 +46,11 @@ class ExecuteResponse(BaseModel):
     stdout: str
     stderr: str
     truncated: bool
+    # The digest of the stream before it was bounded, so a caller can prove what
+    # it did not receive instead of trusting the flag.
+    output_sha256: str = ""
+    original_bytes: int = 0
+    omitted_bytes: int = 0
     # One report per DLP surface, including passes: the audit ledger has to show
     # that the control ran, not only that it found something.
     dlp: list[dict[str, Any]]
@@ -69,13 +75,6 @@ def run(argv: list[str]) -> subprocess.CompletedProcess[str]:
         shell=False,
         check=False,
     )
-
-
-def _clip(text: str) -> tuple[str, bool]:
-    encoded = text.encode("utf-8", errors="replace")
-    if len(encoded) <= MAX_OUTPUT_BYTES:
-        return text, False
-    return encoded[:MAX_OUTPUT_BYTES].decode("utf-8", errors="replace"), True
 
 
 @app.get("/healthz")
@@ -123,17 +122,27 @@ def execute(request: ExecuteRequest) -> ExecuteResponse:
     except subprocess.TimeoutExpired as exc:
         raise HTTPException(status_code=504, detail="command timed out") from exc
 
-    stdout, clipped_out = _clip(completed.stdout or "")
-    stderr, clipped_err = _clip(completed.stderr or "")
-    stdout, report = _guard(stdout, surface="output")
+    # Scan the whole stream, then bound it. Clipping first would hand the
+    # detector a shorter, cleaner string and call that a pass, which is exactly
+    # how an output control becomes decorative: the secret past the cap is never
+    # examined, and the caller is told the output was checked.
+    # gate() returns the text it is safe to serve: findings are redacted in
+    # place, so the value it hands back is the product, not a formality.
+    stdout_checked, report = _guard(completed.stdout or "", surface="output")
     reports.append(report)
-    stderr, report = _guard(stderr, surface="output")
+    stderr_checked, report = _guard(completed.stderr or "", surface="output")
     reports.append(report)
+
+    out = bound(stdout_checked, limit=MAX_OUTPUT_BYTES)
+    err = bound(stderr_checked, limit=MAX_OUTPUT_BYTES)
     return ExecuteResponse(
         allowlist_id=command.id,
         exit_code=completed.returncode,
-        stdout=stdout,
-        stderr=stderr,
-        truncated=clipped_out or clipped_err,
+        stdout=out.text,
+        stderr=err.text,
+        truncated=out.truncated or err.truncated,
+        output_sha256=out.sha256,
+        original_bytes=out.original_bytes,
+        omitted_bytes=out.omitted_bytes,
         dlp=reports,
     )

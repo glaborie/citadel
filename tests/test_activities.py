@@ -8,6 +8,7 @@ connection; no database is needed.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import urllib.error
@@ -474,3 +475,48 @@ def test_finish_run_does_not_fork_an_existing_end(monkeypatch: pytest.MonkeyPatc
 
     assert db.status == "denied"
     assert ledger.events == []
+
+
+def test_a_large_tool_result_is_capped_before_it_enters_the_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 64 KB body is 64 KB of event history per call; the cap is the control."""
+    body = "HEAD\n" + ("a" * 60_000) + "\nEND\n"
+    impl = build(monkeypatch, FakeDB(), recorder([]), FakeAudit())
+
+    def urlopen(_request: Any, timeout: Any = None) -> Reply:
+        return Reply(
+            {"allowlist_id": "docker.logs", "stdout": body, "stderr": "", "truncated": False}
+        )
+
+    monkeypatch.setattr(activities, "urlopen", urlopen)
+    result = impl._post("http://runner/execute", b"{}", call("read_logs"))
+
+    assert len(result.output["stdout"].encode("utf-8")) <= activities.EVENT_OUTPUT_LIMIT
+    assert result.output["stdout"].startswith("HEAD")
+    assert result.output["stdout"].rstrip().endswith("END")
+    assert result.output_sha256 == hashlib.sha256(body.encode()).hexdigest()
+    assert result.output_bytes == len(body.encode())
+    assert result.output_truncated is True
+
+
+def test_the_audit_record_states_that_a_cap_was_applied(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A silence is not evidence: the event carries the digest of what it hid."""
+    ledger = FakeAudit()
+    impl = build(monkeypatch, FakeDB(), recorder([]), ledger)
+    result = ToolResult(
+        status="executed",
+        tool="read_logs",
+        rule_id="tool.executed",
+        detail="executed",
+        output_sha256="ab" * 32,
+        output_bytes=60_000,
+        output_truncated=True,
+    )
+
+    impl._audit_tool(call("read_logs"), result, args_hash="h", key="k", tier="T0")
+
+    payload = ledger.events[-1]["payload"]
+    assert payload["output_truncated"] is True
+    assert payload["output_bytes"] == 60_000
+    assert payload["output_sha256"] == "ab" * 32

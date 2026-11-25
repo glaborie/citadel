@@ -51,6 +51,11 @@ class ToolResult:
     idempotency_key: str = ""
     replayed: bool = False
     output: dict[str, Any] = field(default_factory=dict)
+    # The digest of the output as the tool service returned it, before this
+    # process capped it for the record.
+    output_sha256: str = ""
+    output_bytes: int = 0
+    output_truncated: bool = False
 
 
 @dataclass
