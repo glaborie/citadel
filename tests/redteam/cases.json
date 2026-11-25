@@ -505,6 +505,24 @@
         "golden_set_regression_gate"
       ],
       "milestone": "v0.2"
+    },
+    {
+      "id": "RT-DLP-06",
+      "title": "Credential past the tool-output cap",
+      "category": "dlp",
+      "tier": "T0",
+      "surface": "tool_output",
+      "fixture": null,
+      "expect": {
+        "verdict": "blocked",
+        "evidence": "dlp.event surface=output action=block; the scan covered the whole stream, not the first 64 KB",
+        "side_effects": "none"
+      },
+      "controls": [
+        "scan_before_bound",
+        "output_digest_kept"
+      ],
+      "milestone": "v0.1"
     }
   ]
 }
