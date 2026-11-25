@@ -37,6 +37,7 @@ class Cursor:
 class FakeDB:
     def __init__(self) -> None:
         self.rows: dict[str, dict[str, Any]] = {}
+        self.approvals: list[tuple[Any, ...]] = []
         self.used_jti: set[str] = set()
         # Who owns the run the API is asked to approve.
         self.run_owner: tuple[str, ...] = ("user-alice",)
@@ -79,6 +80,10 @@ class FakeConn:
                 return Cursor(None)
             self._db.used_jti.add(jti)
             return Cursor((jti,))
+
+        if statement.startswith("UPDATE approval_requests"):
+            self._db.approvals.append(params)
+            return Cursor(None)
 
         if statement.startswith("SELECT user_id FROM runs"):
             return Cursor(self._db.run_owner)

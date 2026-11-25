@@ -34,7 +34,7 @@ If enabled in a later milestone: two distinct approvers, hardware/second-channel
 ## Approval workflow
 
 1. Specialist requests tool execution; policy returns `requires_approval` with tier and rule ID.
-2. Temporal workflow emits a signal to the approval console and waits.
+2. The specialist records a pending approval row (arguments DLP-checked first) and the workflow waits.
 3. Approver authenticates via Keycloak; UI shows tool, canonical args, diff, evidence, risk and TTL.
 4. Approve/deny with reason is authorised server-side; event is hash-chained into audit **before** the workflow resumes.
 5. On approve, tool executes once with idempotency key. On deny/expiry, run records denial and stops that branch.

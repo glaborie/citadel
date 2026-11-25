@@ -19,6 +19,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from citadel import __version__, dlp, telemetry
+from citadel.approval_requests import close_request
 from citadel.approvals import mint_approval_token
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
@@ -277,6 +278,16 @@ def create_app(
             decision="approved" if body.approved else "denied",
             approver=principal.user_id,
             ttl=APPROVAL_TTL,
+        )
+
+        close_request(
+            dsn=_dsn(),
+            tenant_id=principal.tenant_id,
+            run_id=body.run_id,
+            tool=body.tool,
+            approved=body.approved,
+            approver=principal.user_id,
+            reason=body.reason,
         )
 
         decision = ApprovalDecision(

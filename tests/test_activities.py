@@ -19,6 +19,7 @@ from typing import Any, cast
 
 import pytest
 
+from citadel import approval_requests, dlp
 from citadel.hashing import arguments_hash
 from citadel.policy import Decision
 from citadel.workflows import activities
@@ -39,6 +40,7 @@ class FakeDB:
 
     def __init__(self, rows: dict[str, dict[str, Any]] | None = None) -> None:
         self.rows: dict[str, dict[str, Any]] = rows or {}
+        self.approvals: list[tuple[Any, ...]] = []
 
     @contextmanager
     def connect(self, _dsn: str, _tenant: str) -> Iterator[FakeConn]:
@@ -67,6 +69,9 @@ class FakeConn:
             status, result, key = params
             self._db.rows[str(key)] = {"status": status, "result": json.loads(result)}
             return _Cursor(None)
+        if statement.startswith("INSERT INTO approval_requests"):
+            self._db.approvals.append(params)
+            return _Cursor(None)
         raise AssertionError(f"unexpected SQL: {statement}")
 
 
@@ -94,6 +99,7 @@ def build(
     monkeypatch: pytest.MonkeyPatch, db: FakeDB, invoke: Any, audit: Any = None
 ) -> ToolActivities:
     monkeypatch.setattr(activities, "tenant_connection", db.connect)
+    monkeypatch.setattr(approval_requests, "tenant_connection", db.connect)
     impl = ToolActivities(
         checker=cast(Any, None),
         run_store=cast(Any, None),
@@ -298,6 +304,82 @@ def test_policy_decision_is_audited(monkeypatch: pytest.MonkeyPatch) -> None:
     assert event["payload"]["subject"] == "user-alice"
     assert event["payload"]["args_hash"] == arguments_hash(call("read_logs").arguments)
     assert event["payload"]["decision"] == "allow"
+
+
+def _detector(monkeypatch: pytest.MonkeyPatch, body: bytes = b"[]") -> None:
+    class Reply:
+        def read(self) -> bytes:
+            return body
+
+        def __enter__(self) -> Reply:
+            return self
+
+        def __exit__(self, *_: Any) -> None:
+            return None
+
+    monkeypatch.setattr(dlp, "urlopen", lambda _r, timeout=None: Reply())
+
+
+def test_a_t1_request_is_recorded_for_the_console(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeDB()
+    impl = build(monkeypatch, db, recorder([]), FakeAudit())
+    decision = Decision("requires_approval", "policy.tier_requires_approval", "approve it", "T1")
+    monkeypatch.setattr(activities, "authorize", lambda *args, **kwargs: decision)
+    _detector(monkeypatch)
+
+    outcome = impl.authorize_tool(call("restart_service"))
+
+    assert outcome.outcome == "requires_approval"
+    assert len(db.approvals) == 1
+    tenant, run_id, tool, agent, arguments, tier, rule_id, requested_by = db.approvals[0]
+    assert (tenant, run_id, tool, agent, tier, rule_id, requested_by) == (
+        "lab-a",
+        call("restart_service").run_id,
+        "restart_service",
+        "docker",
+        "T1",
+        "policy.tier_requires_approval",
+        "user-alice",
+    )
+    assert json.loads(arguments) == {"service": "checkout-api"}
+
+
+def test_a_secret_in_t1_arguments_denies_before_recording(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = FakeDB()
+    ledger = FakeAudit()
+    impl = build(monkeypatch, db, recorder([]), ledger)
+    decision = Decision("requires_approval", "policy.tier_requires_approval", "approve it", "T1")
+    monkeypatch.setattr(activities, "authorize", lambda *args, **kwargs: decision)
+    _detector(monkeypatch)
+    item = call("restart_service")
+    item.arguments = {"service": "ghp_" + "a" * 36}
+
+    outcome = impl.authorize_tool(item)
+
+    assert outcome.outcome == "deny"
+    assert outcome.rule_id == "dlp.blocked"
+    assert db.approvals == []
+    assert [event["event_type"] for event in ledger.events] == ["policy.decision", "dlp.event"]
+
+
+def test_a_dead_detector_denies_before_recording(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeDB()
+    impl = build(monkeypatch, db, recorder([]), FakeAudit())
+    decision = Decision("requires_approval", "policy.tier_requires_approval", "approve it", "T1")
+    monkeypatch.setattr(activities, "authorize", lambda *args, **kwargs: decision)
+
+    def down(_request: Any, timeout: Any = None) -> Any:
+        raise OSError("detector down")
+
+    monkeypatch.setattr(dlp, "urlopen", down)
+
+    outcome = impl.authorize_tool(call("restart_service"))
+
+    assert outcome.outcome == "deny"
+    assert outcome.rule_id == "dlp.unavailable"
+    assert db.approvals == []
 
 
 def test_tool_call_is_audited(monkeypatch: pytest.MonkeyPatch) -> None:

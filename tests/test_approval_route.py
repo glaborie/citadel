@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 
-from citadel import dlp
+from citadel import approval_requests, dlp
 from citadel.api import app as api_module
 from citadel.api.app import create_app
 from citadel.identity import KeycloakVerifier
@@ -35,6 +35,7 @@ def env(
         return SimpleNamespace(audit_id=f"audit-{len(events)}")
 
     monkeypatch.setattr(api_module, "tenant_connection", db.connect)
+    monkeypatch.setattr(approval_requests, "tenant_connection", db.connect)
     monkeypatch.setattr(api_module, "AuditLedger", lambda _dsn: SimpleNamespace(append=append))
     verifier = KeycloakVerifier(ISSUER, AUDIENCE, StaticKeys(rsa_key.public_key()))
     client = TestClient(

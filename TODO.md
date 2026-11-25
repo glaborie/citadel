@@ -7,9 +7,13 @@ Open work. Done items get deleted, not ticked.
       Decide between accepting the gap or adding a recognizer that separates
       names from technical nouns.
 
-- [ ] An approval-preview endpoint must render only checked payloads. The
-      check sits on the decision POST; a console read path that serves raw run
-      arguments would reopen RT-HITL-05.
+- [ ] Console sessions have no refresh. The session cookie and the Keycloak
+      access token both last 300 s, so a review longer than five minutes ends
+      in a re-login (silent through the SSO session, but the form is lost).
+
+- [ ] Approval detail shows canonical arguments, not a rendered diff. ADR-009
+      asks for the diff as well; `open_remediation_pr` reads an existing branch,
+      so there is nothing to diff until a checkout exists in the operator.
 
 - [ ] Register `docker.inspect`, `docker.compose.config` and `gh.pr.diff` in the
       tool catalog. Their output now passes DLP, but registering a tool means
