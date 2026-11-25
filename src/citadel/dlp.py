@@ -37,11 +37,10 @@ ANALYZER_TIMEOUT_SECONDS = 30
 # timestamp makes tool output useless without hiding anything personal. The
 # US_* recognizers are absent because they score ordinary digit strings at 0.01.
 #
-# PERSON is absent for the same reason, with better evidence: on this stack it
-# scores "docker" in "docker: unknown command" at 0.85 — exactly what it gives
-# "Alice Smith". Redacting it turns every error message into <PERSON>: unknown
-# command: <PERSON> compose. Structured identifiers redact reliably; free-text
-# names do not, so they are an open item rather than a noisy control.
+# PERSON is requested, but only spans that survive `_is_name` count: on this
+# stack the detector scores "docker" in "docker: unknown command" at 0.85 —
+# exactly what it gives "Alice Smith". Without the filter every error message
+# becomes <PERSON>: unknown command: <PERSON> compose.
 PII_ENTITIES: tuple[str, ...] = (
     "EMAIL_ADDRESS",
     "PHONE_NUMBER",
@@ -52,6 +51,45 @@ PII_ENTITIES: tuple[str, ...] = (
     "MEDICAL_LICENSE",
     "CRYPTO",
     "AHV",
+    "PERSON",
+)
+
+# Words this system uses constantly, scored as names at 0.85 by
+# presidio-analyzer:2.2.362 (live, not guessed). A PERSON span containing one
+# is a technical noun, not a person. Extend when a new service name starts
+# appearing in logs as <PERSON>.
+TECHNICAL_NOUNS: frozenset[str] = frozenset(
+    {
+        "docker",
+        "compose",
+        "keycloak",
+        "temporal",
+        "openfga",
+        "presidio",
+        "mlflow",
+        "postgres",
+        "qdrant",
+        "omniroute",
+        "citadel",
+        "github",
+        "ubuntu",
+        "squid",
+        "gvisor",
+        "runsc",
+        "sops",
+        "fastapi",
+        "uvicorn",
+        "pytest",
+        "ruff",
+        "mypy",
+        "redis",
+        "kafka",
+        "nginx",
+        "kubernetes",
+        "grafana",
+        "prometheus",
+        "otel",
+    }
 )
 
 # Credentials: no NER model will find these, so they are matched exactly.
@@ -244,7 +282,7 @@ def _findings(text: str, detected: Iterable[dict[str, Any]]) -> list[Finding]:
             detector_verdict="n/a",
         )
         for start, end, entity, score in spans
-        if entity != "IP_ADDRESS" or _is_public_ip(text[start:end])
+        if _keep(entity, text[start:end])
     ]
     for kind, rules in (("block", SECRET_RULES), ("redact", PII_RULES)):
         for category, pattern in rules:
@@ -261,6 +299,26 @@ def _findings(text: str, detected: Iterable[dict[str, Any]]) -> list[Finding]:
                     )
                 )
     return findings
+
+
+def _keep(entity: str, candidate: str) -> bool:
+    """Deterministic filters for the two entities the detector over-reports."""
+    if entity == "IP_ADDRESS":
+        return _is_public_ip(candidate)
+    if entity == "PERSON":
+        return _is_name(candidate)
+    return True
+
+
+def _is_name(candidate: str) -> bool:
+    """A span is a person unless one of its words is one of ours.
+
+    Case-folded because the detector scores `docker` (0.85) and `Docker
+    Compose` (0.85) as confidently as `Alice Smith`. Single names are kept:
+    `alice approved` is a person too.
+    """
+    words = re.split(r"[^\w'-]+", candidate)
+    return not any(word.casefold() in TECHNICAL_NOUNS for word in words if word)
 
 
 def _is_public_ip(candidate: str) -> bool:

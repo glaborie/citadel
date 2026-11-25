@@ -133,8 +133,20 @@ def test_clean_text_passes_through_unchanged() -> None:
     assert verdict.findings == ()
 
 
-def test_person_names_are_not_asked_for() -> None:
-    """Calibration: PERSON scored "docker" at 0.85 here, so it is not requested."""
+def person(text: str, *names: str) -> list[dict[str, Any]]:
+    """The detector's answer for names, with offsets taken from the text."""
+    spans: list[dict[str, Any]] = []
+    cursor = 0
+    for name in names:
+        start = text.index(name, cursor)
+        spans.append(
+            {"entity_type": "PERSON", "start": start, "end": start + len(name), "score": 0.85}
+        )
+        cursor = start + len(name)
+    return spans
+
+
+def test_person_is_requested_from_the_detector() -> None:
     seen: list[dict[str, Any]] = []
 
     def opener(request: Any, timeout: Any = None) -> Response:
@@ -142,7 +154,38 @@ def test_person_names_are_not_asked_for() -> None:
         return Response([])
 
     dlp.inspect("docker: unknown command", surface="output", analyzer_url=URL, opener=opener)
-    assert "PERSON" not in seen[0]["entities"]
+    assert "PERSON" in seen[0]["entities"]
+
+
+@pytest.mark.parametrize(
+    "name", ["Alice Smith", "Alice", "alice", "Hans Müller", "Jean-Pierre Dupont"]
+)
+def test_names_are_redacted(name: str) -> None:
+    text = f"restarted for {name}"
+    verdict = dlp.inspect(
+        text, surface="output", analyzer_url=URL, opener=detector(person(text, name))
+    )
+    assert verdict.action == "redact"
+    assert verdict.text == "restarted for <PERSON>"
+
+
+@pytest.mark.parametrize(
+    "text,name",
+    [
+        ("docker: unknown command: docker compose", "docker"),
+        ("Docker Compose is not installed", "Docker Compose"),
+        ("Docker daemon is not running", "Docker"),
+        ("Keycloak realm citadel is down", "Keycloak"),
+        ("Temporal workflow failed on Postgres", "Temporal"),
+    ],
+)
+def test_technical_nouns_are_not_redacted(text: str, name: str) -> None:
+    """Calibration: these score 0.85, the same as a name, and must survive."""
+    verdict = dlp.inspect(
+        text, surface="output", analyzer_url=URL, opener=detector(person(text, name))
+    )
+    assert verdict.action == "pass"
+    assert verdict.text == text
 
 
 def test_overlapping_hits_are_redacted_once() -> None:
