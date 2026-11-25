@@ -1,6 +1,6 @@
 # Red-team report
 
-Generated 2026-11-25 13:46 UTC from `pytest -m redteam`. Do not edit by hand.
+Generated 2026-11-25 14:14 UTC from `pytest -m redteam`. Do not edit by hand.
 
 **25 of 29 blocked or denied as specified** · 0 failing · 0 known gaps · 4 pending · 0 not run · 25 executed in this run.
 
@@ -43,4 +43,4 @@ lowered to make it green. Neither pending nor gap counts as passing.
 
 ## Known gaps in the pack
 
-- **RT-DLP-02** — PERSON and ADDRESS are not recognisers in v0.1 (TODO.md); structured Swiss identifiers are
+- **RT-DLP-02** — ADDRESS is not a recogniser in v0.1; PERSON is filtered against technical nouns, so a name colliding with one is not redacted

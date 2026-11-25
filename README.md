@@ -4,7 +4,7 @@
 
 Citadel is a clean-slate Python + Docker Compose stack that runs a small fleet of specialised agents (Docker, GitHub, Researcher) against a real homelab. It treats identity, tenancy, authorisation, sandboxing, DLP, audit and evaluation as first-class runtime properties rather than middleware added at the end. It is a portfolio piece aimed at senior AI-engineering roles and is deliberately usable outside the demo.
 
-**Status: v0.1 in progress — 9 of 10 implementation steps complete and running on a live host.** The identity, policy, orchestration, sandbox, write-path, DLP and model-gateway controls are implemented and verified end to end; the offline evaluation harness, live trajectory recorder and OTLP trace export to MLflow are built, and a T1 drill produced one trace with policy, DLP, approval and tool spans. The approval console's five views and Keycloak SSO are built (verified at the unit level, not yet against a live Keycloak). The remaining step is the red-team close-out and milestone exit review. See `TODO.md` for open work and `docs/implementation-notes/v0.1-verification.md` for what was executed, on which host, and what it printed.
+**Status: v0.1 complete, with its exit review in `docs/exit-review-v0.1.md`.** Identity, policy, orchestration, sandboxing, the write path, DLP, the approval console, hash-pinned skill packs, the model loop inside the orchestrator workflow and the API that submits it are built and verified on a live host. A task posted to `POST /runs` now runs the whole chain: pack plus tool manifest as the system prompt, a model call, the requested tool through the policy chokepoint and DLP gates, and the answer on `run.end`. Four of the five exit criteria are met as written, and the fifth cannot be (a clean clone carries no secrets by design). See `TODO.md` for open work and `docs/implementation-notes/v0.1-verification.md` for what was executed, on which host, and what it printed.
 
 ## What demonstrates what
 
@@ -25,14 +25,14 @@ The table is the architecture; the **Status** column says which rows exist as co
 | 10 | MCP support | Adapter seam only; consume external tools in a later milestone | seam only |
 | 11 | Permission-aware RAG | ACL-filtered Qdrant hybrid retrieval → rerank → structured citations | v0.2 |
 | 12 | Code mode | Deferred; only inside the sandbox, never in the worker | deferred |
-| 13 | Trajectory evaluation | MLflow 3.x offline + online grading of full traces | deterministic offline harness and live recorder built; MLflow export and judge rubrics pending |
+| 13 | Trajectory evaluation | MLflow 3.x offline + online grading of full traces | deterministic offline harness, live recorder and OTLP export built; judge rubrics are v0.2 |
 | 14 | A2A | Adapter seam only; ecosystem judged too thin to build against | seam only |
 | 15 | Semantic routing | Deterministic → embedding → complexity routing in v0.4 | v0.4 |
 | 16 | Scoped caching | Exact then semantic, partitioned by tenant + entitlement + model version | v0.3 |
 
 ## What runs today
 
-`make up` starts 17 services, unwrapping secrets through SOPS first so no plaintext copy is written to disk. All health-checked services report healthy; `./scripts/clean-clone-check.sh` installs and passes 265 tests (35 skipped: live-network and red-team executors not yet wired) from a fresh clone with no hidden files.
+`make up` starts 17 services, unwrapping secrets through SOPS first so no plaintext copy is written to disk. All health-checked services report healthy; `./scripts/clean-clone-check.sh` installs and passes 381 tests (32 skipped: live-network and live-model cases) from a fresh clone with no hidden files.
 
 | Control | Evidence |
 |---|---|
@@ -84,7 +84,7 @@ flowchart LR
 
 ## Milestones
 
-- **v0.1** — one full turn: auth → tenant → policy → guarded read → HITL-gated write → audit + trace. *In progress: steps 1–7 of 10 done, offline eval harness, recorded trajectories and MLflow tracing in place.*
+- **v0.1** — one full turn: auth → tenant → policy → guarded read → HITL-gated write → audit + trace. *Complete: exit review in `docs/exit-review-v0.1.md`; all ten implementation steps delivered, four of five exit criteria met as written and the fifth recorded as a deviation.*
 - **v0.2** — permission-aware RAG, Researcher, SOPS+age secrets.
 - **v0.3** — full evaluation suite, online grading, tenant-scoped cache.
 - **v0.4** — MCP consume adapter, A2A seam, code mode, semantic routing.
@@ -127,11 +127,11 @@ src/citadel/
   audit.py                    # hash-chained ledger
   telemetry.py                # one MLflow trace per run, spans carry audit IDs
   worker.py                   # role-scoped Temporal workers
-tests/                        # 265 hermetic tests + opt-in live suites
+tests/                        # 381 hermetic tests + opt-in live suites
 ```
 
 ## Verification status
 
-Design reviewed and confirmed by the human owner on 2026-11-23. Implementation is verified against a real host: 15 containers healthy, live Keycloak login, real OpenFGA decisions, real Postgres RLS, real GitHub reads and a draft-PR write that reached GitHub's `createPullRequest` mutation, and a DLP block that redacted a planted Swiss IBAN and refused a planted token.
+Design reviewed and confirmed by the human owner on 2026-11-23. Implementation is verified against a real host: 17 containers healthy, live Keycloak login, real OpenFGA decisions, real Postgres RLS, real GitHub reads and a draft-PR write that reached GitHub's `createPullRequest` mutation, and a DLP block that redacted a planted Swiss IBAN and refused a planted token.
 
 Nothing in `docs/` is treated as done on paper: every control above has a recorded drill in `docs/implementation-notes/v0.1-verification.md`, including the ones that failed first. The eval harness grades two trajectories exported from live runs, and the T1 run's MLflow trace carries the policy, DLP, approval and tool spans with matching audit IDs. Open verification items inherited from the design (exact OmniRoute image commit, MLflow auth wiring, gVisor availability) are tracked in `AGENTS.md`; the OmniRoute and MLflow image questions are answered, MLflow's human-path auth remains open because the UI is not published, and `runsc` is documented as unavailable on this host with the Compose flags as the actual isolation boundary.

@@ -20,7 +20,7 @@ from typing import Any, cast
 
 import pytest
 
-from citadel import approval_requests, dlp
+from citadel import approval_requests, dlp, net
 from citadel.hashing import arguments_hash
 from citadel.policy import Decision
 from citadel.workflows import activities
@@ -244,7 +244,7 @@ def test_dlp_reports_on_a_successful_call_reach_the_ledger(
     def urlopen(_request: Any, timeout: Any = None) -> Reply:
         return Reply({"allowlist_id": "docker.ps", "dlp": [report]})
 
-    monkeypatch.setattr(activities, "urlopen", urlopen)
+    monkeypatch.setattr(net, "urlopen", urlopen)
     result = impl._post("http://runner/execute", b"{}", call("read_logs"))
 
     assert result.status == "executed"
@@ -264,7 +264,7 @@ def test_a_dlp_block_is_audited_and_reported(monkeypatch: pytest.MonkeyPatch) ->
             request.full_url, 403, "Forbidden", Message(), io.BytesIO(body)
         )
 
-    monkeypatch.setattr(activities, "urlopen", urlopen)
+    monkeypatch.setattr(net, "urlopen", urlopen)
     result = impl._post("http://runner/execute", b"{}", call("read_logs"))
 
     assert (result.status, result.rule_id) == ("failed", "dlp.blocked")
@@ -284,7 +284,7 @@ def test_an_unavailable_detector_is_reported_as_such(monkeypatch: pytest.MonkeyP
             request.full_url, 503, "Unavailable", Message(), io.BytesIO(body)
         )
 
-    monkeypatch.setattr(activities, "urlopen", urlopen)
+    monkeypatch.setattr(net, "urlopen", urlopen)
     result = impl._post("http://runner/execute", b"{}", call("read_logs"))
 
     assert result.rule_id == "dlp.unavailable"
@@ -456,12 +456,18 @@ def test_finish_run_writes_the_end_event(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(activities, "tenant_connection", db.connect)
 
     RunActivities(dsn="unused", audit=cast(Any, ledger)).finish_run(
-        RunEnd(run_id="run-1", tenant_id="lab-a", outcome="completed")
+        RunEnd(
+            run_id="run-1",
+            tenant_id="lab-a",
+            outcome="completed",
+            answer="two containers are running",
+        )
     )
 
     assert db.status == "completed"
     assert [event["event_type"] for event in ledger.events] == ["run.end"]
     assert ledger.events[0]["payload"]["outcome"] == "completed"
+    assert ledger.events[0]["payload"]["answer"] == "two containers are running"
 
 
 def test_finish_run_does_not_fork_an_existing_end(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -489,7 +495,7 @@ def test_a_large_tool_result_is_capped_before_it_enters_the_history(
             {"allowlist_id": "docker.logs", "stdout": body, "stderr": "", "truncated": False}
         )
 
-    monkeypatch.setattr(activities, "urlopen", urlopen)
+    monkeypatch.setattr(net, "urlopen", urlopen)
     result = impl._post("http://runner/execute", b"{}", call("read_logs"))
 
     assert len(result.output["stdout"].encode("utf-8")) <= activities.EVENT_OUTPUT_LIMIT

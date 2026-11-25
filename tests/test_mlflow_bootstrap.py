@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from citadel import mlflow_bootstrap
+from citadel import mlflow_bootstrap, net
 
 
 class Reply:
@@ -33,7 +33,7 @@ def test_existing_experiment_is_returned(monkeypatch: pytest.MonkeyPatch) -> Non
         assert "get-by-name" in request.full_url
         return Reply({"experiment": {"experiment_id": "3"}})
 
-    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(net, "urlopen", urlopen)
     assert mlflow_bootstrap.ensure_experiment() == "3"
 
 
@@ -48,6 +48,6 @@ def test_missing_experiment_is_created(monkeypatch: pytest.MonkeyPatch) -> None:
         created.append(request.full_url)
         return Reply({"experiment_id": "7"})
 
-    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(net, "urlopen", urlopen)
     assert mlflow_bootstrap.ensure_experiment() == "7"
     assert created == [f"{mlflow_bootstrap.BASE}/api/2.0/mlflow/experiments/create"]

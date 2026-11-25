@@ -8,6 +8,7 @@ from typing import Any
 from citadel.audit import AuditLedger
 from citadel.policy import RelationChecker, RunStore
 from citadel.workflows.activities import RunActivities, ToolActivities
+from citadel.workflows.model_step import ModelActivities
 from citadel.workflows.orchestrator import RunWorkflow
 from citadel.workflows.specialist import SpecialistWorkflow
 
@@ -31,8 +32,11 @@ def activities_for(
 ) -> list[Any]:
     audit = AuditLedger(dsn)
     if role == "orchestrator":
+        # The orchestrator owns sequencing: it may ask the model for a step and it
+        # writes run.end. It never holds a side-effecting tool.
         run_activities = RunActivities(dsn=dsn, audit=audit)
-        return [run_activities.finish_run]
+        model_activities = ModelActivities(dsn=dsn, audit=audit)
+        return [run_activities.finish_run, model_activities.next_step]
     if checker is None or run_store is None:
         raise ValueError(f"{role} activities need a policy checker and run store")
     impl = ToolActivities(

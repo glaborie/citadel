@@ -7,7 +7,6 @@ signed directly so the tests drive the same routes a logged-in browser would.
 from __future__ import annotations
 
 import time
-import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -16,6 +15,7 @@ import jwt
 import pytest
 from fastapi.testclient import TestClient
 
+from citadel import net
 from citadel.ui import app as ui_app
 
 KEY = "test-session-key-0123456789abcdef"
@@ -215,7 +215,7 @@ def test_decide_forwarded_to_the_api_with_the_user_token(
         seen["body"] = request.data
         return Reply()
 
-    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    monkeypatch.setattr(net, "urlopen", fake)
     response = client.post(
         f"/approvals/{REQUEST}/decide",
         data={"csrf": "csrf-value", "decision": "approve", "reason": "looks fine"},

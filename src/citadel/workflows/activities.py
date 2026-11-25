@@ -14,7 +14,7 @@ import os
 import time
 import urllib.error
 from typing import Any
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from temporalio import activity
 
@@ -23,6 +23,7 @@ from citadel.approval_requests import record_request
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
 from citadel.hashing import arguments_hash
+from citadel.net import open_url
 from citadel.policy import AuthorizationRequest, RelationChecker, RunStore, authorize
 from citadel.policy.catalog import load_catalog
 from citadel.telemetry import record_span
@@ -336,7 +337,7 @@ class ToolActivities:
             method="POST",
         )
         try:
-            with urlopen(request, timeout=60) as response:
+            with open_url(request, timeout=60) as response:
                 payload: dict[str, Any] = json.loads(response.read())
         except urllib.error.HTTPError as exc:
             # A tool service that answered is deterministic: retrying the same
@@ -443,6 +444,7 @@ class RunActivities:
                 "outcome": end.outcome,
                 "citation_ids": end.citation_ids,
                 "safety_flags": end.safety_flags,
+                "answer": end.answer[:4000],
             },
         )
         record_span(

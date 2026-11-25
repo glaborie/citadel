@@ -1,0 +1,28 @@
+# Gitleaks configuration.
+#
+# The scan covers full history on purpose. Both allowlists are attached to the
+# rule they excuse and are deliberately narrow: a path that exists to contain
+# synthetic secrets, and one regex for a type annotation. A real key pasted
+# anywhere else still fails the job - including into the test file named below
+# and into the fixture directory under another rule.
+
+[extend]
+useDefault = true
+
+# `client: TestClient, key: Ed25519PrivateKey` and
+# `private_key: Ed25519PrivateKey | None = None` are annotations. The rule sees
+# "key: <high-entropy token>"; the value is a type, never a literal.
+[[rules]]
+id = "generic-api-key"
+[[rules.allowlists]]
+description = "`key: Ed25519PrivateKey` - an identifier or a type annotation, never a literal value"
+regexTarget = "line"
+regexes = ['''\b(private_)?key\s*:\s*Ed25519PrivateKey\b''']
+
+# The DLP red-team cases plant credentials on purpose so the detector has
+# something to block or redact. Those files are inputs to a control.
+[[rules]]
+id = "github-pat"
+[[rules.allowlists]]
+description = "Synthetic GitHub PATs planted by the DLP red-team fixtures"
+paths = ['''tests/redteam/fixtures/''']

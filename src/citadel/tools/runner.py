@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import tempfile
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -60,7 +61,7 @@ def _child_env(binary: str = "") -> dict[str, str]:
     keys = SAFE_ENV_KEYS + BINARY_ENV_KEYS.get(binary, ())
     env = {key: os.environ[key] for key in keys if key in os.environ}
     env.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
-    env.setdefault("HOME", "/tmp")
+    env.setdefault("HOME", tempfile.gettempdir())
     return env
 
 
