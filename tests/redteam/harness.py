@@ -46,6 +46,10 @@ ANALYZER = "http://presidio.test"
 # report can be generated without pytest having to know about our data model.
 COLLECTED: dict[str, tuple[str, str]] = {}
 
+# Live results land here and win over the offline answer: the stack is the
+# stronger evidence, and file execution order must not decide which one counts.
+LIVE: dict[str, tuple[str, str]] = {}
+
 
 @dataclass(frozen=True)
 class Case:

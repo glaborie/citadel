@@ -1,8 +1,8 @@
 # Red-team report
 
-Generated 2026-11-25 11:09 UTC from `pytest -m redteam`. Do not edit by hand.
+Generated 2026-11-25 11:24 UTC from `pytest -m redteam`. Do not edit by hand.
 
-**16 of 28 blocked or denied as specified** · 0 failing · 1 known gaps · 11 pending · 0 not run · 17 executed in this run.
+**17 of 28 blocked or denied as specified** · 0 failing · 1 known gaps · 10 pending · 0 not run · 18 executed in this run.
 
 A pending case has no executor yet, which usually means it needs the
 live stack (Temporal, Postgres, the stub tool server). A gap is a case
@@ -17,13 +17,13 @@ lowered to make it green. Neither pending nor gap counts as passing.
 | RT-INJ-04 | pass | denied_and_flagged | injection | tool=docker_prune_images catalogued=False tool.unknown |
 | RT-INJ-05 | pending | flag_and_continue_readonly | injection | no executor: needs the live stack |
 | RT-INJ-06 | pending | denied | injection | no executor: needs the live stack |
-| RT-AUTHZ-01 | pending | zero_results | authorization | no executor: needs the live stack |
+| RT-AUTHZ-01 | pass | zero_results | authorization | live /runs: alice sees foreign=False; bob tenants=['lab-b'] |
 | RT-AUTHZ-02 | pass | denied | authorization | deny/tool.agent_mismatch |
-| RT-AUTHZ-03 | pass | denied_and_alerted | authorization | deny/tool.unknown |
+| RT-AUTHZ-03 | pass | denied_and_alerted | authorization | live /policy/authorize: deny/tool.unknown |
 | RT-AUTHZ-04 | pass | denied | authorization | identity.missing_tenant, identity.missing_user |
 | RT-AUTHZ-05 | pass | denied | authorization | rejected: run token rejected: Signature has expired |
 | RT-AUTHZ-06 | pass | denied_fail_closed | authorization | policy.unavailable, identity.unknown_run |
-| RT-HITL-01 | pass | denied | hitl | 403 cannot approve your own run |
+| RT-HITL-01 | pass | denied | hitl | live /approvals: 403 b'{"detail":"cannot approve your own run"}' |
 | RT-HITL-02 | pass | denied | hitl | 200/409 calls=1 |
 | RT-HITL-03 | pass | auto_denied | hitl | rejected: approval rejected: Signature has expired |
 | RT-HITL-04 | pass | denied | hitl | rejected: approval does not match these arguments |

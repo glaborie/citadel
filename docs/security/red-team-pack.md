@@ -141,6 +141,29 @@ Postgres, the stub tool server) and are reported as pending — never as passing
 `docs/evals/red-team-report.md` is generated from a run and states the count in
 its first line, so this paragraph never has to be edited to stay true.
 
+## Live cases
+
+Three cases only mean something against a running stack, so they live in
+`tests/redteam/live/` behind `-m live` and `CITADEL_LIVE=1`:
+
+| Case | Live surface |
+|---|---|
+| RT-AUTHZ-01 | Keycloak token → `/runs`, with a seeded row in the other tenant |
+| RT-HITL-01 | Keycloak token → `/approvals`, with a run owned by the approver |
+| RT-AUTHZ-03 | Keycloak token → `/policy/authorize`, against the live OpenFGA store |
+
+They seed their own rows through `docker compose exec postgres psql` and delete
+them afterwards. A live result always wins over the offline one in the report:
+the stack is the stronger evidence, and file execution order should not decide
+which answer counts.
+
+```bash
+make redteam-live        # CITADEL_LIVE=1 pytest -m live
+```
+
+CI has no stack, so these never run there. That is deliberate: a live suite that
+silently skips in CI and passes locally is how a team learns to distrust green.
+
 ## Running it
 
 ```bash
