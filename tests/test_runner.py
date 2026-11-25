@@ -188,6 +188,15 @@ def test_gh_is_given_the_token(monkeypatch: pytest.MonkeyPatch) -> None:
     assert runner._child_env("gh")["GH_TOKEN"] == "ghp_secret"
 
 
+def test_gh_token_comes_from_a_mounted_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    path = tmp_path / "gh_token"
+    path.write_text("ghp_from_file\n", encoding="ascii")
+    monkeypatch.setenv("GH_TOKEN_FILE", str(path))
+    monkeypatch.setenv("GH_TOKEN", "ghp_from_env")
+    assert runner._child_env("gh")["GH_TOKEN"] == "ghp_from_file"
+    assert "GH_TOKEN" not in runner._child_env("docker")
+
+
 def test_large_output_is_bounded_to_the_cap() -> None:
     result = bound("x" * (runner.MAX_OUTPUT_BYTES + 10), limit=runner.MAX_OUTPUT_BYTES)
     assert result.truncated is True

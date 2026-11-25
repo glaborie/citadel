@@ -32,7 +32,9 @@ The table is the architecture; the **Status** column says which rows exist as co
 
 ## What runs today
 
-`make up` starts 17 services, unwrapping secrets through SOPS first so no plaintext copy is written to disk. All health-checked services report healthy; `./scripts/clean-clone-check.sh` installs and passes 381 tests (32 skipped: live-network and live-model cases) from a fresh clone with no hidden files.
+`make up` starts 17 services, unwrapping secrets through SOPS first into
+gitignored Docker-secret files under `secrets/` (never into a container
+environment). All health-checked services report healthy; `./scripts/clean-clone-check.sh` installs and passes 381 tests (32 skipped: live-network and live-model cases) from a fresh clone with no hidden files.
 
 | Control | Evidence |
 |---|---|

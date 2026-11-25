@@ -23,6 +23,7 @@ from citadel import __version__, dlp, telemetry, tool_outputs
 from citadel.approval_requests import close_request
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
+from citadel.env import secret
 from citadel.hashing import arguments_hash
 from citadel.identity import IdentityError, KeycloakVerifier, Principal, mint_run_token
 from citadel.identity.run_token import private_key_from_env
@@ -142,12 +143,12 @@ def create_app(
         )
 
     def _dsn() -> str:
-        return dsn if dsn is not None else os.environ["CITADEL_DB_DSN"]
+        return dsn if dsn is not None else secret("CITADEL_DB_DSN")
 
     def _key() -> Ed25519PrivateKey:
         if private_key is not None:
             return private_key
-        return private_key_from_env(os.environ["CITADEL_RUN_TOKEN_PRIVATE_KEY"])
+        return private_key_from_env(secret("CITADEL_RUN_TOKEN_PRIVATE_KEY"))
 
     def _pack(agent: str) -> SkillPack:
         try:
