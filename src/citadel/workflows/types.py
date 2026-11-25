@@ -66,6 +66,12 @@ class RunInput:
     agent_id: str
     tool: str
     arguments: dict[str, Any] = field(default_factory=dict)
+    # A task run carries its instruction here instead of naming a tool; the
+    # orchestrator then loops until the model answers or the budget runs out.
+    task: str = ""
+    model_alias: str = ""
+    prompt_pack_version: str = ""
+    max_steps: int = 3
 
 
 @dataclass
