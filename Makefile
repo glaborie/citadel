@@ -85,3 +85,13 @@ model-smoke:
 .PHONY: redteam-report-live
 redteam-report-live:
 	CITADEL_LIVE=1 CITADEL_REDTEAM_REPORT=1 .venv/bin/python -m pytest -m "redteam or live" -q
+
+# One worktree per branch; this retires the ones whose work already landed. It
+# removes a tree only when its HEAD is an ancestor of origin/master and it has
+# no uncommitted changes, and deletes the branch only once its commits are
+# confirmed in origin/master. A tree touched in the last 15 minutes is skipped,
+# because another session may be in it. ARGS=--dry-run to see the decisions first.
+.PHONY: worktree-prune
+
+worktree-prune:  ## Remove worktrees whose branch is already merged
+	scripts/worktree-prune.sh $(ARGS)
