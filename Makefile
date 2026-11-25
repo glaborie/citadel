@@ -37,6 +37,12 @@ migrate:  ## Re-apply migrations/*.sql to an existing database
 		docker compose exec -T postgres psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -f "/$$f" || exit 1; \
 	done
 
+.PHONY: test
+
+# The offline suite: live tests skip themselves unless CITADEL_LIVE_TESTS is set.
+test:  ## Run the test suite (live tests skip themselves)
+	uv run pytest
+
 .PHONY: eval
 
 # Deterministic grading of the committed trajectory fixtures.
