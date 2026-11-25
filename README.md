@@ -18,6 +18,7 @@ The table is the architecture; the **Status** column says which rows exist as co
 | 4 | Sandboxing | Hardened ephemeral sidecar; gVisor `runsc` as a one-line upgrade | built, without gVisor (`runsc` unavailable on this host) |
 | 5 | DLP | Local Presidio + custom CH/EU recognizers; fail-closed; redact before egress | built |
 | 6 | Guardrails | Inline policy checks on prompts, retrieval, tool args and model output | tool args, results and policy done; model/retrieval paths do not exist yet |
+| 6a | Skills | Three hash-pinned packs with a lazy index; a run's `prompt_pack_version` must match the deployed pack | built: content, verified loader and checked provenance; no runtime assembles the prompt yet |
 | 7 | Human in the loop | Keycloak-authenticated approval console resuming Temporal workflows | built: five views, PKCE SSO, CSRF, server-side authorisation |
 | 8 | Idempotency | Durable hashed tool keys + Postgres unique constraint; effectively-once semantics | built |
 | 9 | Telemetry | OTel spans to MLflow; hash-chained security audit log in Postgres | built: spans carry the audit event id; audit chain built |
@@ -41,6 +42,7 @@ The table is the architecture; the **Status** column says which rows exist as co
 | Sandbox | `cap_drop: ALL`, read-only rootfs, no socket, egress only to `api.github.com` through a domain-allowlisted proxy |
 | DLP | Presidio plus deterministic credential rules; person names are redacted after a filter that keeps the stack's own vocabulary readable; a detector that cannot answer blocks the call rather than passing text |
 | Writes | `restart_service` and `open_remediation_pr` only, only from the operator, only with a single-use approval token naming the exact arguments |
+| Skills | `skills/<agent>/` index plus references, every file pinned by sha256; a changed, missing or unpinned file is refused at load, and `POST /runs` rejects a pack version the deployment does not have |
 | Console | Five server-rendered views behind Keycloak PKCE login; a decision POST forwards to the API with the approver's own token, so CSRF, role and DLP checks stay server-side |
 | Audit | Append-only hash chain per tenant, verified after every live drill |
 | Tracing | OTLP/HTTP into MLflow; one T1 run produced a single trace with run start, policy, approval, three DLP events, tool call and run end, each carrying its audit ID |
@@ -121,6 +123,7 @@ src/citadel/
   tools/                      # allowlist, argv builder, sandbox, operator
   workflows/                  # orchestrator + specialist workflows, activities
   dlp.py                      # fail-closed DLP (Presidio + hard rules)
+  skills.py                   # hash-verified skill pack loader
   audit.py                    # hash-chained ledger
   telemetry.py                # one MLflow trace per run, spans carry audit IDs
   worker.py                   # role-scoped Temporal workers

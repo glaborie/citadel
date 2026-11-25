@@ -15,6 +15,10 @@ up:  ## Start the stack, unwrapping secrets through sops
 # OpenFGA CLI pinned by digest; only needed to regenerate the model JSON.
 POLICY_CLI = openfga/cli:latest@sha256:7a7f9fb0a27a788a0fa7907eb5fc751c3134ca0776245578308e011606b61091
 
+.PHONY: skills-lock
+skills-lock:  ## Re-hash the skill packs after editing (bump their version too)
+	uv run python -m citadel.skills
+
 .PHONY: policy-model policy-bootstrap
 
 # model.fga is the source of truth; model.json is the generated artifact the

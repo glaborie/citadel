@@ -1,0 +1,10 @@
+{
+  "agent": "researcher",
+  "pack": "researcher-1.0.0",
+  "version": "1.0.0",
+  "files": {
+    "SKILL.md": "sha256:75b4cbe3f50ef11387e4845ce83c3dce800831e96c01e2fd192418c0c141d67a",
+    "references/citations.md": "sha256:62fbfaf3c323c26b92385fee551c92f71ae24713d73dd2985ef6fbffbf572fa9",
+    "references/untrusted-content.md": "sha256:47af70cb658f60a693459f6f3e03ccf79d295058188c9968402086eeca97bfa4"
+  }
+}

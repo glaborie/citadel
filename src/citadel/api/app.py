@@ -28,6 +28,7 @@ from citadel.identity.run_token import private_key_from_env
 from citadel.policy import AuthorizationRequest, RelationChecker, authorize
 from citadel.policy.openfga import build_checker
 from citadel.runs import PostgresRunStore
+from citadel.skills import SkillPack, SkillPackError, SkillPackMissing, load_pack
 from citadel.workflows.orchestrator import child_workflow_id
 from citadel.workflows.specialist import SpecialistWorkflow
 from citadel.workflows.types import APPROVAL_TTL, ApprovalDecision
@@ -123,10 +124,30 @@ def create_app(
             return private_key
         return private_key_from_env(os.environ["CITADEL_RUN_TOKEN_PRIVATE_KEY"])
 
+    def _pack(agent: str) -> SkillPack:
+        try:
+            return load_pack(agent)
+        except SkillPackMissing as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except SkillPackError as exc:
+            # The deployment is broken, the request is not: do not invite a retry.
+            raise HTTPException(status_code=503, detail=f"skill pack unusable: {exc}") from exc
+
     @app.post("/runs", status_code=201)
     def create_run(
         body: RunRequest, principal: Annotated[Principal, Depends(current_principal)]
     ) -> dict[str, Any]:
+        # Provenance is only reproducible if it names content this deployment
+        # actually has, so the caller's label is checked, never trusted.
+        pack = _pack(body.agent_id)
+        if body.prompt_pack_version != pack.name:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"unknown prompt_pack_version {body.prompt_pack_version!r};"
+                    f" agent {body.agent_id!r} runs {pack.name!r}"
+                ),
+            )
         run_id = str(uuid.uuid4())
         token, context = mint_run_token(
             principal,

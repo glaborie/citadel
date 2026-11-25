@@ -245,6 +245,7 @@ services:
       CITADEL_DLP_URL: http://presidio:3000
       OPENFGA_API_URL: http://openfga:8080
       KEYCLOAK_ADMIN_URL: http://keycloak:8080
+      CITADEL_SKILLS_DIR: /app/skills
     ports:
       - "18000:8000"
     depends_on:
