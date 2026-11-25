@@ -55,6 +55,12 @@ jobs:
       contents: read
       security-events: write   # upload-sarif writes here, and nowhere else
     name: SAST · Semgrep
+    # Ordered, not because the scans depend on each other but because three
+    # SARIF uploads landing within the same few seconds fail at "Uploading
+    # results" (seen on #43: Bandit passed, Semgrep and CodeQL failed, and each
+    # passed when re-run alone). One upload at a time is deterministic.
+    needs: [bandit]
+    if: always()
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -85,6 +91,8 @@ jobs:
 
   codeql:
     name: SAST · CodeQL
+    needs: [semgrep]
+    if: always()
     runs-on: ubuntu-24.04
     permissions:
       contents: read
