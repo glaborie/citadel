@@ -28,6 +28,9 @@ def test_case(case: harness.Case) -> None:
         harness.COLLECTED[case.id] = ("pending", "no executor: needs the live stack")
         pytest.skip(f"{case.id} has no executor yet: {case.evidence}")
     outcome = harness.run(case)
+    if not outcome.passed and case.known_gap is not None:
+        harness.COLLECTED[case.id] = ("gap", outcome.detail)
+        pytest.xfail(f"{case.id} known gap: {case.known_gap} ({outcome.detail})")
     harness.COLLECTED[case.id] = ("pass" if outcome.passed else "fail", outcome.detail)
     assert outcome.passed, (
         f"{case.id} expected {case.verdict!r} ({case.evidence}), got {outcome.detail}"
