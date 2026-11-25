@@ -15,6 +15,9 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Same reasoning as the pip entry above: a version published minutes ago is
+    # the one an attacker controls, and security updates bypass the cooldown.
+    cooldown: { default-days: 7 }
     groups:
       codeql:
         patterns:
