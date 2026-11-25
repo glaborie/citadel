@@ -6,9 +6,31 @@ Every tool is classified before it can be registered. Unclassified tools are den
 
 **Default: allowed without HITL.**
 
-Examples: `inspect_containers`, `read_logs`, `get_service_health`, `read_file` (allowlisted paths), `search_code`, `get_pr_status`, `search_docs`, `fetch_page`.
+Registered in v0.1: `inspect_containers`, `inspect_container`, `read_logs`, `get_service_health`, `compose_config`, `search_code`, `get_pr_status`, `pr_diff`. Design placeholders, not yet registered: `read_file` (allowlisted paths), `search_docs`, `fetch_page`.
 
 Controls: tenant-scoped token, OpenFGA allow, DLP on input and output, source citation for retrieval, cache permitted with full partition key, audit event still emitted, sandbox still applies.
+
+### Pinned arguments
+
+A tool may point at a command that discloses secrets by design — `docker inspect`
+prints `.Config.Env`, `docker compose config` prints values resolved from `.env`.
+It may do so only if its catalog entry pins the arguments that decide how much is
+printed:
+
+| Tool | Command | Pinned | Effect |
+|---|---|---|---|
+| `inspect_container` | `docker inspect` | `--format` with a template that selects name, status, restart count and image | the environment is not reachable from the call |
+| `compose_config` | `docker compose config` | `--no-interpolate --quiet` | variable references instead of resolved values |
+
+Pinned arguments are placed before any caller-supplied one and are not declared as
+parameters, so a call that tries to supply `format` is refused as an unknown
+argument rather than accepted with a different template. The rule is enforced both
+ways: a test asserts every tool wired to a `content_risk: definitive` command pins
+at least one argument, and `RT-AUTHZ-07` proves three widened calls are refused.
+
+Output still passes DLP before it is served, and for credentials the action is a
+**refusal**, not a redaction: a diff or a config file with a token in it is not the
+artifact a reviewer asked for, so it is not served at all.
 
 ## T1 — Reversible write
 

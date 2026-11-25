@@ -24,6 +24,10 @@ class ToolSpec:
     agent: str
     command: str | None = None
     params: tuple[Param, ...] = ()
+    # Arguments the catalog pins. They are placed before any caller-supplied one
+    # and are not reachable from a tool call, so a tool whose command can disclose
+    # secrets can fix the flag that decides how much it prints.
+    args: tuple[str, ...] = ()
 
 
 def _param(raw: dict[str, Any]) -> Param:
@@ -47,6 +51,7 @@ def load_catalog() -> dict[str, ToolSpec]:
             agent=spec["agent"],
             command=spec.get("command"),
             params=tuple(_param(p) for p in spec.get("params", [])),
+            args=tuple(spec.get("args", [])),
         )
         for name, spec in raw["tools"].items()
     }

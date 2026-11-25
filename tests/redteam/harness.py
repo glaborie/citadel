@@ -35,6 +35,7 @@ from citadel.policy import (
     authorize,
     load_catalog,
 )
+from citadel.tools import CommandDenied, build_argv
 from citadel.workflows import activities as activities_module
 from citadel.workflows.activities import idempotency_key
 from citadel.workflows.types import ToolCall
@@ -1004,9 +1005,39 @@ def exec_eval_gate(case_: Case, _: Path) -> Outcome:
     return Outcome(ok, f"golden={len(good)} pass, degraded fails {len(failed)}: {first[:60]}")
 
 
+def exec_pinned_arguments(case_: Case, _: Path) -> Outcome:
+    """RT-AUTHZ-07: the catalog pins the flag that decides how much a read prints.
+
+    docker inspect and docker compose config disclose secrets by design. The tool
+    may exist only because its catalog entry pins --format / --no-interpolate, and
+    because a caller cannot supply arguments the catalog does not declare.
+    """
+    argv, command = build_argv("inspect_container", {"container": "citadel-checkout-api-1"})
+    pinned = "--format" in argv and ".Config.Env" not in " ".join(argv)
+
+    refused: list[str] = []
+    for tool, arguments in (
+        ("inspect_container", {"container": "x", "format": "{{json .Config.Env}}"}),
+        ("compose_config", {"format": "{{json .}}"}),
+        ("pr_diff", {"repo": "glaborie/citadel", "number": "30", "path": "src"}),
+    ):
+        try:
+            build_argv(tool, arguments)
+        except CommandDenied as exc:
+            refused.append(str(exc)[:40])
+
+    ok = pinned and len(refused) == 3 and command.content_risk == "definitive"
+    detail = (
+        f"{command.id} pins --format, .Config.Env unreachable; "
+        f"{len(refused)}/3 widened calls refused"
+    )
+    return Outcome(ok, detail)
+
+
 EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-AUTHZ-02": exec_cross_specialist,
     "RT-AUTHZ-03": exec_unknown_tool,
+    "RT-AUTHZ-07": exec_pinned_arguments,
     "RT-AUTHZ-04": exec_missing_identity,
     "RT-AUTHZ-05": exec_expired_run_token,
     "RT-AUTHZ-06": exec_policy_unavailable,

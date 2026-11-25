@@ -152,16 +152,65 @@ def test_every_registered_command_is_allowlisted() -> None:
             assert spec.command in ids, f"{name} points at unknown command {spec.command}"
 
 
-def test_definitive_secret_commands_are_not_registered_as_tools() -> None:
+def test_a_secret_disclosing_command_is_only_wired_with_pinned_arguments() -> None:
     """The caveat is enforced, not just documented.
 
-    docker inspect and docker compose config disclose secrets by design, so no
-    tool may point at them until the DLP wrapper redacts their output.
+    docker inspect and docker compose config disclose secrets by design. A tool
+    may point at them only if its catalog entry pins the flag that decides how
+    much is printed, because the caller cannot supply arguments the catalog does
+    not declare.
     """
     risky = {c.id for c in load_allowlist() if c.content_risk == "definitive"}
     assert risky == {"docker.inspect", "docker.compose.config"}
-    for name, spec in load_catalog().items():
-        assert spec.command not in risky, f"{name} is wired to a secret-disclosing command"
+
+    wired = {name: spec for name, spec in load_catalog().items() if spec.command in risky}
+    assert wired, "the two commands are registered; this test is about how"
+    for name, spec in wired.items():
+        assert spec.args, f"{name} is wired to a secret-disclosing command with nothing pinned"
+        assert spec.tier == "T0", f"{name} is a read, so it should be T0"
+
+    # And the two commands are not merely present: they are the ones pinned.
+    assert "--format" in load_catalog()["inspect_container"].args
+    assert "--no-interpolate" in load_catalog()["compose_config"].args
+
+
+def test_inspect_container_pins_a_format_that_cannot_print_the_environment() -> None:
+    argv, command = build_argv("inspect_container", {"container": "citadel-checkout-api-1"})
+
+    assert argv[:3] == ["docker", "inspect", "--format"]
+    template = argv[3]
+    assert ".Config.Env" not in template, "the pinned template must not select the environment"
+    assert "RestartCount" in template
+    assert argv[-1] == "citadel-checkout-api-1"
+    assert command.content_risk == "definitive"
+
+
+def test_the_caller_cannot_supply_the_pinned_format() -> None:
+    """Pinned means unreachable: an extra argument is an unknown argument."""
+    with pytest.raises(CommandDenied, match="unexpected arguments"):
+        build_argv(
+            "inspect_container",
+            {"container": "citadel-checkout-api-1", "format": "{{json .Config.Env}}"},
+        )
+
+
+def test_compose_config_pins_no_interpolate() -> None:
+    argv, _ = build_argv("compose_config", {})
+
+    assert argv == ["docker", "compose", "config", "--no-interpolate", "--quiet"]
+
+
+def test_pr_diff_builds_a_bounded_diff_command() -> None:
+    argv, command = build_argv("pr_diff", {"repo": "glaborie/citadel", "number": "30"})
+
+    assert argv == ["gh", "pr", "diff", "--repo", "glaborie/citadel", "30"]
+    assert command.content_risk == "possible"
+
+
+def test_pr_diff_refuses_a_second_positional() -> None:
+    """One PR number, no path arguments: the allowlist counts positional tokens."""
+    with pytest.raises(CommandDenied):
+        build_argv("pr_diff", {"repo": "glaborie/citadel", "number": "30", "extra": "x"})
 
 
 def test_allowlist_marks_output_risk_for_documented_commands() -> None:
