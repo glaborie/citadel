@@ -34,7 +34,7 @@ jobs:
       - run: uv sync --frozen
       - name: Run Bandit
         # adjust `src` if your package layout differs
-        run: uv run --with bandit bandit -r src -ll -ii -f sarif -o bandit.sarif
+        run: uv run --with 'bandit[sarif]' bandit -r src -ll -ii -f sarif -o bandit.sarif
       - name: Upload Bandit SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@v3
