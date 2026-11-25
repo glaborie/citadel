@@ -53,6 +53,15 @@ uv run python -m citadel.evals
 
 The run is fail-closed: an unknown event type, a missing required field, two run ids, a foreign tenant or an unknown expectation key is a dataset error, not a skipped check.
 
+A live run is exported from the audit ledger, and the export refuses an incomplete trajectory:
+
+```
+docker compose exec -T api python -m citadel.evals.recorder \
+  --tenant lab-a --run <run-id> --out /tmp/run.json
+```
+
+The golden set includes two recorded runs: a T0 read (`devops-013-recorded`) and a T1 write with an approval (`devops-014-recorded`). The approval reason is redacted before it enters a fixture.
+
 Expectation keys beyond the example above:
 
 | Key | Asserts |
@@ -64,7 +73,7 @@ Expectation keys beyond the example above:
 
 `approval.decision.decision` is `approved` or `denied`; a `tool` field ties the decision to the call it authorises.
 
-Still missing: a recorder from live runs, OTel export to MLflow and judge-scored rubrics. This harness is deterministic only.
+Still missing: OTel export to MLflow and judge-scored rubrics. `model.call` and `retrieval.*` have no producer until those paths exist; this harness is deterministic only.
 
 ## Graders
 

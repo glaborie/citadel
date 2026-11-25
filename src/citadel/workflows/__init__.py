@@ -7,7 +7,7 @@ from typing import Any
 
 from citadel.audit import AuditLedger
 from citadel.policy import RelationChecker, RunStore
-from citadel.workflows.activities import ToolActivities
+from citadel.workflows.activities import RunActivities, ToolActivities
 from citadel.workflows.orchestrator import RunWorkflow
 from citadel.workflows.specialist import SpecialistWorkflow
 
@@ -23,21 +23,25 @@ def workflows_for(role: str) -> list[Any]:
 def activities_for(
     role: str,
     *,
-    checker: RelationChecker,
-    run_store: RunStore,
     dsn: str,
-    runner_url: str,
-    operator_url: str,
+    checker: RelationChecker | None = None,
+    run_store: RunStore | None = None,
+    runner_url: str = "",
+    operator_url: str = "",
 ) -> list[Any]:
+    audit = AuditLedger(dsn)
     if role == "orchestrator":
-        return []
+        run_activities = RunActivities(dsn=dsn, audit=audit)
+        return [run_activities.finish_run]
+    if checker is None or run_store is None:
+        raise ValueError(f"{role} activities need a policy checker and run store")
     impl = ToolActivities(
         checker=checker,
         run_store=run_store,
         dsn=dsn,
         runner_url=runner_url,
         operator_url=operator_url,
-        audit=AuditLedger(dsn),
+        audit=audit,
     )
     return [impl.authorize_tool, impl.execute_tool]
 

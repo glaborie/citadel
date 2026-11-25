@@ -15,11 +15,11 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
 
 from temporalio.client import Client
 from temporalio.worker import Worker
 
+from citadel.policy import RelationChecker, RunStore
 from citadel.policy.openfga import build_checker
 from citadel.runs import PostgresRunStore
 from citadel.workflows import activities_for, namespace, temporal_address, workflows_for
@@ -41,21 +41,24 @@ async def serve(role: str) -> None:
 
     client = await Client.connect(temporal_address(), namespace=namespace())
 
-    activities: list[Any] = []
+    dsn = os.environ["CITADEL_DB_DSN"]
+    checker: RelationChecker | None = None
+    run_store: RunStore | None = None
     if role != "orchestrator":
         checker = build_checker(
             os.environ.get("OPENFGA_API_URL", "http://openfga:8080"),
             os.environ.get("OPENFGA_STORE_NAME", "citadel"),
         )
-        dsn = os.environ["CITADEL_DB_DSN"]
-        activities = activities_for(
-            role,
-            checker=checker,
-            run_store=PostgresRunStore(dsn),
-            dsn=dsn,
-            runner_url=os.environ.get("CITADEL_TOOL_RUNNER_URL", "http://tool-runner:8020"),
-            operator_url=os.environ.get("CITADEL_OPERATOR_URL", "http://operator:8030"),
-        )
+        run_store = PostgresRunStore(dsn)
+
+    activities = activities_for(
+        role,
+        dsn=dsn,
+        checker=checker,
+        run_store=run_store,
+        runner_url=os.environ.get("CITADEL_TOOL_RUNNER_URL", "http://tool-runner:8020"),
+        operator_url=os.environ.get("CITADEL_OPERATOR_URL", "http://operator:8030"),
+    )
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()

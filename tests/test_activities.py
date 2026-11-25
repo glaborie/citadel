@@ -18,9 +18,11 @@ from typing import Any, cast
 
 import pytest
 
+from citadel.hashing import arguments_hash
+from citadel.policy import Decision
 from citadel.workflows import activities
-from citadel.workflows.activities import ToolActivities, idempotency_key
-from citadel.workflows.types import ToolCall, ToolResult
+from citadel.workflows.activities import RunActivities, ToolActivities, idempotency_key
+from citadel.workflows.types import RunEnd, ToolCall, ToolResult
 
 
 class _Cursor:
@@ -278,3 +280,98 @@ def test_an_unavailable_detector_is_reported_as_such(monkeypatch: pytest.MonkeyP
 
     assert result.rule_id == "dlp.unavailable"
     assert len(ledger.events) == 1
+
+
+def test_policy_decision_is_audited(monkeypatch: pytest.MonkeyPatch) -> None:
+    ledger = FakeAudit()
+    impl = build(monkeypatch, FakeDB(), recorder([]), ledger)
+    decision = Decision("allow", "policy.allowed", "allowed", "T0")
+    monkeypatch.setattr(activities, "authorize", lambda *args, **kwargs: decision)
+
+    impl.authorize_tool(call("read_logs"))
+
+    event = ledger.events[0]
+    assert event["event_type"] == "policy.decision"
+    assert event["payload"]["run_id"] == call("read_logs").run_id
+    assert event["payload"]["subject"] == "user-alice"
+    assert event["payload"]["args_hash"] == arguments_hash(call("read_logs").arguments)
+    assert event["payload"]["decision"] == "allow"
+
+
+def test_tool_call_is_audited(monkeypatch: pytest.MonkeyPatch) -> None:
+    ledger = FakeAudit()
+    impl = build(monkeypatch, FakeDB(), recorder([]), ledger)
+
+    impl.execute_tool(call("read_logs"))
+
+    tool_events = [event for event in ledger.events if event["event_type"] == "tool.call"]
+    assert len(tool_events) == 1
+    payload = tool_events[0]["payload"]
+    assert payload["status"] == "executed"
+    assert payload["tier"] == "T0"
+    assert payload["args_hash"] == arguments_hash(call("read_logs").arguments)
+    assert payload["idempotency_key"] == idempotency_key(call("read_logs"))
+
+
+def test_a_replayed_call_is_audited(monkeypatch: pytest.MonkeyPatch) -> None:
+    item = call("read_logs")
+    db = FakeDB({idempotency_key(item): {"status": "executed", "result": {"stdout": "hi"}}})
+    ledger = FakeAudit()
+    impl = build(monkeypatch, db, recorder([]), ledger)
+
+    impl.execute_tool(item)
+
+    payload = ledger.events[0]["payload"]
+    assert payload["status"] == "replayed"
+    assert payload["idempotency_key"] == idempotency_key(item)
+
+
+class RunFakeDB:
+    def __init__(self, ended: bool) -> None:
+        self.ended = ended
+        self.status: str | None = None
+
+    @contextmanager
+    def connect(self, _dsn: str, _tenant: str) -> Iterator[RunFakeConn]:
+        yield RunFakeConn(self)
+
+
+class RunFakeConn:
+    def __init__(self, db: RunFakeDB) -> None:
+        self._db = db
+
+    def execute(self, sql: str, params: tuple[Any, ...] = ()) -> _Cursor:
+        statement = " ".join(sql.split())
+        if statement.startswith("UPDATE runs SET status = %s"):
+            self._db.status = str(params[0])
+            return _Cursor(None)
+        if statement.startswith("SELECT 1 FROM audit_events"):
+            return _Cursor((1,) if self._db.ended else None)
+        raise AssertionError(f"unexpected SQL: {statement}")
+
+
+def test_finish_run_writes_the_end_event(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = RunFakeDB(ended=False)
+    ledger = FakeAudit()
+    monkeypatch.setattr(activities, "tenant_connection", db.connect)
+
+    RunActivities(dsn="unused", audit=cast(Any, ledger)).finish_run(
+        RunEnd(run_id="run-1", tenant_id="lab-a", outcome="completed")
+    )
+
+    assert db.status == "completed"
+    assert [event["event_type"] for event in ledger.events] == ["run.end"]
+    assert ledger.events[0]["payload"]["outcome"] == "completed"
+
+
+def test_finish_run_does_not_fork_an_existing_end(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = RunFakeDB(ended=True)
+    ledger = FakeAudit()
+    monkeypatch.setattr(activities, "tenant_connection", db.connect)
+
+    RunActivities(dsn="unused", audit=cast(Any, ledger)).finish_run(
+        RunEnd(run_id="run-1", tenant_id="lab-a", outcome="denied")
+    )
+
+    assert db.status == "denied"
+    assert ledger.events == []

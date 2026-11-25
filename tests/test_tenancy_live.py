@@ -129,7 +129,17 @@ def test_api_rejects_a_request_without_a_token() -> None:
 def test_cross_tenant_run_is_invisible() -> None:
     """Red team: bob in lab-b must never see a run created by alice in lab-a."""
     alice, bob = user_token("alice"), user_token("bob")
-    status, created = api_call("POST", "/runs", alice, {"agent_id": "docker", "risk_tier": "T0"})
+    status, created = api_call(
+        "POST",
+        "/runs",
+        alice,
+        {
+            "agent_id": "docker",
+            "risk_tier": "T0",
+            "prompt_pack_version": "docker-1.0.0",
+            "model_alias": "auto/best-fast",
+        },
+    )
     assert status == 201, created
     assert created["tenant_id"] == "lab-a"
 
@@ -167,7 +177,17 @@ def test_app_role_cannot_bypass_rls() -> None:
 
 
 def _new_run(token: str, agent: str = "docker") -> str:
-    status, created = api_call("POST", "/runs", token, {"agent_id": agent, "risk_tier": "T0"})
+    status, created = api_call(
+        "POST",
+        "/runs",
+        token,
+        {
+            "agent_id": agent,
+            "risk_tier": "T0",
+            "prompt_pack_version": f"{agent}-1.0.0",
+            "model_alias": "auto/best-fast",
+        },
+    )
     assert status == 201, created
     run_id: str = created["run_id"]
     return run_id

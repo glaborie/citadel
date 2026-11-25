@@ -4,7 +4,7 @@
 
 Citadel is a clean-slate Python + Docker Compose stack that runs a small fleet of specialised agents (Docker, GitHub, Researcher) against a real homelab. It treats identity, tenancy, authorisation, sandboxing, DLP, audit and evaluation as first-class runtime properties rather than middleware added at the end. It is a portfolio piece aimed at senior AI-engineering roles and is deliberately usable outside the demo.
 
-**Status: v0.1 in progress — 7 of 10 implementation steps complete and running on a live host.** The identity, policy, orchestration, sandbox, write-path and DLP controls are implemented and verified end to end; the offline evaluation harness is built and runs in CI. The approval console UI and MLflow tracing are next, and the model gateway is not yet wired into the runtime. See `TODO.md` for open work and `docs/implementation-notes/v0.1-verification.md` for what was executed, on which host, and what it printed.
+**Status: v0.1 in progress — 7 of 10 implementation steps complete and running on a live host.** The identity, policy, orchestration, sandbox, write-path and DLP controls are implemented and verified end to end; the offline evaluation harness and live trajectory recorder are built, and a T1 drill recorded policy, DLP, approval and tool spans under one run. The approval console UI and MLflow tracing are next, and the model gateway is not yet wired into the runtime. See `TODO.md` for open work and `docs/implementation-notes/v0.1-verification.md` for what was executed, on which host, and what it printed.
 
 ## What demonstrates what
 
@@ -24,14 +24,14 @@ The table is the architecture; the **Status** column says which rows exist as co
 | 10 | MCP support | Adapter seam only; consume external tools in a later milestone | seam only |
 | 11 | Permission-aware RAG | ACL-filtered Qdrant hybrid retrieval → rerank → structured citations | v0.2 |
 | 12 | Code mode | Deferred; only inside the sandbox, never in the worker | deferred |
-| 13 | Trajectory evaluation | MLflow 3.x offline + online grading of full traces | deterministic offline harness built; live recording, MLflow and judge rubrics pending |
+| 13 | Trajectory evaluation | MLflow 3.x offline + online grading of full traces | deterministic offline harness and live recorder built; MLflow export and judge rubrics pending |
 | 14 | A2A | Adapter seam only; ecosystem judged too thin to build against | seam only |
 | 15 | Semantic routing | Deterministic → embedding → complexity routing in v0.4 | v0.4 |
 | 16 | Scoped caching | Exact then semantic, partitioned by tenant + entitlement + model version | v0.3 |
 
 ## What runs today
 
-`make up` starts 17 services, unwrapping secrets through SOPS first so no plaintext copy is written to disk. All health-checked services report healthy; `./scripts/clean-clone-check.sh` installs and passes 223 tests (18 live-network tests skipped) from a fresh clone with no hidden files.
+`make up` starts 17 services, unwrapping secrets through SOPS first so no plaintext copy is written to disk. All health-checked services report healthy; `./scripts/clean-clone-check.sh` installs and passes 245 tests (19 live-network tests skipped) from a fresh clone with no hidden files.
 
 | Control | Evidence |
 |---|---|
@@ -80,7 +80,7 @@ flowchart LR
 
 ## Milestones
 
-- **v0.1** — one full turn: auth → tenant → policy → guarded read → HITL-gated write → audit + trace. *In progress: steps 1–7 of 10 done, offline eval harness in place.*
+- **v0.1** — one full turn: auth → tenant → policy → guarded read → HITL-gated write → audit + trace. *In progress: steps 1–7 of 10 done, offline eval harness and recorded trajectories in place.*
 - **v0.2** — permission-aware RAG, Researcher, SOPS+age secrets.
 - **v0.3** — full evaluation suite, online grading, tenant-scoped cache.
 - **v0.4** — MCP consume adapter, A2A seam, code mode, semantic routing.
@@ -120,11 +120,11 @@ src/citadel/
   dlp.py                      # fail-closed DLP (Presidio + hard rules)
   audit.py                    # hash-chained ledger
   worker.py                   # role-scoped Temporal workers
-tests/                        # 223 hermetic tests + opt-in live suites
+tests/                        # 245 hermetic tests + opt-in live suites
 ```
 
 ## Verification status
 
 Design reviewed and confirmed by the human owner on 2026-11-23. Implementation is verified against a real host: 15 containers healthy, live Keycloak login, real OpenFGA decisions, real Postgres RLS, real GitHub reads and a draft-PR write that reached GitHub's `createPullRequest` mutation, and a DLP block that redacted a planted Swiss IBAN and refused a planted token.
 
-Nothing in `docs/` is treated as done on paper: every control above has a recorded drill in `docs/implementation-notes/v0.1-verification.md`, including the ones that failed first. Open verification items inherited from the design (exact OmniRoute image commit, MLflow auth wiring, gVisor availability) are tracked in `AGENTS.md`; the first two are now answered in the notes, and `runsc` is documented as unavailable on this host with the Compose flags as the actual isolation boundary.
+Nothing in `docs/` is treated as done on paper: every control above has a recorded drill in `docs/implementation-notes/v0.1-verification.md`, including the ones that failed first. The eval harness grades two trajectories exported from live runs, including a T1 approval and write. Open verification items inherited from the design (exact OmniRoute image commit, MLflow auth wiring, gVisor availability) are tracked in `AGENTS.md`; the first two are now answered in the notes, and `runsc` is documented as unavailable on this host with the Compose flags as the actual isolation boundary.

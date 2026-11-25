@@ -8,7 +8,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
-from citadel.approvals import arguments_hash, mint_approval_token, verify_approval_token
+from citadel.approvals import mint_approval_token, verify_approval_token
+from citadel.hashing import arguments_hash
 from citadel.identity import IdentityError, Principal, mint_run_token
 
 

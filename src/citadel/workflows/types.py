@@ -61,3 +61,12 @@ class RunInput:
     agent_id: str
     tool: str
     arguments: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class RunEnd:
+    run_id: str
+    tenant_id: str
+    outcome: str
+    citation_ids: list[str] = field(default_factory=list)
+    safety_flags: list[str] = field(default_factory=list)

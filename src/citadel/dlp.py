@@ -131,7 +131,7 @@ class Verdict:
         """What may be logged: categories and verdicts, never the values."""
         return {
             "action": self.action,
-            "detector": DETECTOR_VERSION,
+            "detector_version": DETECTOR_VERSION,
             "categories": sorted({finding.category for finding in self.findings}),
             "findings": [
                 {
@@ -182,7 +182,7 @@ def gate(text: str, *, surface: str, analyzer_url: str) -> tuple[str, dict[str, 
             {
                 "surface": surface,
                 "action": "block",
-                "detector": DETECTOR_VERSION,
+                "detector_version": DETECTOR_VERSION,
                 "categories": [],
                 "findings": [],
                 "error": str(exc)[:200],

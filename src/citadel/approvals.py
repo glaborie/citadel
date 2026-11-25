@@ -8,8 +8,6 @@ anything that cannot sign.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import time
 import uuid
 from collections.abc import Mapping
@@ -22,6 +20,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
+from citadel.hashing import arguments_hash
 from citadel.identity import IdentityError
 
 ISSUER = "citadel"
@@ -39,11 +38,6 @@ class ApprovalClaims:
     arguments_hash: str
     approver: str
     jti: str
-
-
-def arguments_hash(arguments: Mapping[str, Any]) -> str:
-    body = json.dumps(arguments, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
 def mint_approval_token(

@@ -15,7 +15,7 @@ from typing import Annotated, Any
 import jwt
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import Depends, FastAPI, Header, HTTPException
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from citadel import __version__
 from citadel.approvals import mint_approval_token
@@ -28,7 +28,7 @@ from citadel.policy.openfga import build_checker
 from citadel.runs import PostgresRunStore
 from citadel.workflows.orchestrator import child_workflow_id
 from citadel.workflows.specialist import SpecialistWorkflow
-from citadel.workflows.types import ApprovalDecision
+from citadel.workflows.types import APPROVAL_TTL, ApprovalDecision
 
 
 class AuthorizeRequest(BaseModel):
@@ -54,9 +54,13 @@ class RunRequest(BaseModel):
     # A client must not be able to smuggle a tenant or user into the body.
     model_config = ConfigDict(extra="forbid")
 
-    agent_id: str
+    agent_id: str = Field(min_length=1)
     scopes: list[str] = []
     risk_tier: str = "T0"
+    # Provenance the trajectory needs; an unspecified pack or alias is not
+    # reproducible, so the caller has to name them.
+    prompt_pack_version: str = Field(min_length=1)
+    model_alias: str = Field(min_length=1)
 
 
 def _verifier_from_env() -> KeycloakVerifier:
@@ -133,6 +137,23 @@ def create_app(
                 " VALUES (%s, %s, %s, %s, %s)",
                 (run_id, principal.tenant_id, principal.user_id, body.agent_id, body.risk_tier),
             )
+        # Written after the row exists, so a recorded trajectory always names a
+        # real run. If this fails the request fails and no run is claimed.
+        AuditLedger(_dsn()).append(
+            tenant_id=principal.tenant_id,
+            event_type="run.start",
+            actor_type="user",
+            actor_id=principal.user_id,
+            payload={
+                "run_id": run_id,
+                "tenant_id": principal.tenant_id,
+                "user_id": principal.user_id,
+                "agent_id": body.agent_id,
+                "prompt_pack_version": body.prompt_pack_version,
+                "model_alias": body.model_alias,
+                "risk_tier": body.risk_tier,
+            },
+        )
         return {"run_id": context.run_id, "tenant_id": context.tenant_id, "run_token": token}
 
     @app.get("/runs")
@@ -195,8 +216,11 @@ def create_app(
                 "run_id": body.run_id,
                 "tool": body.tool,
                 "agent_id": body.agent_id,
-                "approved": body.approved,
+                "approver": principal.user_id,
+                "decision": "approved" if body.approved else "denied",
                 "reason": body.reason,
+                "ttl": APPROVAL_TTL,
+                "rule_id": "approval.approved" if body.approved else "approval.denied",
             },
         )
 

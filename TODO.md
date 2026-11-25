@@ -28,15 +28,13 @@ Open work. Done items get deleted, not ticked.
       in one run approach the 256 KB warning. Cap or offload before diffs and
       logs flow through.
 
-- [ ] Eval fixtures are synthetic, not recorded. The harness grades committed
-      trajectories, but nothing exports a live run: `run.start`, `run.end` and
-      `tool.call` are not all in the audit ledger, and no OTel spans reach
-      MLflow. Until that recorder exists the v0.1 "recorded golden trajectory"
-      criterion is unmet.
-
 - [ ] Judge-scored rubrics are absent. Only deterministic hard assertions run;
       `mlflow.genai.evaluate()` and the built-in groundedness/safety scorers
       belong with the v0.2 eval suite.
+
+- [ ] Recorded trajectories cover run start/end, policy, DLP, approval and tool
+      spans. `model.call` and `retrieval.*` have no producer until the model and
+      retrieval paths exist, so those event types remain fixture-only.
 
 - [ ] No argument-value grader. `tool.call` carries `args_hash`, not the
       canonical arguments, so "argument values match expected form" cannot be
