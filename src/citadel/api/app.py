@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from citadel import __version__, dlp, telemetry
+from citadel import __version__, dlp, telemetry, tool_outputs
 from citadel.approval_requests import close_request
 from citadel.approvals import mint_approval_token
 from citadel.audit import AuditLedger
@@ -275,6 +275,40 @@ def create_app(
             "runs": [
                 {"id": str(r[0]), "tenant_id": r[1], "agent_id": r[2], "status": r[3]} for r in rows
             ],
+        }
+
+    @app.get("/runs/{run_id}/outputs/{digest}")
+    def read_output(
+        run_id: str,
+        digest: str,
+        principal: Annotated[Principal, Depends(current_principal)],
+    ) -> dict[str, Any]:
+        """Read back a tool stream the event history could not carry in full.
+
+        The run has to exist in the caller's tenant, and RLS decides the rest: a
+        digest is content-addressed, so two tenants holding identical bytes are two
+        rows, and neither can read the other's.
+        """
+        with tenant_connection(_dsn(), principal.tenant_id) as conn:
+            known = conn.execute("SELECT 1 FROM runs WHERE id = %s", (run_id,)).fetchone()
+            if known is None:
+                raise HTTPException(status_code=404, detail="run not found in this tenant")
+            body = tool_outputs.fetch(conn, digest=digest)
+        if body is None:
+            raise HTTPException(status_code=404, detail="no stored output for that digest")
+
+        AuditLedger(_dsn()).append(
+            tenant_id=principal.tenant_id,
+            event_type="tool.output.read",
+            actor_type="user",
+            actor_id=principal.user_id,
+            payload={"run_id": run_id, "digest": digest, "bytes": len(body.encode("utf-8"))},
+        )
+        return {
+            "run_id": run_id,
+            "digest": digest,
+            "bytes": len(body.encode("utf-8")),
+            "output": body,
         }
 
     async def _signal_decision(workflow_id: str, decision: ApprovalDecision) -> None:

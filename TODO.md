@@ -21,12 +21,15 @@ Open work. Done items get deleted, not ticked.
       because the allowlist matcher rejects those tokens. Upgrade path is a
       checkout inside the operator plus `--fill`.
 
-- [ ] Output past the event cap is discarded, not offloaded. The result carries
-      8 KB of head and tail plus the sha256 of the whole stream, so the record
-      proves what existed but cannot show it: reading back a 100 KB diff after
-      the run means running the tool again. Offload to object storage keyed by
-      that digest before diffs and logs are expected to be reviewed.
+- [ ] `tool_outputs` has no retention policy. Offloaded streams are kept forever,
+      which is a growing table and an unbounded archive of tool output: pick a TTL
+      (90 days is the obvious default), add the delete job and the grant for it,
+      and decide whether the digest-only record stays after the body is gone.
 
+- [ ] The runner's own 64 KB cap still loses bytes before storage sees them. A
+      larger stream is cut inside the sandbox, so `output_ref` points at 64 KB and
+      not at the 10 MB the tool produced. Streaming from the sandbox to object
+      storage - or a per-tool cap for `pr_diff` - is the next step if diffs grow.
 - [ ] The judge is built and uncalibrated. `--judge` scores four dimensions and
       every one ships report-only because no kappa has been measured: the 30-item
       stratified sample and two raters from docs/evals/judge-calibration.md have

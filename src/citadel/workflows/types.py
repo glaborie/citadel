@@ -56,6 +56,10 @@ class ToolResult:
     output_sha256: str = ""
     output_bytes: int = 0
     output_truncated: bool = False
+    # Digest of the stream the record could not carry in full; the body is in
+    # tool_outputs when output_stored is true.
+    output_ref: str = ""
+    output_stored: bool = False
 
 
 @dataclass
