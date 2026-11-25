@@ -32,7 +32,7 @@ produced in under five minutes during a review, the gate is not met.
 3. **Model changes are changes.** Swapping a model alias, a prompt pack or a
    retrieval configuration requires a full eval run and a diff against the last
    accepted baseline. No baseline, no merge.
-4. **Exceptions are written, dated and owned.** A gap lives in `TODO.md` with an
+4. **Exceptions are written, dated and owned.** A gap lives in a GitHub issue with an
    owner and a review date; it does not live in a conversation.
 5. **The definition is versioned.** Changing it is an ADR, not an edit — the
    standard is what the next engineer inherits, so it needs a decision record.

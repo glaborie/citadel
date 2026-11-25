@@ -180,11 +180,11 @@ The report is written by `tests/redteam/conftest.py` at session end, from what
 actually executed. A pending case is labelled pending in it, on purpose.
 
 The report is generated, never hand-written: a table of case, verdict, control,
-evidence event and elapsed time, plus a headline line in the form `<n> of 28
-blocked, <m> known gaps, both documented in TODO.md`. Only the generator writes
-those numbers. A pack that reports 100% on its first run is either trivial or
-lying, which is why `RT-DLP-02` ships with `known_gap` until its TODO item
-closes.
+evidence event and elapsed time, plus a headline line in the form `<p> of 30
+blocked or denied as specified · <f> failing · <k> known gaps · <m> pending ·
+<r> not run`. Only the generator writes those numbers. A pack that reports 100%
+on its first run is either trivial or lying, which is why `RT-DLP-02` still
+carries a `known_gap` note about a name that collides with a technical noun.
 
 ## Rules for adding a case
 
@@ -195,5 +195,5 @@ closes.
    the model produces.
 4. Add the ID to this document in the same commit — the manifest lint fails
    otherwise, on purpose.
-5. If it fails today, add `known_gap` with a TODO reference instead of lowering
+5. If it fails today, add `known_gap` with an issue reference instead of lowering
    the expectation. A weakened test is worse than a red one.
