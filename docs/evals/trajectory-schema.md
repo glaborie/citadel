@@ -73,7 +73,7 @@ Expectation keys beyond the example above:
 
 `approval.decision.decision` is `approved` or `denied`; a `tool` field ties the decision to the call it authorises.
 
-Still missing: OTel export to MLflow and judge-scored rubrics. `model.call` and `retrieval.*` have no producer until those paths exist; this harness is deterministic only.
+Still missing: judge-scored rubrics and MLflow dataset/scorer logging. `model.call` and `retrieval.*` have no producer until those paths exist; this harness is deterministic only.
 
 ## Graders
 

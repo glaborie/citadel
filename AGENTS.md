@@ -48,7 +48,7 @@ You are implementing Citadel from an approved design. Read the whole document se
 ## Open verification items
 
 1. Canonical OmniRoute repository and exact image commit; many forks and a GitHub redirect were observed.
-2. MLflow image version and auth wiring compatible with the Keycloak OAuth2 proxy.
+2. MLflow image version (resolved: 3.18.0, digest pinned in Compose) and the Keycloak OAuth2 proxy for the human path (open only if the UI is published; the internal OTLP write path is resolved).
 3. gVisor `runsc` availability on the target Ubuntu host; if absent, document the fallback explicitly.
 4. Keycloak delegated-token mechanism preserving user identity (RFC 8693 V2 caveats).
 5. Whether the chosen hosted reranker/embedding endpoints are acceptable for the redacted data leaving the box.

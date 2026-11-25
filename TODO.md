@@ -32,6 +32,14 @@ Open work. Done items get deleted, not ticked.
       `mlflow.genai.evaluate()` and the built-in groundedness/safety scorers
       belong with the v0.2 eval suite.
 
+- [ ] MLflow human-path auth. The UI is internal-only and unpublished, so no
+      browser path exists yet. If it is exposed, add the Keycloak OAuth2 proxy
+      from ADR-017; the worker OTLP write path is internal-only and unaffected.
+
+- [ ] MLflow experiment bootstrap is manual. `make mlflow-bootstrap` creates
+      `citadel-trajectories`; a fresh volume needs it before traces resolve.
+      Fold it into `make up` or a one-shot init container.
+
 - [ ] Recorded trajectories cover run start/end, policy, DLP, approval and tool
       spans. `model.call` and `retrieval.*` have no producer until the model and
       retrieval paths exist, so those event types remain fixture-only.

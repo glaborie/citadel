@@ -4,7 +4,7 @@
 
 Citadel is a clean-slate Python + Docker Compose stack that runs a small fleet of specialised agents (Docker, GitHub, Researcher) against a real homelab. It treats identity, tenancy, authorisation, sandboxing, DLP, audit and evaluation as first-class runtime properties rather than middleware added at the end. It is a portfolio piece aimed at senior AI-engineering roles and is deliberately usable outside the demo.
 
-**Status: v0.1 in progress — 7 of 10 implementation steps complete and running on a live host.** The identity, policy, orchestration, sandbox, write-path and DLP controls are implemented and verified end to end; the offline evaluation harness and live trajectory recorder are built, and a T1 drill recorded policy, DLP, approval and tool spans under one run. The approval console UI and MLflow tracing are next, and the model gateway is not yet wired into the runtime. See `TODO.md` for open work and `docs/implementation-notes/v0.1-verification.md` for what was executed, on which host, and what it printed.
+**Status: v0.1 in progress — 7 of 10 implementation steps complete and running on a live host.** The identity, policy, orchestration, sandbox, write-path and DLP controls are implemented and verified end to end; the offline evaluation harness, live trajectory recorder and OTLP trace export to MLflow are built, and a T1 drill produced one trace with policy, DLP, approval and tool spans. The approval console UI is next, and the model gateway is not yet wired into the runtime. See `TODO.md` for open work and `docs/implementation-notes/v0.1-verification.md` for what was executed, on which host, and what it printed.
 
 ## What demonstrates what
 
@@ -20,7 +20,7 @@ The table is the architecture; the **Status** column says which rows exist as co
 | 6 | Guardrails | Inline policy checks on prompts, retrieval, tool args and model output | tool args, results and policy done; model/retrieval paths do not exist yet |
 | 7 | Human in the loop | Keycloak-authenticated approval console resuming Temporal workflows | workflow, TTL and signed tokens built; console is a skeleton |
 | 8 | Idempotency | Durable hashed tool keys + Postgres unique constraint; effectively-once semantics | built |
-| 9 | Telemetry | OTel spans to MLflow; hash-chained security audit log in Postgres | audit built; OTel export is step 9 |
+| 9 | Telemetry | OTel spans to MLflow; hash-chained security audit log in Postgres | built: spans carry the audit event id; audit chain built |
 | 10 | MCP support | Adapter seam only; consume external tools in a later milestone | seam only |
 | 11 | Permission-aware RAG | ACL-filtered Qdrant hybrid retrieval → rerank → structured citations | v0.2 |
 | 12 | Code mode | Deferred; only inside the sandbox, never in the worker | deferred |
@@ -31,7 +31,7 @@ The table is the architecture; the **Status** column says which rows exist as co
 
 ## What runs today
 
-`make up` starts 17 services, unwrapping secrets through SOPS first so no plaintext copy is written to disk. All health-checked services report healthy; `./scripts/clean-clone-check.sh` installs and passes 245 tests (19 live-network tests skipped) from a fresh clone with no hidden files.
+`make up` starts 17 services, unwrapping secrets through SOPS first so no plaintext copy is written to disk. All health-checked services report healthy; `./scripts/clean-clone-check.sh` installs and passes 265 tests (35 skipped: live-network and red-team executors not yet wired) from a fresh clone with no hidden files.
 
 | Control | Evidence |
 |---|---|
@@ -42,6 +42,7 @@ The table is the architecture; the **Status** column says which rows exist as co
 | DLP | Presidio plus deterministic credential rules; a detector that cannot answer blocks the call rather than passing text |
 | Writes | `restart_service` and `open_remediation_pr` only, only from the operator, only with a single-use approval token naming the exact arguments |
 | Audit | Append-only hash chain per tenant, verified after every live drill |
+| Tracing | OTLP/HTTP into MLflow; one T1 run produced a single trace with run start, policy, approval, three DLP events, tool call and run end, each carrying its audit ID |
 
 ### Tools
 
@@ -80,7 +81,7 @@ flowchart LR
 
 ## Milestones
 
-- **v0.1** — one full turn: auth → tenant → policy → guarded read → HITL-gated write → audit + trace. *In progress: steps 1–7 of 10 done, offline eval harness and recorded trajectories in place.*
+- **v0.1** — one full turn: auth → tenant → policy → guarded read → HITL-gated write → audit + trace. *In progress: steps 1–7 of 10 done, offline eval harness, recorded trajectories and MLflow tracing in place.*
 - **v0.2** — permission-aware RAG, Researcher, SOPS+age secrets.
 - **v0.3** — full evaluation suite, online grading, tenant-scoped cache.
 - **v0.4** — MCP consume adapter, A2A seam, code mode, semantic routing.
@@ -119,12 +120,13 @@ src/citadel/
   workflows/                  # orchestrator + specialist workflows, activities
   dlp.py                      # fail-closed DLP (Presidio + hard rules)
   audit.py                    # hash-chained ledger
+  telemetry.py                # one MLflow trace per run, spans carry audit IDs
   worker.py                   # role-scoped Temporal workers
-tests/                        # 245 hermetic tests + opt-in live suites
+tests/                        # 265 hermetic tests + opt-in live suites
 ```
 
 ## Verification status
 
 Design reviewed and confirmed by the human owner on 2026-11-23. Implementation is verified against a real host: 15 containers healthy, live Keycloak login, real OpenFGA decisions, real Postgres RLS, real GitHub reads and a draft-PR write that reached GitHub's `createPullRequest` mutation, and a DLP block that redacted a planted Swiss IBAN and refused a planted token.
 
-Nothing in `docs/` is treated as done on paper: every control above has a recorded drill in `docs/implementation-notes/v0.1-verification.md`, including the ones that failed first. The eval harness grades two trajectories exported from live runs, including a T1 approval and write. Open verification items inherited from the design (exact OmniRoute image commit, MLflow auth wiring, gVisor availability) are tracked in `AGENTS.md`; the first two are now answered in the notes, and `runsc` is documented as unavailable on this host with the Compose flags as the actual isolation boundary.
+Nothing in `docs/` is treated as done on paper: every control above has a recorded drill in `docs/implementation-notes/v0.1-verification.md`, including the ones that failed first. The eval harness grades two trajectories exported from live runs, and the T1 run's MLflow trace carries the policy, DLP, approval and tool spans with matching audit IDs. Open verification items inherited from the design (exact OmniRoute image commit, MLflow auth wiring, gVisor availability) are tracked in `AGENTS.md`; the OmniRoute and MLflow image questions are answered, MLflow's human-path auth remains open because the UI is not published, and `runsc` is documented as unavailable on this host with the Compose flags as the actual isolation boundary.

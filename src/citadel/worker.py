@@ -19,6 +19,7 @@ from pathlib import Path
 from temporalio.client import Client
 from temporalio.worker import Worker
 
+from citadel import telemetry
 from citadel.policy import RelationChecker, RunStore
 from citadel.policy.openfga import build_checker
 from citadel.runs import PostgresRunStore
@@ -86,6 +87,7 @@ def main() -> int:
     role = os.environ.get("CITADEL_WORKER_ROLE", "")
     if not role:
         raise SystemExit("CITADEL_WORKER_ROLE is not set")
+    telemetry.configure(f"citadel-worker-{role}")
 
     stopping = threading.Event()
     threading.Thread(target=_beat, args=(stopping,), daemon=True).start()

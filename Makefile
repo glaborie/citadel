@@ -37,6 +37,13 @@ migrate:
 eval:
 	uv run python -m citadel.evals
 
+.PHONY: mlflow-bootstrap
+
+# One-time per fresh MLflow volume: create the traces experiment the OTLP
+# exporter names via MLFLOW_EXPERIMENT_ID.
+mlflow-bootstrap:
+	docker compose exec -T api python -m citadel.mlflow_bootstrap
+
 # Red-team pack: manifest lint always, case execution once fixtures exist.
 # Uses the project venv explicitly so it does not depend on an activated shell.
 .PHONY: redteam

@@ -22,6 +22,7 @@ from citadel.db import tenant_connection
 from citadel.hashing import arguments_hash
 from citadel.policy import AuthorizationRequest, RelationChecker, RunStore, authorize
 from citadel.policy.catalog import load_catalog
+from citadel.telemetry import record_span
 from citadel.workflows.types import PolicyOutcome, RunEnd, ToolCall, ToolResult
 
 
@@ -69,7 +70,7 @@ class ToolActivities:
         )
         # The workflow path had no policy audit before this: only the API's
         # /policy/authorize route wrote one, so a delegated run left no trace.
-        self._audit.append(
+        ref = self._audit.append(
             tenant_id=call.tenant_id,
             event_type="policy.decision",
             actor_type="agent",
@@ -83,6 +84,15 @@ class ToolActivities:
                 "rule_id": decision.rule_id,
                 "tier": decision.tier,
             },
+        )
+        record_span(
+            "policy.decision",
+            run_id=call.run_id,
+            audit_id=ref.audit_id,
+            tool=call.tool,
+            decision=decision.outcome,
+            rule_id=decision.rule_id,
+            tier=decision.tier,
         )
         return PolicyOutcome(
             outcome=decision.outcome,
@@ -156,7 +166,7 @@ class ToolActivities:
         tier: str,
         duration: int = 0,
     ) -> None:
-        self._audit.append(
+        ref = self._audit.append(
             tenant_id=call.tenant_id,
             event_type="tool.call",
             actor_type="agent",
@@ -173,6 +183,17 @@ class ToolActivities:
                 "detail": result.detail,
                 "replayed": result.replayed,
             },
+        )
+        record_span(
+            "tool.call",
+            run_id=call.run_id,
+            audit_id=ref.audit_id,
+            tool=call.tool,
+            tier=tier,
+            status=result.status,
+            idempotency_key=result.idempotency_key or key,
+            duration=duration,
+            replayed=result.replayed,
         )
 
     def _settled(
@@ -297,12 +318,25 @@ class ToolActivities:
         for report in reports:
             if not isinstance(report, dict):
                 continue
-            self._audit.append(
+            ref = self._audit.append(
                 tenant_id=call.tenant_id,
                 event_type="dlp.event",
                 actor_type="agent",
                 actor_id=call.agent_id,
                 payload={"run_id": call.run_id, "tool": call.tool, **report},
+            )
+            categories = report.get("categories", [])
+            record_span(
+                "dlp.event",
+                run_id=call.run_id,
+                audit_id=ref.audit_id,
+                tool=call.tool,
+                surface=str(report.get("surface", "")),
+                action=str(report.get("action", "")),
+                detector_version=str(report.get("detector_version", "")),
+                categories=",".join(str(item) for item in categories)
+                if isinstance(categories, list)
+                else "",
             )
 
 
@@ -328,7 +362,7 @@ class RunActivities:
             if existing is not None:
                 # A retried activity must not fork the trajectory.
                 return
-        self._audit.append(
+        ref = self._audit.append(
             tenant_id=end.tenant_id,
             event_type="run.end",
             actor_type="agent",
@@ -339,6 +373,13 @@ class RunActivities:
                 "citation_ids": end.citation_ids,
                 "safety_flags": end.safety_flags,
             },
+        )
+        record_span(
+            "run.end",
+            run_id=end.run_id,
+            audit_id=ref.audit_id,
+            outcome=end.outcome,
+            safety_flags=",".join(end.safety_flags),
         )
 
 

@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from citadel import __version__
+from citadel import __version__, telemetry
 from citadel.approvals import mint_approval_token
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
@@ -85,6 +85,7 @@ def create_app(
     checker: RelationChecker | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Citadel API", version=__version__)
+    telemetry.configure("citadel-api")
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
@@ -139,7 +140,7 @@ def create_app(
             )
         # Written after the row exists, so a recorded trajectory always names a
         # real run. If this fails the request fails and no run is claimed.
-        AuditLedger(_dsn()).append(
+        ref = AuditLedger(_dsn()).append(
             tenant_id=principal.tenant_id,
             event_type="run.start",
             actor_type="user",
@@ -153,6 +154,16 @@ def create_app(
                 "model_alias": body.model_alias,
                 "risk_tier": body.risk_tier,
             },
+        )
+        telemetry.record_span(
+            "run.start",
+            run_id=run_id,
+            audit_id=ref.audit_id,
+            tenant_id=principal.tenant_id,
+            agent_id=body.agent_id,
+            risk_tier=body.risk_tier,
+            prompt_pack_version=body.prompt_pack_version,
+            model_alias=body.model_alias,
         )
         return {"run_id": context.run_id, "tenant_id": context.tenant_id, "run_token": token}
 
@@ -222,6 +233,15 @@ def create_app(
                 "ttl": APPROVAL_TTL,
                 "rule_id": "approval.approved" if body.approved else "approval.denied",
             },
+        )
+        telemetry.record_span(
+            "approval.decision",
+            run_id=body.run_id,
+            audit_id=ref.audit_id,
+            tool=body.tool,
+            decision="approved" if body.approved else "denied",
+            approver=principal.user_id,
+            ttl=APPROVAL_TTL,
         )
 
         decision = ApprovalDecision(
