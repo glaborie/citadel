@@ -45,13 +45,25 @@ You are implementing Citadel from an approved design. Read the whole document se
 - One end-to-end run produces a recorded trace whose policy, DLP, approval and tool spans carry matching audit IDs.
 - No secret, token or credential appears in logs, traces, eval fixtures or the approval UI.
 
-## Open verification items
+## Verification items
 
-1. Canonical OmniRoute repository and exact image commit; many forks and a GitHub redirect were observed.
-2. MLflow image version (resolved: 3.18.0, digest pinned in Compose) and the Keycloak OAuth2 proxy for the human path (open only if the UI is published; the internal OTLP write path is resolved).
-3. gVisor `runsc` availability on the target Ubuntu host; if absent, document the fallback explicitly.
-4. Keycloak delegated-token mechanism preserving user identity (RFC 8693 V2 caveats).
-5. Whether the chosen hosted reranker/embedding endpoints are acceptable for the redacted data leaving the box.
+All were resolved during v0.1 except the last; each has a recorded measurement in
+`docs/implementation-notes/v0.1-verification.md`.
+
+1. Canonical OmniRoute repository and image commit — pinned by digest; see §1.
+2. MLflow image (3.18.0, digest-pinned) — resolved; the human path needs a
+   Keycloak OAuth2 proxy only if the UI is published, the internal OTLP write
+   path is unaffected. See §2 and §19.
+3. gVisor `runsc` availability — unavailable on this host; the hardened Compose
+   flags are the isolation boundary, recorded in §3 and ADR-012.
+4. Keycloak delegated-token mechanism — resolved in §5: standard exchange V2
+   preserves identity but cannot carry the run claims, so the API mints its own
+   Ed25519 run token.
+5. Whether the chosen hosted reranker/embedding endpoints are acceptable for the
+   redacted data leaving the box — still open, and a v0.2 question.
+
+The v0.1 exit review is `docs/exit-review-v0.1.md`. Open work, including the one
+scope delta it records, is `TODO.md`.
 
 ## Style
 

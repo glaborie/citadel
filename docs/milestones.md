@@ -19,6 +19,10 @@ Design confirmed 2026-11-23. Four milestones, each with a demonstrable exit test
 
 **Exit criteria**
 - A fresh clone with no hidden files starts the stack and passes all tests.
+  *Reviewed 2026-11-25 (`docs/exit-review-v0.1.md`): install and tests are proven
+  from a clean clone; the stack cannot start from it, because the secrets are
+  deliberately excluded from the repository. Proposed wording change is in the
+  review.*
 - Red-team suite proves: cross-tenant read blocked, unauthorized tool blocked, DLP failure blocks, expired approval blocks, duplicate idempotency key returns original result.
 - One recorded trace shows policy decision, DLP event, approval and tool result with matching audit IDs.
 - `docs/adr/ADR-008.md` roadmap reconciled with actual delivered scope.

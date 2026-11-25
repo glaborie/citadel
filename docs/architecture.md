@@ -175,15 +175,18 @@ MLflow stores versioned eval datasets and `mlflow.genai.evaluate()` results. Sco
 | Cache leak | Tenant + entitlement partition before similarity search, TTL, no T1/T2 caching |
 | Trace/prompt leakage to MLflow | Keycloak proxy, internal-only network, redaction before export |
 
-## 10. Deployment topology (planned Compose services)
+## 10. Deployment topology (Compose, as built)
 
-`api`, `approval-ui`, `temporal`, `temporal-ui`, `worker-orchestrator`, `worker-docker`, `worker-github`, `worker-researcher` (v0.2), `keycloak`, `postgres`, `openfga`, `qdrant`, `reranker` (TEI), `omniroute`, `presidio`, `mlflow`, `searxng`, `fetcher`, `tool-runner`. Prometheus/Grafana optional. Exact images and versions are pinned at implementation time; see `AGENTS.md`.
+`api`, `approval-ui`, `temporal`, `temporal-ui`, `worker-orchestrator`, `worker-docker`, `worker-github`, `keycloak`, `postgres`, `openfga`, `openfga-migrate`, `omniroute`, `presidio`, `mlflow`, `tool-runner`, `operator`, `docker-socket-proxy`, `github-egress`. That is 18 definitions, 17 running services (`openfga-migrate` is a one-shot). Images are pinned by digest in `compose.yaml`.
 
-## 11. Open verification items
+Not yet in Compose because they belong to v0.2: `worker-researcher`, `qdrant`, `reranker` (TEI), `searxng`, `fetcher`. Prometheus/Grafana remain optional (v0.3).
 
-1. Exact upstream and image commit for OmniRoute (GitHub redirects and many forks were observed).
-2. MLflow image version and auth configuration compatible with the chosen proxy.
-3. gVisor `runsc` availability on the target Ubuntu host; fallback is the hardened sidecar without gVisor.
-4. Keycloak token-exchange mechanism that preserves the user identity (RFC 8693 V2 caveats).
+## 11. Verification items (all resolved except the last)
 
-These are implementation details, not unresolved design decisions.
+1. **OmniRoute upstream and image** — resolved: pinned by digest in `compose.yaml`; the redirect and fork question is documented in `docs/implementation-notes/v0.1-verification.md` §1.
+2. **MLflow image and auth** — resolved: 3.18.0, pinned by digest, internal OTLP write path only (§19). Human-path auth stays open only if the UI is published (ADR-017).
+3. **gVisor `runsc`** — resolved as documented fallback: unavailable on this host, so the hardened sidecar flags are the isolation boundary (ADR-012).
+4. **Keycloak token exchange** — resolved in §5: standard exchange V2 preserves `sub`, `tenant` and roles but cannot carry the run claims, so the API mints its own Ed25519 run token. RFC 8693 delegation (`may_act`) was measured and rejected.
+5. **Hosted reranker/embedding endpoints** — still open, and a v0.2 question: whether the chosen endpoints are acceptable for redacted data.
+
+These were implementation details, not unresolved design decisions.
