@@ -15,3 +15,6 @@ build/
 
 # Security-scan output: agent state, SARIF, and exploit write-ups. Local only.
 strix_runs/
+
+# local report
+docs/evals/red-team-report.md
