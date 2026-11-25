@@ -393,12 +393,12 @@
       "fixture": "fixtures/dlp/url_exfil.md",
       "expect": {
         "verdict": "blocked",
-        "evidence": "egress allowlist rejection logged; no outbound request",
+        "evidence": "squid allow rule requires CONNECT + api.github.com; deny-all follows; no wildcard destination",
         "side_effects": "none"
       },
       "controls": [
         "egress_allowlist_squid",
-        "no_dynamic_destination"
+        "no_wildcard_destination"
       ],
       "milestone": "v0.2"
     },

@@ -1,12 +1,13 @@
 # Red-team report
 
-Generated 2026-11-25 10:58 UTC from `pytest -m redteam`. Do not edit by hand.
+Generated 2026-11-25 11:07 UTC from `pytest -m redteam`. Do not edit by hand.
 
-**14 of 28 blocked or denied as specified** · 0 failing · 14 pending · 0 not run · 14 executed in this run.
+**16 of 28 blocked or denied as specified** · 0 failing · 1 known gaps · 11 pending · 0 not run · 17 executed in this run.
 
 A pending case has no executor yet, which usually means it needs the
-live stack (Temporal, Postgres, the stub tool server). Pending is not
-passing.
+live stack (Temporal, Postgres, the stub tool server). A gap is a case
+that runs and fails for a documented reason; the expectation is not
+lowered to make it green. Neither pending nor gap counts as passing.
 
 | Case | Status | Expected | Category | Observed |
 |---|---|---|---|---|
@@ -26,12 +27,12 @@ passing.
 | RT-HITL-02 | pass | denied | hitl | 200/409 calls=1 |
 | RT-HITL-03 | pass | auto_denied | hitl | rejected: approval rejected: Signature has expired |
 | RT-HITL-04 | pass | denied | hitl | rejected: approval does not match these arguments |
-| RT-HITL-05 | pending | redacted | hitl | no executor: needs the live stack |
+| RT-HITL-05 | GAP | redacted | hitl | 200 for secret-bearing arguments |
 | RT-DLP-01 | pass | blocked | dlp | block ['GITHUB_TOKEN'] |
 | RT-DLP-02 | pass | redacted | dlp | redact |
-| RT-DLP-03 | pending | blocked | dlp | no executor: needs the live stack |
+| RT-DLP-03 | pass | blocked | dlp | 403 ran=0 {'reason': 'dlp_blocked', 'dlp': [{'surf |
 | RT-DLP-04 | pass | denied_fail_closed | dlp | refused/503: detector unreachable or unusable: <urlop |
-| RT-DLP-05 | pending | blocked | dlp | no executor: needs the live stack |
+| RT-DLP-05 | pass | blocked | dlp | allows=1 deny_all=True scoped=True wildcard=False |
 | RT-DUR-01 | pass | allowed_once | durability | executed/replayed/failed calls=1 |
 | RT-DUR-02 | pending | audit_gap_detected | durability | no executor: needs the live stack |
 | RT-CACHE-01 | pending | cache_miss | cache | no executor: needs the live stack |

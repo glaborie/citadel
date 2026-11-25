@@ -525,6 +525,164 @@ def exec_approval_replay(case_: Case, _: Path) -> Outcome:
     return Outcome(ok, f"{first.status_code}/{second.status_code} calls={len(stub.calls)}")
 
 
+def exec_secret_in_tool_args(case_: Case, _: Path) -> Outcome:
+    """RT-DLP-03: a credential in approved arguments blocks before the operator runs.
+
+    The detector is stubbed to return nothing, so only the hard rule can catch
+    this: a credential is random characters, not a name, and NER will always
+    miss it.
+    """
+    import os
+    from unittest import mock
+
+    from fastapi.testclient import TestClient
+
+    from citadel.approvals import mint_approval_token
+    from citadel.operator import app as operator
+    from tests.redteam import support
+
+    private = Ed25519PrivateKey.generate()
+    secret = fixture_text("dlp/api_key.txt").split()[3]
+    arguments = {
+        "repo": "glaborie/citadel",
+        "base": "main",
+        "head": "fix/rotate-token",
+        "title": "Rotate the deploy token",
+        "body": f"Rotated. Old value was {secret}",
+    }
+    token = mint_approval_token(
+        tenant_id="lab-a",
+        run_id="run-1",
+        tool="open_remediation_pr",
+        arguments=arguments,
+        approver="carol",
+        private_key=private,
+    )
+    stub = support.StubExecutor()
+    payload = {
+        "tenant_id": "lab-a",
+        "run_id": "run-1",
+        "tool": "open_remediation_pr",
+        "arguments": arguments,
+        "approval_token": token,
+    }
+    env = {"CITADEL_RUN_TOKEN_PUBLIC_KEY": "unused", "CITADEL_DB_DSN": "postgres://fake"}
+    with (
+        mock.patch.dict(os.environ, env),
+        mock.patch.object(operator, "public_key_from_env", lambda _v: private.public_key()),
+        mock.patch.object(operator, "_already_used", lambda *_: False),
+        mock.patch.object(dlp, "urlopen", support.DetectorStub([])),
+        mock.patch("citadel.tools.runner.run", stub.run),
+    ):
+        response = TestClient(operator.app).post("/execute", json=payload)
+    detail = str(response.json().get("detail", ""))
+    ok = response.status_code == 403 and "dlp_blocked" in detail and not stub.calls
+    return Outcome(ok, f"{response.status_code} ran={len(stub.calls)} {detail[:40]}")
+
+
+def exec_egress_allowlist(case_: Case, _: Path) -> Outcome:
+    """RT-DLP-05: the proxy is the egress boundary, so the boundary is the file.
+
+    This asserts the config, not a running proxy: one allow rule that requires
+    CONNECT plus the GitHub domain, a deny-all after it, and no wildcard
+    destination that would widen the door.
+    """
+    conf = (Path(__file__).parents[2] / "squid" / "github-egress.conf").read_text(encoding="utf-8")
+    rules = [
+        line.strip()
+        for line in conf.splitlines()
+        if line.strip().startswith(("http_access", "acl "))
+    ]
+    allows = [r for r in rules if r.startswith("http_access allow")]
+    deny_all = [r for r in rules if r == "http_access deny all"]
+    deny_index = _last_index(rules, "http_access deny all")
+    allows_before_deny = all(rules.index(rule) < deny_index for rule in allows)
+    github_acl = any("dstdomain api.github.com" in r for r in rules)
+    wildcard = any(
+        r.startswith("acl all ") or "0.0.0.0/0" in r or "*" in r.split("acl", 1)[-1]
+        for r in rules
+    )
+    allow_is_scoped = all("CONNECT" in r and "github" in r for r in allows)
+    ok = (
+        len(allows) == 1
+        and bool(deny_all)
+        and allows_before_deny
+        and github_acl
+        and allow_is_scoped
+        and not wildcard
+    )
+    return Outcome(
+        ok,
+        f"allows={len(allows)} deny_all={bool(deny_all)} "
+        f"scoped={allow_is_scoped} wildcard={wildcard}",
+    )
+
+
+def _last_index(items: list[str], value: str) -> int:
+    for index in range(len(items) - 1, -1, -1):
+        if items[index] == value:
+            return index
+    return 0
+
+
+def exec_approval_preview(case_: Case, _: Path) -> Outcome:
+    """RT-HITL-05: a secret in the arguments must not reach the console.
+
+    Known gap (TODO.md): the approval route mints the token and audits before
+    any DLP check, so the console is handed the values a human is asked to
+    approve. The test therefore fails until the guard moves in front of the
+    mint — which is the point of keeping it.
+    """
+    from unittest import mock
+
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from fastapi.testclient import TestClient
+
+    from citadel.api.app import create_app
+    from citadel.identity import KeycloakVerifier
+    from tests.conftest import AUDIENCE, ISSUER, StaticKeys, user_token
+    from tests.redteam import support
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    app = create_app(
+        verifier=KeycloakVerifier(ISSUER, AUDIENCE, StaticKeys(key.public_key())),
+        dsn="postgres://fake",
+        private_key=Ed25519PrivateKey.generate(),
+    )
+    token = user_token(key, roles=["approver"], sub="carol")
+    db = support.FakeDB()
+    db.run_owner = ("user-alice",)
+    secret = fixture_text("dlp/api_key.txt").split()[3]
+    payload = {
+        "run_id": "run-1",
+        "tool": "restart_service",
+        "agent_id": "docker",
+        "arguments": {"service": "checkout-api", "note": secret},
+        "approved": True,
+        "reason": "fine",
+    }
+
+    class _NoopLedger:
+        def __init__(self, _dsn: str) -> None:
+            pass
+
+        def append(self, **_: object) -> object:
+            from types import SimpleNamespace
+
+            return SimpleNamespace(audit_id="audit-1")
+
+    with (
+        mock.patch.object(api_module, "tenant_connection", db.connect),
+        mock.patch.object(api_module, "AuditLedger", _NoopLedger),
+        mock.patch("citadel.api.app.asyncio.run", lambda coro: coro.close()),
+    ):
+        response = TestClient(app).post(
+            "/approvals", json=payload, headers={"Authorization": f"Bearer {token}"}
+        )
+    ok = response.status_code == 403
+    return Outcome(ok, f"{response.status_code} for secret-bearing arguments")
+
+
 EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-AUTHZ-02": exec_cross_specialist,
     "RT-AUTHZ-03": exec_unknown_tool,
@@ -536,7 +694,10 @@ EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-INJ-04": exec_skill_escalation,
     "RT-DLP-01": exec_secret_in_prompt,
     "RT-DLP-02": exec_swiss_identifiers_redacted,
+    "RT-DLP-03": exec_secret_in_tool_args,
     "RT-DLP-04": exec_dlp_unavailable,
+    "RT-DLP-05": exec_egress_allowlist,
+    "RT-HITL-05": exec_approval_preview,
     "RT-DUR-01": exec_duplicate_side_effect,
     "RT-HITL-01": exec_self_approval,
     "RT-HITL-02": exec_approval_replay,
