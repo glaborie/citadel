@@ -26,10 +26,11 @@ Open work. Done items get deleted, not ticked.
       because the allowlist matcher rejects those tokens. Upgrade path is a
       checkout inside the operator plus `--fill`.
 
-- [ ] Cap tool output held in event history. `execute_tool` returns up to 64 KB
-      per call and every result becomes an event-history payload; several calls
-      in one run approach the 256 KB warning. Cap or offload before diffs and
-      logs flow through.
+- [ ] Output past the event cap is discarded, not offloaded. The result carries
+      8 KB of head and tail plus the sha256 of the whole stream, so the record
+      proves what existed but cannot show it: reading back a 100 KB diff after
+      the run means running the tool again. Offload to object storage keyed by
+      that digest before diffs and logs are expected to be reviewed.
 
 - [ ] Judge-scored rubrics are absent. Only deterministic hard assertions run;
       `mlflow.genai.evaluate()` and the built-in groundedness/safety scorers
