@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
+from temporalio.exceptions import ActivityError
 
 from citadel.workflows import activities
 from citadel.workflows.types import (
@@ -76,9 +77,19 @@ class SpecialistWorkflow:
                 approval_token=self._approval.token,
             )
 
-        return await workflow.execute_activity_method(
-            activities.ToolActivities.execute_tool,
-            call,
-            start_to_close_timeout=timedelta(minutes=2),
-            retry_policy=RetryPolicy(maximum_attempts=MAX_ATTEMPTS),
-        )
+        # Retries exhausted: report a structured failure rather than letting the
+        # child workflow die without a result the run can record.
+        try:
+            return await workflow.execute_activity_method(
+                activities.ToolActivities.execute_tool,
+                call,
+                start_to_close_timeout=timedelta(minutes=2),
+                retry_policy=RetryPolicy(maximum_attempts=MAX_ATTEMPTS),
+            )
+        except ActivityError as exc:
+            return ToolResult(
+                status="failed",
+                tool=call.tool,
+                rule_id="tool.no_result",
+                detail=f"{call.tool} produced no result after {MAX_ATTEMPTS} attempts: {exc}",
+            )

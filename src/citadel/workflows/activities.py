@@ -2,7 +2,8 @@
 
 Every activity is synchronous and idempotent from Temporal's point of view:
 the tool call is keyed, so a retry after a crash cannot produce a second side
-effect.
+effect. Whether a repeated attempt may re-run depends on how far the earlier
+attempt got, which is what the `sent` marker records.
 """
 
 from __future__ import annotations
@@ -71,6 +72,9 @@ class ToolActivities:
     @activity.defn
     def execute_tool(self, call: ToolCall) -> ToolResult:
         key = idempotency_key(call)
+        spec = load_catalog().get(call.tool)
+        tier = spec.tier if spec is not None else "T0"
+
         with tenant_connection(self._dsn, call.tenant_id) as conn:
             inserted = conn.execute(
                 "INSERT INTO tool_calls (idempotency_key, tenant_id, run_id, tool, status)"
@@ -81,27 +85,26 @@ class ToolActivities:
             ).fetchone()
 
             if inserted is None:
-                # A previous attempt already owns this key; replay its result.
                 row = conn.execute(
                     "SELECT status, result FROM tool_calls WHERE idempotency_key = %s",
                     (key,),
                 ).fetchone()
                 if row is None:  # pragma: no cover - the conflict implies a row
                     raise RuntimeError(f"idempotency row missing for {key}")
-                stored: dict[str, Any] = row[1] or {}
-                return ToolResult(
-                    status="replayed",
-                    tool=call.tool,
-                    rule_id="idempotency.replayed",
-                    detail="an earlier attempt produced this key",
-                    idempotency_key=key,
-                    replayed=True,
-                    output=stored,
-                )
+                settled = self._settled(call, key, str(row[0]), row[1], tier)
+                if settled is not None:
+                    return settled
 
-            # The sandbox validates again and refuses risky output, so a
-            # compromised worker cannot widen what may run.
-            outcome = self._invoke(call)
+            # Committed before the call leaves this process: a crash after this
+            # point must not be retried as if nothing had been sent.
+            conn.execute("UPDATE tool_calls SET status = 'sent' WHERE idempotency_key = %s", (key,))
+
+        # Transport failures propagate so Temporal retries them. Anything the
+        # tool actually answered is returned as a result, because a retry could
+        # repeat a side effect.
+        outcome = self._invoke(call)
+
+        with tenant_connection(self._dsn, call.tenant_id) as conn:
             conn.execute(
                 "UPDATE tool_calls SET status = %s, result = %s WHERE idempotency_key = %s",
                 (outcome.status, json.dumps(outcome.output), key),
@@ -114,6 +117,40 @@ class ToolActivities:
             idempotency_key=key,
             output=outcome.output,
         )
+
+    def _settled(
+        self, call: ToolCall, key: str, status: str, result: Any, tier: str
+    ) -> ToolResult | None:
+        """What a repeated attempt may do with a key that already exists.
+
+        None means the earlier attempt provably never reached the tool, so
+        attempting again is safe. A `sent` row on a write is the one case where
+        the outcome is genuinely unknown.
+        """
+        if status in {"executed", "replayed", "failed"}:
+            return ToolResult(
+                status="replayed",
+                tool=call.tool,
+                rule_id="idempotency.replayed",
+                detail="an earlier attempt produced this key",
+                idempotency_key=key,
+                replayed=True,
+                output=result or {},
+            )
+        if tier == "T1":
+            # The approval was consumed and the command may have run. Retrying
+            # would either duplicate it or be refused; neither is a result.
+            return ToolResult(
+                status="failed",
+                tool=call.tool,
+                rule_id="tool.possibly_executed",
+                detail=(
+                    "an earlier attempt was interrupted after the approval was consumed;"
+                    " the write may have happened, verify before retrying"
+                ),
+                idempotency_key=key,
+            )
+        return None
 
     def _invoke(self, call: ToolCall) -> ToolResult:
         spec = load_catalog().get(call.tool)
@@ -157,21 +194,20 @@ class ToolActivities:
             with urllib.request.urlopen(request, timeout=60) as response:
                 payload: dict[str, Any] = json.loads(response.read())
         except urllib.error.HTTPError as exc:
+            # A tool service that answered is deterministic: retrying the same
+            # request would get the same answer, and for a write it could repeat
+            # a side effect. So this is a result, not an exception.
             detail = exc.read().decode("utf-8", errors="replace")[:300]
             rule = "tool.refused" if exc.code in (403, 409) else "tool.error"
             return ToolResult(
                 status="failed",
                 tool=call.tool,
                 rule_id=rule,
-                detail=f"sandbox refused the call: {detail}",
+                detail=f"the tool service refused the call: {detail}",
             )
-        except OSError as exc:
-            return ToolResult(
-                status="failed",
-                tool=call.tool,
-                rule_id="tool.unavailable",
-                detail=f"sandbox unreachable: {exc}",
-            )
+        # Transport failures deliberately propagate: Temporal's retry policy is
+        # the only retry mechanism, and swallowing the error here would make it
+        # decorative.
         return ToolResult(
             status="executed",
             tool=call.tool,

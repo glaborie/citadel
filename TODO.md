@@ -16,14 +16,6 @@ Open work. Done items get deleted, not ticked.
       because the allowlist matcher rejects those tokens. Upgrade path is a
       checkout inside the operator plus `--fill`.
 
-- [ ] Make retries real and safe for writes. `_post` in
-      `workflows/activities.py` turns `OSError` and every `HTTPError` into a
-      `failed` ToolResult, so `RetryPolicy` never fires and one network blip
-      ends the run. Propagate transport errors and mark 4xx `non_retryable`.
-      Then a retried T1 write must not report failure: the operator's 409 means
-      the first attempt already landed, and a `tool_calls` row still in
-      `started` replays as an empty result.
-
 - [ ] Cap tool output held in event history. `execute_tool` returns up to 64 KB
       per call and every result becomes an event-history payload; several calls
       in one run approach the 256 KB warning. Cap or offload before diffs and
