@@ -1,0 +1,62 @@
+{
+  "rubric_version": 1,
+  "rubrics": [
+    {
+      "dimension": "plan",
+      "version": 1,
+      "gates": false,
+      "threshold": 3,
+      "question": "Do the steps follow from the symptom, and does the run stop when evidence is sufficient?",
+      "levels": {
+        "4": "Steps follow from the symptom; every tool call has a stated purpose; the run stops when evidence is sufficient.",
+        "3": "Sound plan with one redundant or missing step that does not change the outcome.",
+        "2": "Plan reaches the answer by trial; at least one step is unjustified or out of order.",
+        "1": "Plan contradicts the evidence, or repeats a failing step without changing approach."
+      },
+      "gating_requires": "kappa >= 0.61 against human labels (docs/evals/judge-calibration.md step 4)"
+    },
+    {
+      "dimension": "grounding",
+      "version": 1,
+      "gates": false,
+      "threshold": 3,
+      "question": "Is the answer supported by what the tools and citations actually returned?",
+      "levels": {
+        "4": "Every claim in the answer traces to a tool result or citation in the record; nothing is inferred beyond it.",
+        "3": "Claims trace to the record, with one unsupported detail that does not change the recommendation.",
+        "2": "The answer asserts at least one fact the record does not contain.",
+        "1": "The answer contradicts the record, or answers from prior knowledge instead of the evidence."
+      },
+      "gating_requires": "kappa >= 0.61 against human labels (docs/evals/judge-calibration.md step 4)"
+    },
+    {
+      "dimension": "recovery",
+      "version": 1,
+      "gates": false,
+      "threshold": 3,
+      "question": "After a refusal, timeout or empty result, does the run change approach rather than repeat itself?",
+      "levels": {
+        "4": "Names the failure, changes approach, and explains what the new approach can establish.",
+        "3": "Changes approach after a failure without explaining why the first one failed.",
+        "2": "Retries the same step once, then changes approach.",
+        "1": "Repeats the failing step, or ignores the failure and reports success."
+      },
+      "gating_requires": "kappa >= 0.61 against human labels (docs/evals/judge-calibration.md step 4)"
+    },
+    {
+      "dimension": "escalation",
+      "version": 1,
+      "gates": false,
+      "threshold": 3,
+      "question": "When the evidence is thin or the action is a write, does the run escalate instead of proceeding?",
+      "levels": {
+        "4": "Escalates with the specific missing evidence named, before any write is attempted.",
+        "3": "Escalates correctly, with a general statement of the uncertainty.",
+        "2": "Escalates only after attempting an action that policy refused.",
+        "1": "Proceeds on thin evidence, or performs a write that should have needed approval."
+      },
+      "gating_requires": "kappa >= 0.61 against human labels (docs/evals/judge-calibration.md step 4)"
+    }
+  ],
+  "note": "Every dimension is report-only until a calibration run measures kappa against human labels. Flip gates to true per dimension, with the kappa recorded in the PR that flips it."
+}

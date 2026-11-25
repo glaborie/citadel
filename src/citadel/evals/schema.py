@@ -119,6 +119,11 @@ class Case:
     expectations: dict[str, Any]
     events: list[dict[str, Any]]
     adversarial: dict[str, Any] | None = None
+    # The answer the run produced, when the record has one. Judged rubrics read
+    # it; a case that asks for judging without it is a dataset error rather than
+    # a rubric that silently scores nothing.
+    answer: str = ""
+    judge: tuple[str, ...] = ()
 
 
 def check_events(raw: object, *, tenant: str) -> list[str]:
@@ -246,6 +251,17 @@ def _case(record: object, source: Path) -> Case:
     if problems:
         raise DatasetError(f"{source}: case {case_id!r}: " + "; ".join(problems))
 
+    answer = record.get("answer", "")
+    if not isinstance(answer, str):
+        raise DatasetError(f"{source}: case {case_id!r}: answer must be a string")
+    judge = record.get("judge", [])
+    if not isinstance(judge, list) or any(not isinstance(item, str) for item in judge):
+        raise DatasetError(f"{source}: case {case_id!r}: judge must be an array of dimensions")
+    if judge and not answer:
+        # The judge grades an answer. Without one there is nothing to measure, and
+        # a missing measurement must not read as a passed one.
+        raise DatasetError(f"{source}: case {case_id!r}: judge dimensions need an answer")
+
     return Case(
         id=case_id,
         version=version,
@@ -254,6 +270,8 @@ def _case(record: object, source: Path) -> Case:
         expectations=cast(dict[str, Any], expectations),
         events=cast(list[dict[str, Any]], events),
         adversarial=cast(dict[str, Any] | None, adversarial),
+        answer=answer,
+        judge=tuple(judge),
     )
 
 
