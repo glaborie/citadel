@@ -132,10 +132,14 @@ reviewer asks for: claim, mechanism, code.
 
 ## Status
 
-Twelve cases have an executor today; the rest need the live stack (Temporal,
+Not every case has an executor yet. Those that do run against the real seams:
+the policy chokepoint, the signed run and approval tokens, the DLP gate, the
+tool activity's idempotency path, the API's separation of duties and the
+operator's single-use approval table. The rest need the live stack (Temporal,
 Postgres, the stub tool server) and are reported as pending — never as passing.
-`docs/evals/red-team-report.md` is generated from the run and states the count
-in its first line.
+
+`docs/evals/red-team-report.md` is generated from a run and states the count in
+its first line, so this paragraph never has to be edited to stay true.
 
 ## Running it
 

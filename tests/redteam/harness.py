@@ -22,6 +22,7 @@ from typing import Any
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from citadel import dlp
+from citadel.api import app as api_module
 from citadel.approvals import mint_approval_token, verify_approval_token
 from citadel.identity.keycloak import IdentityError, Principal
 from citadel.identity.run_token import mint_run_token, verify_run_token
@@ -32,6 +33,7 @@ from citadel.policy import (
     authorize,
     load_catalog,
 )
+from citadel.workflows import activities as activities_module
 from citadel.workflows.activities import idempotency_key
 from citadel.workflows.types import ToolCall
 
@@ -376,6 +378,153 @@ def exec_idempotency_key(case_: Case, _: Path) -> Outcome:
     return Outcome(ok, idempotency_key(first)[:24] + "...")
 
 
+def exec_duplicate_side_effect(case_: Case, _: Path) -> Outcome:
+    """RT-DUR-01: one effect per call, however many times Temporal retries.
+
+    Three attempts: a clean run, a retry after success, and a retry after the
+    approval was consumed but the outcome is unknown. Only the first may reach
+    the tool.
+    """
+    from unittest import mock
+
+    from citadel.workflows.activities import ToolActivities
+    from tests.redteam import support
+
+    db = support.FakeDB()
+    audit = support.FakeAudit()
+    stub = support.StubTool()
+    acts = ToolActivities(
+        checker=FakeChecker(),
+        run_store=FakeRunStore(),
+        dsn="postgres://fake",
+        runner_url="http://runner.test",
+        operator_url="http://operator.test",
+        audit=audit,  # type: ignore[arg-type]
+    )
+    call = ToolCall(
+        run_id="run-1",
+        tenant_id="lab-a",
+        user_id="alice",
+        agent_id="docker",
+        tool="restart_service",
+        arguments={"service": "checkout-api"},
+    )
+    with (
+        mock.patch.object(activities_module, "tenant_connection", db.connect),
+        mock.patch.object(ToolActivities, "_invoke", lambda self, c: stub.invoke(c)),
+    ):
+        first = acts.execute_tool(call)
+        second = acts.execute_tool(call)
+        for row in db.rows.values():
+            row["status"] = "sent"
+        third = acts.execute_tool(call)
+
+    ok = (
+        first.status == "executed"
+        and second.status == "replayed"
+        and second.replayed
+        and third.rule_id == "tool.possibly_executed"
+        and stub.count == 1
+    )
+    return Outcome(ok, f"{first.status}/{second.status}/{third.status} calls={stub.count}")
+
+
+def exec_self_approval(case_: Case, _: Path) -> Outcome:
+    """RT-HITL-01: the API refuses an approver who owns the run."""
+    from unittest import mock
+
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from fastapi.testclient import TestClient
+
+    from citadel.api.app import create_app
+    from citadel.identity import KeycloakVerifier
+    from tests.conftest import AUDIENCE, ISSUER, StaticKeys, user_token
+    from tests.redteam import support
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    app = create_app(
+        verifier=KeycloakVerifier(ISSUER, AUDIENCE, StaticKeys(key.public_key())),
+        dsn="postgres://fake",
+    )
+    token = user_token(key, roles=["operator", "approver"], sub="user-alice")
+    db = support.FakeDB()
+    db.run_owner = ("user-alice",)
+    payload = {
+        "run_id": "run-1",
+        "tool": "restart_service",
+        "agent_id": "docker",
+        "arguments": {"service": "checkout-api"},
+        "approved": True,
+        "reason": "looks fine",
+    }
+    with mock.patch.object(api_module, "tenant_connection", db.connect):
+        response = TestClient(app).post(
+            "/approvals", json=payload, headers={"Authorization": f"Bearer {token}"}
+        )
+    body = response.json()
+    ok = response.status_code == 403 and "own run" in str(body.get("detail", ""))
+    return Outcome(ok, f"{response.status_code} {str(body.get('detail'))[:40]}")
+
+
+def exec_approval_replay(case_: Case, _: Path) -> Outcome:
+    """RT-HITL-02: the operator executes once per approval, then returns 409."""
+    import os
+    from unittest import mock
+
+    from fastapi.testclient import TestClient
+
+    from citadel.approvals import mint_approval_token
+    from citadel.operator import app as operator
+    from tests.redteam import support
+
+    private = Ed25519PrivateKey.generate()
+    arguments = {"service": "checkout-api"}
+    token = mint_approval_token(
+        tenant_id="lab-a",
+        run_id="run-1",
+        tool="restart_service",
+        arguments=arguments,
+        approver="carol",
+        private_key=private,
+    )
+    stub = support.StubExecutor()
+    seen: list[str] = []
+
+    def already_used(dsn: str, tenant_id: str, jti: str) -> bool:
+        seen.append(jti)
+        return len(seen) > 1
+
+    def passthrough(text: str, *, surface: str) -> tuple[str, dict[str, object]]:
+        return text, {"surface": surface, "action": "pass"}
+
+    payload = {
+        "tenant_id": "lab-a",
+        "run_id": "run-1",
+        "tool": "restart_service",
+        "arguments": arguments,
+        "approval_token": token,
+    }
+    env = {"CITADEL_RUN_TOKEN_PUBLIC_KEY": "unused", "CITADEL_DB_DSN": "postgres://fake"}
+    with (
+        mock.patch.dict(os.environ, env),
+        mock.patch.object(operator, "public_key_from_env", lambda _v: private.public_key()),
+        mock.patch.object(operator, "_already_used", already_used),
+        mock.patch.object(operator, "_guard", passthrough),
+        mock.patch("citadel.tools.runner.run", stub.run),
+    ):
+        client = TestClient(operator.app)
+        first = client.post("/execute", json=payload)
+        second = client.post("/execute", json=payload)
+
+    ok = (
+        first.status_code == 200
+        and second.status_code == 409
+        and len(stub.calls) == 1
+        and len(seen) == 2
+    )
+    return Outcome(ok, f"{first.status_code}/{second.status_code} calls={len(stub.calls)}")
+
+
 EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-AUTHZ-02": exec_cross_specialist,
     "RT-AUTHZ-03": exec_unknown_tool,
@@ -388,7 +537,9 @@ EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-DLP-01": exec_secret_in_prompt,
     "RT-DLP-02": exec_swiss_identifiers_redacted,
     "RT-DLP-04": exec_dlp_unavailable,
-    "RT-DUR-01": exec_idempotency_key,
+    "RT-DUR-01": exec_duplicate_side_effect,
+    "RT-HITL-01": exec_self_approval,
+    "RT-HITL-02": exec_approval_replay,
 }
 
 
