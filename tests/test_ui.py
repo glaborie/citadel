@@ -233,7 +233,42 @@ def test_audit_search_passes_the_filters_through(env: tuple[TestClient, FakeDB])
     response = client.get("/audit", params={"event_type": "policy.decision", "q": "requires"})
     assert response.status_code == 200
     _, params = db.statements[-1]
-    assert params == ("policy.decision", "policy.decision", "requires", "%requires%")
+    assert params == ("policy.decision", "policy.decision", "", "%%", "requires", "%requires%")
+
+
+def test_runs_sort_uses_only_whitelisted_columns(env: tuple[TestClient, FakeDB]) -> None:
+    client, db = env
+    _login(client, roles=["operator"])
+    assert client.get("/runs", params={"sort": "user", "dir": "asc"}).status_code == 200
+    sql, _ = db.statements[-1]
+    assert sql.endswith("ORDER BY user_id ASC LIMIT 100")
+
+
+def test_unknown_sort_falls_back_and_never_reaches_sql(env: tuple[TestClient, FakeDB]) -> None:
+    client, db = env
+    _login(client, roles=["operator"])
+    client.get("/runs", params={"sort": "id; DROP TABLE runs", "dir": "asc"})
+    sql, _ = db.statements[-1]
+    assert sql.endswith("ORDER BY created_at ASC LIMIT 100")
+    assert "DROP" not in sql
+
+
+def test_runs_filters_reach_the_query(env: tuple[TestClient, FakeDB]) -> None:
+    client, db = env
+    _login(client, roles=["operator"])
+    client.get("/runs", params={"user": "alice", "status": "created"})
+    sql, params = db.statements[-1]
+    assert "user_id ILIKE" in sql and "status ILIKE" in sql
+    assert "%alice%" in params and "%created%" in params
+
+
+def test_audit_filters_and_sort(env: tuple[TestClient, FakeDB]) -> None:
+    client, db = env
+    _login(client, roles=["viewer"])
+    client.get("/audit", params={"actor": "carol", "sort": "event", "dir": "asc"})
+    sql, params = db.statements[-1]
+    assert sql.endswith("ORDER BY event_type ASC LIMIT 100")
+    assert "%carol%" in params
 
 
 def test_login_redirects_with_pkce(env: tuple[TestClient, FakeDB]) -> None:
