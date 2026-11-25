@@ -78,8 +78,11 @@ def test_secret_in_arguments_is_refused_before_mint(
     response = _post(client, token, {"service": "checkout-api", "note": SECRET})
     assert response.status_code == 403
     assert response.json()["detail"]["reason"] == "dlp_blocked"
-    # No token was minted and nothing was written for a human to read.
-    assert events == []
+    # No token was minted; the refusal itself is the only ledger row.
+    assert [event["event_type"] for event in events] == ["dlp.event"]
+    assert events[0]["payload"]["action"] == "block"
+    assert events[0]["payload"]["categories"] == ["GITHUB_TOKEN"]
+    assert SECRET not in str(events)
 
 
 def test_unreachable_detector_refuses_rather_than_passing(
@@ -94,4 +97,5 @@ def test_unreachable_detector_refuses_rather_than_passing(
     response = _post(client, token, {"service": "checkout-api"})
     assert response.status_code == 503
     assert response.json()["detail"]["reason"] == "dlp_unavailable"
-    assert events == []
+    assert [event["event_type"] for event in events] == ["dlp.event"]
+    assert events[0]["payload"]["action"] == "block"

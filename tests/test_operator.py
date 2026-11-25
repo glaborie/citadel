@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import urllib.error
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -53,14 +54,21 @@ def client(
     monkeypatch.setattr(operator_module, "_already_used", lambda *_: False)
 
     captured: dict[str, Any] = {}
+    ledger: list[dict[str, Any]] = []
+
+    def append(**kwargs: Any) -> SimpleNamespace:
+        ledger.append(kwargs)
+        return SimpleNamespace(audit_id=f"audit-{len(ledger)}")
 
     def fake_run(argv: list[str]) -> Done:
         captured["argv"] = argv
         return Done()
 
+    monkeypatch.setattr(operator_module, "AuditLedger", lambda _dsn: SimpleNamespace(append=append))
     monkeypatch.setattr(runner, "run", fake_run)
     test_client = TestClient(operator_module.app)
     test_client.captured = captured
+    test_client.ledger = ledger
     return test_client
 
 
@@ -166,6 +174,10 @@ def test_a_credential_in_approved_input_never_reaches_the_command(
     assert "argv" not in client.captured, "gh must not have run"
     assert response.json()["detail"]["reason"] == "dlp_blocked"
     assert "ghp_" not in response.text
+    # The refusal is recorded even though no command ran and no result exists.
+    assert [event["event_type"] for event in client.ledger] == ["dlp.event"]
+    assert client.ledger[0]["payload"]["action"] == "block"
+    assert "ghp_" not in str(client.ledger)
 
 
 def test_detector_outage_refuses_the_operator_too(
@@ -181,3 +193,5 @@ def test_detector_outage_refuses_the_operator_too(
 
     assert response.status_code == 503
     assert "argv" not in client.captured
+    assert [event["event_type"] for event in client.ledger] == ["dlp.event"]
+    assert client.ledger[0]["payload"]["error"]
