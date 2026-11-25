@@ -12,3 +12,6 @@ __pycache__/
 .ruff_cache/
 dist/
 build/
+
+# Security-scan output: agent state, SARIF, and exploit write-ups. Local only.
+strix_runs/
