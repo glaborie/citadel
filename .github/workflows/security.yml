@@ -163,19 +163,21 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      security-events: write   # required to upload SARIF to the Security tab
-      actions: read            # required by upload-sarif on private repos
+      # Remove security-events: write if you no longer upload SARIF from this job
+      # security-events: write
+      actions: read            # required on private repos
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: false   # zizmor's own recommended hardening
+          persist-credentials: false
 
-      - name: Run zizmor
+      - name: Run zizmor (blocking)
         uses: zizmorcore/zizmor-action@bd12b495c90993a4301c73398142281a61499af3 # v0.9.0   # bundles zizmor 1.33 by default
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          online-audits:  true
+          advanced-security: false   # ← forces --format=github / annotations
+          annotations: true          # ← enables annotations and non-zero exit on findings
 
   # ─────────────────────────── Gate ──────────────────────────────
   security-check:
