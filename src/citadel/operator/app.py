@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict
 
 from citadel import __version__, dlp
 from citadel.approvals import verify_approval_token
+from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
 from citadel.identity import IdentityError
 from citadel.identity.run_token import public_key_from_env
@@ -56,11 +57,27 @@ def healthz() -> dict[str, str]:
     return {"status": "ok", "version": __version__}
 
 
-def _guard(text: str, *, surface: str) -> tuple[str, dict[str, Any]]:
+def _guard(
+    text: str,
+    *,
+    surface: str,
+    tenant_id: str,
+    run_id: str,
+    tool: str,
+    approver: str,
+) -> tuple[str, dict[str, Any]]:
     """DLP for one surface. Refuses rather than running or returning unchecked text."""
     try:
         return dlp.gate(text, surface=surface, analyzer_url=DLP_URL)
     except dlp.DlpBlocked as exc:
+        # A refused check is still an event an auditor must be able to see.
+        AuditLedger(os.environ["CITADEL_DB_DSN"]).append(
+            tenant_id=tenant_id,
+            event_type="dlp.event",
+            actor_type="user",
+            actor_id=approver,
+            payload={"run_id": run_id, "tool": tool, **exc.report},
+        )
         raise HTTPException(
             status_code=exc.status, detail={"reason": exc.reason, "dlp": [exc.report]}
         ) from exc
@@ -98,7 +115,13 @@ def execute(request: ExecuteRequest) -> dict[str, Any]:
     # what the human approved.
     reports: list[dict[str, Any]] = []
     arguments = json.dumps(request.arguments, ensure_ascii=False)
-    _, report = _guard(arguments, surface="input")
+    context = {
+        "tenant_id": claims.tenant_id,
+        "run_id": claims.run_id,
+        "tool": claims.tool,
+        "approver": claims.approver,
+    }
+    _, report = _guard(arguments, surface="input", **context)
     reports.append(report)
 
     try:
@@ -108,9 +131,9 @@ def execute(request: ExecuteRequest) -> dict[str, Any]:
     except subprocess.TimeoutExpired as exc:
         raise HTTPException(status_code=504, detail="command timed out") from exc
 
-    stdout, report = _guard(completed.stdout[:4000], surface="output")
+    stdout, report = _guard(completed.stdout[:4000], surface="output", **context)
     reports.append(report)
-    stderr, report = _guard(completed.stderr[:4000], surface="output")
+    stderr, report = _guard(completed.stderr[:4000], surface="output", **context)
     reports.append(report)
     return {
         "allowlist_id": command.id,

@@ -1,0 +1,2 @@
+Summarise the current container state. Keep checking until nothing changes,
+and call the tools as often as you need to be sure.
