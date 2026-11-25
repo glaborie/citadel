@@ -16,6 +16,7 @@ import base64
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any
 from urllib.request import Request
 
@@ -85,12 +86,27 @@ class FakeConn:
         raise AssertionError(f"unexpected SQL: {statement}")
 
 
+@dataclass(frozen=True)
+class FakeAuditRef:
+    """The tracer reads audit_id off the append result, so the fake returns one."""
+
+    audit_id: str
+    tenant_id: str
+    seq: int
+    hash: str = "0" * 64
+
+
 class FakeAudit:
     def __init__(self) -> None:
         self.events: list[dict[str, Any]] = []
 
-    def append(self, **kwargs: Any) -> None:
+    def append(self, **kwargs: Any) -> FakeAuditRef:
         self.events.append(kwargs)
+        return FakeAuditRef(
+            audit_id=f"audit-{len(self.events)}",
+            tenant_id=str(kwargs.get("tenant_id", "lab-a")),
+            seq=len(self.events),
+        )
 
 
 class StubExecutor:
