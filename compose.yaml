@@ -265,10 +265,22 @@ services:
   approval-ui:
     <<: *app
     command: ["uvicorn", "citadel.ui.app:app", "--host", "0.0.0.0", "--port", "8001"]
+    environment:
+      KEYCLOAK_ISSUER: http://localhost:18081/realms/citadel
+      KEYCLOAK_INTERNAL_ISSUER: http://keycloak:8080/realms/citadel
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/citadel/protocol/openid-connect/certs
+      KEYCLOAK_AUDIENCE: citadel-agent
+      CITADEL_CONSOLE_CLIENT_ID: citadel-console
+      CITADEL_CONSOLE_REDIRECT_URI: http://localhost:18001/callback
+      CITADEL_CONSOLE_SESSION_KEY: ${CITADEL_CONSOLE_SESSION_KEY}
+      CITADEL_API_URL: http://api:8000
+      CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
     ports:
       - "18001:8001"
     depends_on:
       keycloak:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=3)"]

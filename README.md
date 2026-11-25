@@ -4,7 +4,7 @@
 
 Citadel is a clean-slate Python + Docker Compose stack that runs a small fleet of specialised agents (Docker, GitHub, Researcher) against a real homelab. It treats identity, tenancy, authorisation, sandboxing, DLP, audit and evaluation as first-class runtime properties rather than middleware added at the end. It is a portfolio piece aimed at senior AI-engineering roles and is deliberately usable outside the demo.
 
-**Status: v0.1 in progress — 7 of 10 implementation steps complete and running on a live host.** The identity, policy, orchestration, sandbox, write-path and DLP controls are implemented and verified end to end; the offline evaluation harness, live trajectory recorder and OTLP trace export to MLflow are built, and a T1 drill produced one trace with policy, DLP, approval and tool spans. The approval console UI is next, and the model gateway is not yet wired into the runtime. See `TODO.md` for open work and `docs/implementation-notes/v0.1-verification.md` for what was executed, on which host, and what it printed.
+**Status: v0.1 in progress — 9 of 10 implementation steps complete and running on a live host.** The identity, policy, orchestration, sandbox, write-path, DLP and model-gateway controls are implemented and verified end to end; the offline evaluation harness, live trajectory recorder and OTLP trace export to MLflow are built, and a T1 drill produced one trace with policy, DLP, approval and tool spans. The approval console's five views and Keycloak SSO are built (verified at the unit level, not yet against a live Keycloak). The remaining step is the red-team close-out and milestone exit review. See `TODO.md` for open work and `docs/implementation-notes/v0.1-verification.md` for what was executed, on which host, and what it printed.
 
 ## What demonstrates what
 
@@ -18,7 +18,7 @@ The table is the architecture; the **Status** column says which rows exist as co
 | 4 | Sandboxing | Hardened ephemeral sidecar; gVisor `runsc` as a one-line upgrade | built, without gVisor (`runsc` unavailable on this host) |
 | 5 | DLP | Local Presidio + custom CH/EU recognizers; fail-closed; redact before egress | built |
 | 6 | Guardrails | Inline policy checks on prompts, retrieval, tool args and model output | tool args, results and policy done; model/retrieval paths do not exist yet |
-| 7 | Human in the loop | Keycloak-authenticated approval console resuming Temporal workflows | workflow, TTL and signed tokens built; console is a skeleton |
+| 7 | Human in the loop | Keycloak-authenticated approval console resuming Temporal workflows | built: five views, PKCE SSO, CSRF, server-side authorisation |
 | 8 | Idempotency | Durable hashed tool keys + Postgres unique constraint; effectively-once semantics | built |
 | 9 | Telemetry | OTel spans to MLflow; hash-chained security audit log in Postgres | built: spans carry the audit event id; audit chain built |
 | 10 | MCP support | Adapter seam only; consume external tools in a later milestone | seam only |
@@ -41,6 +41,7 @@ The table is the architecture; the **Status** column says which rows exist as co
 | Sandbox | `cap_drop: ALL`, read-only rootfs, no socket, egress only to `api.github.com` through a domain-allowlisted proxy |
 | DLP | Presidio plus deterministic credential rules; a detector that cannot answer blocks the call rather than passing text |
 | Writes | `restart_service` and `open_remediation_pr` only, only from the operator, only with a single-use approval token naming the exact arguments |
+| Console | Five server-rendered views behind Keycloak PKCE login; a decision POST forwards to the API with the approver's own token, so CSRF, role and DLP checks stay server-side |
 | Audit | Append-only hash chain per tenant, verified after every live drill |
 | Tracing | OTLP/HTTP into MLflow; one T1 run produced a single trace with run start, policy, approval, three DLP events, tool call and run end, each carrying its audit ID |
 
@@ -107,12 +108,13 @@ docs/adr/                     # 23 ADRs and an index
 compose.yaml                  # 17 services, images pinned by digest
 Dockerfile                    # one file, three targets: app / operator / sandbox
 Makefile                      # `make up` unwraps secrets through SOPS first
-migrations/                   # RLS, tool ledger, audit chain, approval tokens
+migrations/                   # RLS, tool ledger, audit chain, approvals
 policy/                       # OpenFGA model + compiled JSON
 evals/golden/                 # committed trajectories + expected outcomes
 squid/github-egress.conf      # the sandbox's only egress allowlist
 src/citadel/
   api/                        # runs, approvals, policy endpoints
+  ui/                         # server-rendered approval console
   evals/                      # trajectory schema, deterministic graders, CLI
   identity/                   # Keycloak verification, run tokens
   policy/                     # catalog, OpenFGA checker, authorize()

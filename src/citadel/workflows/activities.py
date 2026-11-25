@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import time
 import urllib.error
 from typing import Any
@@ -17,6 +18,8 @@ from urllib.request import Request, urlopen
 
 from temporalio import activity
 
+from citadel import dlp
+from citadel.approval_requests import record_request
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
 from citadel.hashing import arguments_hash
@@ -24,6 +27,8 @@ from citadel.policy import AuthorizationRequest, RelationChecker, RunStore, auth
 from citadel.policy.catalog import load_catalog
 from citadel.telemetry import record_span
 from citadel.workflows.types import PolicyOutcome, RunEnd, ToolCall, ToolResult
+
+DLP_URL = os.environ.get("CITADEL_DLP_URL", "http://presidio:3000")
 
 
 def idempotency_key(call: ToolCall) -> str:
@@ -94,6 +99,34 @@ class ToolActivities:
             rule_id=decision.rule_id,
             tier=decision.tier,
         )
+        if decision.outcome == "requires_approval":
+            # The arguments are about to be shown to a human: check them now,
+            # and neither persist nor ask when the detector cannot answer.
+            try:
+                dlp.gate(
+                    json.dumps(call.arguments, ensure_ascii=False),
+                    surface="input",
+                    analyzer_url=DLP_URL,
+                )
+            except dlp.DlpBlocked as exc:
+                self._audit_dlp(call, [exc.report])
+                unavailable = exc.reason == "dlp_unavailable"
+                return PolicyOutcome(
+                    outcome="deny",
+                    rule_id="dlp.unavailable" if unavailable else "dlp.blocked",
+                    reason=(
+                        "the detector could not check the approval arguments,"
+                        " so the call was refused"
+                        if unavailable
+                        else "DLP found sensitive content in the approval"
+                        " arguments and refused it"
+                    ),
+                    tier=decision.tier,
+                )
+            record_request(
+                dsn=self._dsn, call=call, tier=decision.tier, rule_id=decision.rule_id
+            )
+
         return PolicyOutcome(
             outcome=decision.outcome,
             rule_id=decision.rule_id,
