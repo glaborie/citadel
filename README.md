@@ -4,7 +4,7 @@
 
 Citadel is a clean-slate Python + Docker Compose stack that runs a small fleet of specialised agents (Docker, GitHub, Researcher) against a real homelab. It treats identity, tenancy, authorisation, sandboxing, DLP, audit and evaluation as first-class runtime properties rather than middleware added at the end. It is a portfolio piece aimed at senior AI-engineering roles and is deliberately usable outside the demo.
 
-**Status: v0.1 in progress — 7 of 10 implementation steps complete and running on a live host.** The identity, policy, orchestration, sandbox, write-path and DLP controls are implemented and verified end to end; the approval console UI, tracing into MLflow and the evaluation harness are next. The model gateway is not yet wired into the runtime. See `TODO.md` for open work and `docs/implementation-notes/v0.1-verification.md` for what was executed, on which host, and what it printed.
+**Status: v0.1 in progress — 7 of 10 implementation steps complete and running on a live host.** The identity, policy, orchestration, sandbox, write-path and DLP controls are implemented and verified end to end; the offline evaluation harness is built and runs in CI. The approval console UI and MLflow tracing are next, and the model gateway is not yet wired into the runtime. See `TODO.md` for open work and `docs/implementation-notes/v0.1-verification.md` for what was executed, on which host, and what it printed.
 
 ## What demonstrates what
 
@@ -24,14 +24,14 @@ The table is the architecture; the **Status** column says which rows exist as co
 | 10 | MCP support | Adapter seam only; consume external tools in a later milestone | seam only |
 | 11 | Permission-aware RAG | ACL-filtered Qdrant hybrid retrieval → rerank → structured citations | v0.2 |
 | 12 | Code mode | Deferred; only inside the sandbox, never in the worker | deferred |
-| 13 | Trajectory evaluation | MLflow 3.x offline + online grading of full traces | schema and design only |
+| 13 | Trajectory evaluation | MLflow 3.x offline + online grading of full traces | deterministic offline harness built; live recording, MLflow and judge rubrics pending |
 | 14 | A2A | Adapter seam only; ecosystem judged too thin to build against | seam only |
 | 15 | Semantic routing | Deterministic → embedding → complexity routing in v0.4 | v0.4 |
 | 16 | Scoped caching | Exact then semantic, partitioned by tenant + entitlement + model version | v0.3 |
 
 ## What runs today
 
-`make up` starts 17 services, unwrapping secrets through SOPS first so no plaintext copy is written to disk. All health-checked services report healthy; `./scripts/clean-clone-check.sh` installs and passes 208 tests (18 live-network tests skipped) from a fresh clone with no hidden files.
+`make up` starts 17 services, unwrapping secrets through SOPS first so no plaintext copy is written to disk. All health-checked services report healthy; `./scripts/clean-clone-check.sh` installs and passes 223 tests (18 live-network tests skipped) from a fresh clone with no hidden files.
 
 | Control | Evidence |
 |---|---|
@@ -80,7 +80,7 @@ flowchart LR
 
 ## Milestones
 
-- **v0.1** — one full turn: auth → tenant → policy → guarded read → HITL-gated write → audit + trace. *In progress: steps 1–7 of 10 done.*
+- **v0.1** — one full turn: auth → tenant → policy → guarded read → HITL-gated write → audit + trace. *In progress: steps 1–7 of 10 done, offline eval harness in place.*
 - **v0.2** — permission-aware RAG, Researcher, SOPS+age secrets.
 - **v0.3** — full evaluation suite, online grading, tenant-scoped cache.
 - **v0.4** — MCP consume adapter, A2A seam, code mode, semantic routing.
@@ -108,9 +108,11 @@ Dockerfile                    # one file, three targets: app / operator / sandbo
 Makefile                      # `make up` unwraps secrets through SOPS first
 migrations/                   # RLS, tool ledger, audit chain, approval tokens
 policy/                       # OpenFGA model + compiled JSON
+evals/golden/                 # committed trajectories + expected outcomes
 squid/github-egress.conf      # the sandbox's only egress allowlist
 src/citadel/
   api/                        # runs, approvals, policy endpoints
+  evals/                      # trajectory schema, deterministic graders, CLI
   identity/                   # Keycloak verification, run tokens
   policy/                     # catalog, OpenFGA checker, authorize()
   tools/                      # allowlist, argv builder, sandbox, operator
@@ -118,7 +120,7 @@ src/citadel/
   dlp.py                      # fail-closed DLP (Presidio + hard rules)
   audit.py                    # hash-chained ledger
   worker.py                   # role-scoped Temporal workers
-tests/                        # 208 hermetic tests + opt-in live suites
+tests/                        # 223 hermetic tests + opt-in live suites
 ```
 
 ## Verification status

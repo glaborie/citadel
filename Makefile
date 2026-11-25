@@ -30,3 +30,15 @@ migrate:
 		echo "applying $$f"; \
 		docker compose exec -T postgres psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -f "/$$f" || exit 1; \
 	done
+
+.PHONY: eval
+
+# Deterministic grading of the committed trajectory fixtures.
+eval:
+	uv run python -m citadel.evals
+
+# Red-team pack: manifest lint always, case execution once fixtures exist.
+# Uses the project venv explicitly so it does not depend on an activated shell.
+.PHONY: redteam
+redteam:
+	.venv/bin/python -m pytest -m redteam -v

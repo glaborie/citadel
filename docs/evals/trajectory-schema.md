@@ -43,6 +43,29 @@ Citadel grades **agent trajectories**, not just final text. The unit of evaluati
 
 Fixtures live in the repository with synthetic secrets only. Dataset version, prompt-pack version, model alias and policy version are all pinned per result.
 
+## Offline harness
+
+`src/citadel/evals/` grades committed trajectories in `evals/golden/golden.json`:
+
+```
+uv run python -m citadel.evals
+```
+
+The run is fail-closed: an unknown event type, a missing required field, two run ids, a foreign tenant or an unknown expectation key is a dataset error, not a skipped check.
+
+Expectation keys beyond the example above:
+
+| Key | Asserts |
+|---|---|
+| `required_policy_rules` | tool → rule id on an allowing policy decision |
+| `required_dlp` | a DLP event with matching tool, action and categories |
+| `recovery` | a recovery event with the expected `failed_step` and `strategy` |
+| `expected_outcome` | `run.end.outcome` |
+
+`approval.decision.decision` is `approved` or `denied`; a `tool` field ties the decision to the call it authorises.
+
+Still missing: a recorder from live runs, OTel export to MLflow and judge-scored rubrics. This harness is deterministic only.
+
 ## Graders
 
 **Deterministic (hard assertions)** — tool selection equals allowed set; forbidden tool never called; argument values match expected canonical form; required sequence order; policy decision and rule ID correct; DLP category/action correct; approval present before T1 execution; idempotency key stable across retries; recovery strategy correct; citations present and resolvable; no cross-tenant filter set.
