@@ -603,8 +603,7 @@ def exec_egress_allowlist(case_: Case, _: Path) -> Outcome:
     allows_before_deny = all(rules.index(rule) < deny_index for rule in allows)
     github_acl = any("dstdomain api.github.com" in r for r in rules)
     wildcard = any(
-        r.startswith("acl all ") or "0.0.0.0/0" in r or "*" in r.split("acl", 1)[-1]
-        for r in rules
+        r.startswith("acl all ") or "0.0.0.0/0" in r or "*" in r.split("acl", 1)[-1] for r in rules
     )
     allow_is_scoped = all("CONNECT" in r and "github" in r for r in allows)
     ok = (
@@ -632,10 +631,10 @@ def _last_index(items: list[str], value: str) -> int:
 def exec_approval_preview(case_: Case, _: Path) -> Outcome:
     """RT-HITL-05: a secret in the arguments must not reach the console.
 
-    Known gap (TODO.md): the approval route mints the token and audits before
-    any DLP check, so the console is handed the values a human is asked to
-    approve. The test therefore fails until the guard moves in front of the
-    mint — which is the point of keeping it.
+    The approval route checks the arguments before it mints the token and
+    audits the decision, so a secret is refused rather than rendered. The
+    detector is stubbed because the hard rule for credentials does not need it;
+    the test would otherwise depend on Presidio being up.
     """
     from unittest import mock
 
@@ -679,6 +678,7 @@ def exec_approval_preview(case_: Case, _: Path) -> Outcome:
         mock.patch.object(api_module, "tenant_connection", db.connect),
         mock.patch.object(api_module, "AuditLedger", _NoopLedger),
         mock.patch("citadel.api.app.asyncio.run", lambda coro: coro.close()),
+        mock.patch.object(dlp, "urlopen", detector([])),
     ):
         response = TestClient(app).post(
             "/approvals", json=payload, headers={"Authorization": f"Bearer {token}"}

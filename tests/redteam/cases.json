@@ -303,15 +303,14 @@
       "surface": "approval_ui",
       "fixture": "fixtures/approval/secret_in_args.json",
       "expect": {
-        "verdict": "redacted",
-        "evidence": "dlp.event surface=approval_preview",
+        "verdict": "blocked",
+        "evidence": "403 before the token is minted; no approval.decision event",
         "side_effects": "none"
       },
       "controls": [
         "dlp_at_approval_request_time"
       ],
-      "milestone": "v0.1",
-      "known_gap": "TODO.md: T1 arguments reach the console before DLP sees them"
+      "milestone": "v0.1"
     },
     {
       "id": "RT-DLP-01",
