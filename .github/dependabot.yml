@@ -19,6 +19,9 @@ updates:
     # the one an attacker controls, and security updates bypass the cooldown.
     cooldown: { default-days: 7 }
     groups:
+      sbom:
+        patterns:
+          - "anchore/sbom-action*"
       codeql:
         patterns:
           - "github/codeql-action/*"
