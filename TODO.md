@@ -2,12 +2,25 @@
 
 Open work. Done items get deleted, not ticked.
 
-- [ ] Step 7: DLP (Presidio + custom CH/EU recognizers). Unblocks `read_logs`,
-      `gh.pr.diff`, `docker.inspect` and `docker.compose.config` — all four are
-      refused by the sandbox today because their output can carry secrets.
-      Add deterministic hard rules too (known token prefixes, private keys)
-      that override the detector score, with the detector's own verdict kept in
-      the audit record so the override is reviewable.
+- [ ] `read_logs` cannot execute. DLP is no longer the blocker, but the tool maps
+      to `docker compose logs` and the sandbox has neither the compose plugin nor
+      a compose project file: `docker: unknown command: docker compose`, exit 1.
+      Fix by mapping it to `docker logs <container>` (the operator already
+      derives `citadel-<service>-1`) or by giving the sandbox a project file.
+
+- [ ] Names are not redacted. Presidio scores `docker` at 0.85, the same as
+      `Alice Smith`, so `PERSON` was dropped from `PII_ENTITIES` in step 7.
+      Decide between accepting the gap or adding a recognizer that separates
+      names from technical nouns.
+
+- [ ] T1 arguments reach the approval UI before DLP sees them. The operator
+      blocks execution, but the console renders the values a human is asked to
+      approve, which breaks "no plaintext secrets in the approval UI". Needs a
+      DLP check at approval-request time in the specialist.
+
+- [ ] Register `docker.inspect`, `docker.compose.config` and `gh.pr.diff` in the
+      tool catalog. Their output now passes DLP, but registering a tool means
+      extending the OpenFGA model and bootstrap, which is a step 4 change.
 
 - [ ] ADR-022 agent approvers. Still `Proposed` and unimplemented: a permitted
       agent cannot approve a run, so every T1 write waits for a human.
@@ -20,19 +33,3 @@ Open work. Done items get deleted, not ticked.
       per call and every result becomes an event-history payload; several calls
       in one run approach the 256 KB warning. Cap or offload before diffs and
       logs flow through.
-
-## Not adopted from the Temporal AI cookbook
-
-Reviewed 4 of 18 recipes: human-in-the-loop, guardrails-hard-rules, claim
-check, agentic loop with tool calling.
-
-- Approval `request_id` matching — the specialist child workflow is already one
-  per (run, tool), and the signed token, not the signal, is the real control.
-- Dynamic activities per tool — `execute_tool` already dispatches on the tool
-  name in the payload.
-- Claim check via an S3 `PayloadCodec` — no S3 in the stack; the cap/offload
-  item above covers the same risk for less.
-- ADK / Vercel / OpenAI-Agents multi-agent recipes — AGENTS.md and ADR-001 rule
-  out those agent abstractions.
-- The approval wait itself needed nothing: `wait_condition(timeout=...)` with
-  auto-deny on expiry is already what `SpecialistWorkflow` does.

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "comment": "Pre-approved CLI commands. Anything not matched is denied. Executed as an argv list with shell=False; no shell, pipes or redirection. content_risk marks commands whose OUTPUT can disclose secrets: 'definitive' means by design (env dumps, interpolated config), 'possible' means it may appear in normal content. The allowlist constrains actions, not content; 'definitive' commands must not be registered in the tool catalog until the DLP wrapper redacts their output.",
+  "comment": "Pre-approved CLI commands. Anything not matched is denied. Executed as an argv list with shell=False; no shell, pipes or redirection. content_risk marks commands whose OUTPUT can disclose secrets: 'definitive' means by design (env dumps, interpolated config), 'possible' means it may appear in normal content. The allowlist constrains actions, not content; every T0 output passes DLP before it is served, and 'definitive' commands are still refused while they are absent from the tool catalog.",
   "commands": [
     {
       "id": "docker.compose.ps",

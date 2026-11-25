@@ -9,6 +9,7 @@ The worst it can do is replay an approval, which the jti table prevents.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from typing import Any
@@ -16,7 +17,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict
 
-from citadel import __version__
+from citadel import __version__, dlp
 from citadel.approvals import verify_approval_token
 from citadel.db import tenant_connection
 from citadel.identity import IdentityError
@@ -26,6 +27,7 @@ from citadel.tools import runner as executor
 from citadel.tools.allowlist import AllowedCommand
 
 WRITABLE_TIERS = {"T1"}
+DLP_URL = os.environ.get("CITADEL_DLP_URL", "http://presidio:3000")
 
 app = FastAPI(title="Citadel Operator", version=__version__)
 
@@ -73,6 +75,16 @@ def healthz() -> dict[str, str]:
     return {"status": "ok", "version": __version__}
 
 
+def _guard(text: str, *, surface: str) -> tuple[str, dict[str, Any]]:
+    """DLP for one surface. Refuses rather than running or returning unchecked text."""
+    try:
+        return dlp.gate(text, surface=surface, analyzer_url=DLP_URL)
+    except dlp.DlpBlocked as exc:
+        raise HTTPException(
+            status_code=exc.status, detail={"reason": exc.reason, "dlp": [exc.report]}
+        ) from exc
+
+
 @app.post("/execute")
 def execute(request: ExecuteRequest) -> dict[str, Any]:
     public_key = public_key_from_env(os.environ["CITADEL_RUN_TOKEN_PUBLIC_KEY"])
@@ -98,6 +110,14 @@ def execute(request: ExecuteRequest) -> dict[str, Any]:
     if command.tier not in WRITABLE_TIERS:
         raise HTTPException(status_code=403, detail=f"{command.id} is not a T1 command")
 
+    # Checked before anything runs: a credential in an argument must never
+    # reach a command, and rewriting an argument would run something other than
+    # what the human approved.
+    reports: list[dict[str, Any]] = []
+    arguments = json.dumps(request.arguments, ensure_ascii=False)
+    _, report = _guard(arguments, surface="input")
+    reports.append(report)
+
     try:
         completed = executor.run(argv)
     except FileNotFoundError as exc:
@@ -105,11 +125,16 @@ def execute(request: ExecuteRequest) -> dict[str, Any]:
     except subprocess.TimeoutExpired as exc:
         raise HTTPException(status_code=504, detail="command timed out") from exc
 
+    stdout, report = _guard(completed.stdout[:4000], surface="output")
+    reports.append(report)
+    stderr, report = _guard(completed.stderr[:4000], surface="output")
+    reports.append(report)
     return {
         "allowlist_id": command.id,
         "argv": argv,
         "approver": claims.approver,
         "exit_code": completed.returncode,
-        "stdout": completed.stdout[:4000],
-        "stderr": completed.stderr[:4000],
+        "stdout": stdout,
+        "stderr": stderr,
+        "dlp": reports,
     }

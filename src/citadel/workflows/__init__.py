@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from citadel.audit import AuditLedger
 from citadel.policy import RelationChecker, RunStore
 from citadel.workflows.activities import ToolActivities
 from citadel.workflows.orchestrator import RunWorkflow
@@ -36,6 +37,7 @@ def activities_for(
         dsn=dsn,
         runner_url=runner_url,
         operator_url=operator_url,
+        audit=AuditLedger(dsn),
     )
     return [impl.authorize_tool, impl.execute_tool]
 

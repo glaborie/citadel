@@ -360,16 +360,20 @@ services:
       DOCKER_HOST: unix:///var/run/docker.sock
       # The write token is injected here and nowhere else; gh reads GH_TOKEN.
       GH_TOKEN: ${GH_WRITE_TOKEN:-unset}
+      # DLP is the only reason this service is allowed to return command text.
+      CITADEL_DLP_URL: http://presidio:3000
       # gh reaches GitHub only through the domain-allowlisted proxy. Loopback
       # and the Docker proxy must bypass it or the healthcheck breaks.
       HTTPS_PROXY: http://github-egress:3128
       HTTP_PROXY: http://github-egress:3128
-      NO_PROXY: localhost,127.0.0.1,docker-socket-proxy
-      no_proxy: localhost,127.0.0.1,docker-socket-proxy
+      NO_PROXY: localhost,127.0.0.1,docker-socket-proxy,presidio
+      no_proxy: localhost,127.0.0.1,docker-socket-proxy,presidio
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
+        condition: service_healthy
+      presidio:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8030/healthz', timeout=3)"]
@@ -454,15 +458,20 @@ services:
     mem_limit: 512m
     environment:
       DOCKER_HOST: tcp://docker-socket-proxy:2375
+      # Output is only served after this service has redacted it.
+      CITADEL_DLP_URL: http://presidio:3000
       # All sandbox egress goes through the domain-allowlisted proxy.
       HTTPS_PROXY: http://github-egress:3128
       HTTP_PROXY: http://github-egress:3128
       # Loopback and in-stack calls must never traverse the egress proxy.
-      NO_PROXY: localhost,127.0.0.1,docker-socket-proxy
-      no_proxy: localhost,127.0.0.1,docker-socket-proxy
+      NO_PROXY: localhost,127.0.0.1,docker-socket-proxy,presidio
+      no_proxy: localhost,127.0.0.1,docker-socket-proxy,presidio
       # gh reads GH_TOKEN; the secret is named for what it is, so the
       # write token can never be passed here by accident.
       GH_TOKEN: ${GH_READ_TOKEN:-unset}
+    depends_on:
+      presidio:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8020/healthz', timeout=3)"]
       interval: 15s

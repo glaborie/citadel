@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import urllib.error
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
+from citadel import dlp
 from citadel.tools import runner
+
+LOGS = {"agent": "docker", "tool": "read_logs", "arguments": {"service": "checkout-api"}}
 
 
 class Done:
@@ -18,12 +22,12 @@ class Done:
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    captured: dict[str, Any] = {}
+def client(monkeypatch: pytest.MonkeyPatch, analyzer: list[dict[str, Any]]) -> TestClient:
+    captured: dict[str, Any] = {"stdout": "ok", "stderr": ""}
 
     def fake_run(argv: list[str]) -> Done:
         captured["argv"] = argv
-        return Done()
+        return Done(stdout=str(captured["stdout"]), stderr=str(captured["stderr"]))
 
     monkeypatch.setattr(runner, "run", fake_run)
     test_client = TestClient(runner.app)
@@ -82,12 +86,71 @@ def test_sandbox_refuses_t1_whatever_the_caller_asks(
     assert "use the operator service" in response.json()["detail"]
 
 
-@pytest.mark.parametrize("tool", ["read_logs", "get_pr_status"])
-def test_risky_output_is_refused_until_dlp_exists(client: TestClient, tool: str) -> None:
-    """definitive and possible risk are both blocked here for now."""
-    args = {"service": "checkout-api"} if tool == "read_logs" else {"repo": "acme/infra"}
-    response = client.post("/execute", json={"agent": "docker", "tool": tool, "arguments": args})
+def test_output_passes_through_dlp_and_is_reported(client: TestClient) -> None:
+    """`read_logs` output is served now, and the ledger can see DLP ran."""
+    response = client.post("/execute", json=LOGS)
+
+    assert response.status_code == 200
+    reports = response.json()["dlp"]
+    assert [report["surface"] for report in reports] == ["input", "output", "output"]
+    assert all(report["action"] == "pass" for report in reports)
+
+
+def test_pii_in_output_is_redacted_before_it_is_served(
+    client: TestClient, analyzer: dict[str, list[dict[str, Any]]]
+) -> None:
+    analyzer["a@example.ch"] = [
+        {"entity_type": "EMAIL_ADDRESS", "start": 0, "end": 13, "score": 1.0}
+    ]
+    client.captured["stdout"] = "a@example.ch"
+
+    body = client.post("/execute", json=LOGS).json()
+
+    assert body["stdout"] == "<EMAIL_ADDRESS>"
+    assert body["dlp"][1]["categories"] == ["EMAIL_ADDRESS"]
+
+
+def test_a_credential_in_output_blocks_the_call(client: TestClient) -> None:
+    client.captured["stdout"] = "boom ghp_" + "a" * 36
+
+    response = client.post("/execute", json=LOGS)
+
     assert response.status_code == 403
+    detail = response.json()["detail"]
+    assert detail["reason"] == "dlp_blocked"
+    assert detail["dlp"][0]["categories"] == ["GITHUB_TOKEN"]
+    assert "ghp_" not in response.text
+
+
+def test_a_credential_in_an_argument_never_reaches_the_command(
+    client: TestClient,
+) -> None:
+    """Red team: smuggle a token through a tool argument instead of the output."""
+    response = client.post(
+        "/execute",
+        json={**LOGS, "arguments": {"service": "ghp_" + "a" * 36}},
+    )
+
+    assert response.status_code == 403
+    assert "argv" not in client.captured, "the command must not have run"
+    assert "ghp_" not in response.text
+
+
+def test_detector_outage_blocks_the_call(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fail closed: an unavailable detector is a refusal, not a bypass."""
+
+    def boom(*_: Any, **__: Any) -> Any:
+        raise urllib.error.URLError("name resolution")
+
+    monkeypatch.setattr(dlp, "urlopen", boom)
+
+    response = client.post("/execute", json=LOGS)
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["reason"] == "dlp_unavailable"
+    assert "argv" not in client.captured
 
 
 def test_malformed_arguments_are_refused(client: TestClient) -> None:

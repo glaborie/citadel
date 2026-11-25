@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import urllib.error
 from typing import Any
 
 import pytest
@@ -10,6 +11,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from fastapi.testclient import TestClient
 
+from citadel import dlp
 from citadel.approvals import mint_approval_token
 from citadel.operator import app as operator_module
 from citadel.tools import runner
@@ -38,7 +40,11 @@ def key() -> Ed25519PrivateKey:
 
 
 @pytest.fixture
-def client(key: Ed25519PrivateKey, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def client(
+    key: Ed25519PrivateKey,
+    monkeypatch: pytest.MonkeyPatch,
+    analyzer: dict[str, list[dict[str, Any]]],
+) -> TestClient:
     public = base64.b64encode(
         key.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
     ).decode()
@@ -147,3 +153,31 @@ def test_missing_approval_is_refused(client: TestClient, key: Ed25519PrivateKey)
     payload = body(key, "open_remediation_pr", PR_ARGS)
     payload["approval_token"] = ""
     assert client.post("/execute", json=payload).status_code == 403
+
+
+def test_a_credential_in_approved_input_never_reaches_the_command(
+    client: TestClient, key: Ed25519PrivateKey
+) -> None:
+    """Red team: approval for text that happens to carry a token."""
+    arguments = {**PR_ARGS, "body": "leaked ghp_" + "a" * 36}
+    response = client.post("/execute", json=body(key, "open_remediation_pr", arguments))
+
+    assert response.status_code == 403
+    assert "argv" not in client.captured, "gh must not have run"
+    assert response.json()["detail"]["reason"] == "dlp_blocked"
+    assert "ghp_" not in response.text
+
+
+def test_detector_outage_refuses_the_operator_too(
+    client: TestClient, key: Ed25519PrivateKey, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(*_: Any, **__: Any) -> Any:
+        raise urllib.error.URLError("name resolution")
+
+    monkeypatch.setattr(dlp, "urlopen", boom)
+    response = client.post(
+        "/execute", json=body(key, "restart_service", {"service": "checkout-api"})
+    )
+
+    assert response.status_code == 503
+    assert "argv" not in client.captured

@@ -8,10 +8,12 @@ connection; no database is needed.
 
 from __future__ import annotations
 
+import io
 import json
 import urllib.error
 from collections.abc import Iterator
 from contextlib import contextmanager
+from email.message import Message
 from typing import Any, cast
 
 import pytest
@@ -76,7 +78,17 @@ def call(tool: str) -> ToolCall:
     )
 
 
-def build(monkeypatch: pytest.MonkeyPatch, db: FakeDB, invoke: Any) -> ToolActivities:
+class FakeAudit:
+    def __init__(self) -> None:
+        self.events: list[dict[str, Any]] = []
+
+    def append(self, **kwargs: Any) -> None:
+        self.events.append(kwargs)
+
+
+def build(
+    monkeypatch: pytest.MonkeyPatch, db: FakeDB, invoke: Any, audit: Any = None
+) -> ToolActivities:
     monkeypatch.setattr(activities, "tenant_connection", db.connect)
     impl = ToolActivities(
         checker=cast(Any, None),
@@ -84,6 +96,7 @@ def build(monkeypatch: pytest.MonkeyPatch, db: FakeDB, invoke: Any) -> ToolActiv
         dsn="unused",
         runner_url="http://runner",
         operator_url="http://operator",
+        audit=cast(Any, audit or FakeAudit()),
     )
     monkeypatch.setattr(impl, "_invoke", invoke)
     return impl
@@ -193,3 +206,75 @@ def test_a_refusal_is_terminal_and_recorded(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert result.status == "failed"
     assert db.rows[idempotency_key(item)]["status"] == "failed"
+
+
+class Reply:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self._body = json.dumps(payload).encode()
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> Reply:
+        return self
+
+    def __exit__(self, *_: Any) -> None:
+        return None
+
+
+def test_dlp_reports_on_a_successful_call_reach_the_ledger(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pass has to be recorded too: it is the proof the control ran."""
+    ledger = FakeAudit()
+    impl = build(monkeypatch, FakeDB(), recorder([]), ledger)
+    report = {"surface": "input", "action": "pass", "categories": [], "findings": []}
+
+    def urlopen(_request: Any, timeout: Any = None) -> Reply:
+        return Reply({"allowlist_id": "docker.ps", "dlp": [report]})
+
+    monkeypatch.setattr(activities, "urlopen", urlopen)
+    result = impl._post("http://runner/execute", b"{}", call("read_logs"))
+
+    assert result.status == "executed"
+    assert [event["event_type"] for event in ledger.events] == ["dlp.event"]
+    assert ledger.events[0]["payload"]["surface"] == "input"
+    assert ledger.events[0]["payload"]["run_id"] == call("read_logs").run_id
+
+
+def test_a_dlp_block_is_audited_and_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+    ledger = FakeAudit()
+    impl = build(monkeypatch, FakeDB(), recorder([]), ledger)
+    report = {"surface": "input", "action": "block", "categories": ["GITHUB_TOKEN"]}
+    body = json.dumps({"detail": {"reason": "dlp_blocked", "dlp": [report]}}).encode()
+
+    def urlopen(request: Any, timeout: Any = None) -> Reply:
+        raise urllib.error.HTTPError(
+            request.full_url, 403, "Forbidden", Message(), io.BytesIO(body)
+        )
+
+    monkeypatch.setattr(activities, "urlopen", urlopen)
+    result = impl._post("http://runner/execute", b"{}", call("read_logs"))
+
+    assert (result.status, result.rule_id) == ("failed", "dlp.blocked")
+    assert ledger.events[0]["payload"]["categories"] == ["GITHUB_TOKEN"]
+    assert "GITHUB_TOKEN" not in result.detail, "the ledger holds the detail, not a result"
+
+
+def test_an_unavailable_detector_is_reported_as_such(monkeypatch: pytest.MonkeyPatch) -> None:
+    ledger = FakeAudit()
+    impl = build(monkeypatch, FakeDB(), recorder([]), ledger)
+    body = json.dumps(
+        {"detail": {"reason": "dlp_unavailable", "dlp": [{"surface": "input", "action": "block"}]}}
+    ).encode()
+
+    def urlopen(request: Any, timeout: Any = None) -> Reply:
+        raise urllib.error.HTTPError(
+            request.full_url, 503, "Unavailable", Message(), io.BytesIO(body)
+        )
+
+    monkeypatch.setattr(activities, "urlopen", urlopen)
+    result = impl._post("http://runner/execute", b"{}", call("read_logs"))
+
+    assert result.rule_id == "dlp.unavailable"
+    assert len(ledger.events) == 1

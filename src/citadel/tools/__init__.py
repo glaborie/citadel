@@ -6,7 +6,6 @@ from citadel.tools.allowlist import (
     audit_view,
     load_allowlist,
     match,
-    requires_redaction,
 )
 from citadel.tools.invoke import build_argv
 
@@ -17,5 +16,4 @@ __all__ = [
     "build_argv",
     "load_allowlist",
     "match",
-    "requires_redaction",
 ]

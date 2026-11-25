@@ -124,11 +124,6 @@ def match(tokens: Sequence[str], *, agent: str) -> AllowedCommand:
     raise CommandDenied(f"command not allowlisted for {agent}: {' '.join(tokens[:3])}")
 
 
-def requires_redaction(command: AllowedCommand) -> bool:
-    """True when the command's output is not safe to show without DLP."""
-    return command.content_risk is not None
-
-
 def audit_view(command: AllowedCommand, tokens: Sequence[str]) -> dict[str, Any]:
     return {
         "allowlist_id": command.id,

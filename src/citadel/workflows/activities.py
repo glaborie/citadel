@@ -11,11 +11,12 @@ from __future__ import annotations
 import hashlib
 import json
 import urllib.error
-import urllib.request
 from typing import Any
+from urllib.request import Request, urlopen
 
 from temporalio import activity
 
+from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
 from citadel.policy import AuthorizationRequest, RelationChecker, RunStore, authorize
 from citadel.policy.catalog import load_catalog
@@ -42,12 +43,14 @@ class ToolActivities:
         dsn: str,
         runner_url: str,
         operator_url: str,
+        audit: AuditLedger,
     ) -> None:
         self._checker = checker
         self._run_store = run_store
         self._dsn = dsn
         self._runner_url = runner_url
         self._operator_url = operator_url
+        self._audit = audit
 
     @activity.defn
     def authorize_tool(self, call: ToolCall) -> PolicyOutcome:
@@ -184,20 +187,35 @@ class ToolActivities:
         return self._post(f"{self._runner_url}/execute", body, call)
 
     def _post(self, url: str, body: bytes, call: ToolCall) -> ToolResult:
-        request = urllib.request.Request(
+        request = Request(
             url,
             data=body,
             headers={"Content-Type": "application/json"},
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:
+            with urlopen(request, timeout=60) as response:
                 payload: dict[str, Any] = json.loads(response.read())
         except urllib.error.HTTPError as exc:
             # A tool service that answered is deterministic: retrying the same
             # request would get the same answer, and for a write it could repeat
             # a side effect. So this is a result, not an exception.
-            detail = exc.read().decode("utf-8", errors="replace")[:300]
+            raw = exc.read().decode("utf-8", errors="replace")
+            reports = _dlp_reports(_json_or_none(raw))
+            if reports is not None:
+                self._audit_dlp(call, reports)
+                unavailable = exc.code == 503
+                return ToolResult(
+                    status="failed",
+                    tool=call.tool,
+                    rule_id="dlp.unavailable" if unavailable else "dlp.blocked",
+                    detail=(
+                        "the detector could not check this call, so it was refused"
+                        if unavailable
+                        else "DLP found sensitive content in this call and refused it"
+                    ),
+                )
+            detail = raw[:300]
             rule = "tool.refused" if exc.code in (403, 409) else "tool.error"
             return ToolResult(
                 status="failed",
@@ -208,6 +226,9 @@ class ToolActivities:
         # Transport failures deliberately propagate: Temporal's retry policy is
         # the only retry mechanism, and swallowing the error here would make it
         # decorative.
+        reports = _dlp_reports(payload)
+        if reports is not None:
+            self._audit_dlp(call, reports)
         return ToolResult(
             status="executed",
             tool=call.tool,
@@ -215,3 +236,34 @@ class ToolActivities:
             detail=f"{call.tool} executed as {payload.get('allowlist_id')}",
             output=payload,
         )
+
+    def _audit_dlp(self, call: ToolCall, reports: list[Any]) -> None:
+        # One event per surface, passes included: the ledger has to show the
+        # control ran, not only that it found something.
+        for report in reports:
+            if not isinstance(report, dict):
+                continue
+            self._audit.append(
+                tenant_id=call.tenant_id,
+                event_type="dlp.event",
+                actor_type="agent",
+                actor_id=call.agent_id,
+                payload={"run_id": call.run_id, "tool": call.tool, **report},
+            )
+
+
+def _json_or_none(text: str) -> Any:
+    try:
+        return json.loads(text)
+    except ValueError:
+        return None
+
+
+def _dlp_reports(payload: Any) -> list[Any] | None:
+    """DLP reports at the top level on success, under `detail` on a refusal."""
+    if not isinstance(payload, dict):
+        return None
+    reports = payload.get("dlp")
+    if reports is None and isinstance(payload.get("detail"), dict):
+        reports = payload["detail"].get("dlp")
+    return reports if isinstance(reports, list) else None

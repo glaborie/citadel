@@ -8,6 +8,7 @@ still a caller.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from typing import Any
@@ -15,11 +16,12 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict
 
-from citadel import __version__
-from citadel.tools import CommandDenied, build_argv, requires_redaction
+from citadel import __version__, dlp
+from citadel.tools import CommandDenied, build_argv
 
 COMMAND_TIMEOUT_SECONDS = 30
 MAX_OUTPUT_BYTES = 64_000
+DLP_URL = os.environ.get("CITADEL_DLP_URL", "http://presidio:3000")
 
 # Nothing from the ambient environment reaches the child process. The GitHub
 # token is only exposed to `gh`, so `docker ps` cannot read it.
@@ -43,6 +45,9 @@ class ExecuteResponse(BaseModel):
     stdout: str
     stderr: str
     truncated: bool
+    # One report per DLP surface, including passes: the audit ledger has to show
+    # that the control ran, not only that it found something.
+    dlp: list[dict[str, Any]]
 
 
 def _child_env(binary: str = "") -> dict[str, str]:
@@ -78,6 +83,16 @@ def healthz() -> dict[str, str]:
     return {"status": "ok", "version": __version__}
 
 
+def _guard(text: str, *, surface: str) -> tuple[str, dict[str, Any]]:
+    """DLP for one surface. Refuses rather than serving unchecked text."""
+    try:
+        return dlp.gate(text, surface=surface, analyzer_url=DLP_URL)
+    except dlp.DlpBlocked as exc:
+        raise HTTPException(
+            status_code=exc.status, detail={"reason": exc.reason, "dlp": [exc.report]}
+        ) from exc
+
+
 @app.post("/execute")
 def execute(request: ExecuteRequest) -> ExecuteResponse:
     try:
@@ -92,11 +107,11 @@ def execute(request: ExecuteRequest) -> ExecuteResponse:
         raise HTTPException(
             status_code=403, detail=f"{command.id} is {command.tier}; use the operator service"
         )
-    if requires_redaction(command):
-        # Step 7 adds DLP. Until then risky output never leaves the sandbox.
-        raise HTTPException(
-            status_code=403, detail=f"{command.id} output requires redaction before it is served"
-        )
+
+    reports: list[dict[str, Any]] = []
+    arguments = json.dumps(request.arguments, ensure_ascii=False)
+    _, report = _guard(arguments, surface="input")
+    reports.append(report)
 
     try:
         completed = run(argv)
@@ -110,10 +125,15 @@ def execute(request: ExecuteRequest) -> ExecuteResponse:
 
     stdout, clipped_out = _clip(completed.stdout or "")
     stderr, clipped_err = _clip(completed.stderr or "")
+    stdout, report = _guard(stdout, surface="output")
+    reports.append(report)
+    stderr, report = _guard(stderr, surface="output")
+    reports.append(report)
     return ExecuteResponse(
         allowlist_id=command.id,
         exit_code=completed.returncode,
         stdout=stdout,
         stderr=stderr,
         truncated=clipped_out or clipped_err,
+        dlp=reports,
     )
