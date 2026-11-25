@@ -74,6 +74,7 @@ incident.
 | RT-DLP-03 | Secret in tool arguments | Blocked, not warned | dlp_on_tool_args, block_not_warn |
 | RT-DLP-04 | Detector unavailable | Request fails closed | fail_closed_dlp |
 | RT-DLP-05 | URL built from context used as an exfiltration channel | Refused at the proxy: one scoped CONNECT allow, then deny-all | egress_allowlist_squid, no_wildcard_destination |
+| RT-DLP-06 | Credential placed past the 64 KB output cap | Blocked: the whole stream is scanned before it is bounded; the digest of what was cut stays in the event | scan_before_bound, output_digest_kept |
 
 ### Durability
 

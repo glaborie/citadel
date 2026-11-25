@@ -26,9 +26,39 @@ from citadel.hashing import arguments_hash
 from citadel.policy import AuthorizationRequest, RelationChecker, RunStore, authorize
 from citadel.policy.catalog import load_catalog
 from citadel.telemetry import record_span
+from citadel.tools.bounds import DEFAULT_EVENT_LIMIT, bound
 from citadel.workflows.types import PolicyOutcome, RunEnd, ToolCall, ToolResult
 
 DLP_URL = os.environ.get("CITADEL_DLP_URL", "http://presidio:3000")
+# A tool result is part of the activity's return value, which Temporal
+# stores in event history: an uncapped 64 KB body becomes 64 KB of history
+# per call, and a few calls reach the 256 KB warning.
+EVENT_OUTPUT_LIMIT = int(os.environ.get("CITADEL_EVENT_OUTPUT_MAX_BYTES", DEFAULT_EVENT_LIMIT))
+
+
+def bounded_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Cap the streams that ride in the activity result, keeping their digests.
+
+    The digest of the whole stream stays behind, so the cap is visible in the
+    record instead of being implied by an absence of bytes.
+    """
+    capped = dict(payload)
+    digest_of: list[str] = []
+    original_bytes = 0
+    truncated = False
+    for stream in ("stdout", "stderr"):
+        text = capped.get(stream)
+        if not isinstance(text, str) or not text:
+            continue
+        bounded = bound(text, limit=EVENT_OUTPUT_LIMIT)
+        capped[stream] = bounded.text
+        digest_of.append(bounded.sha256)
+        original_bytes += bounded.original_bytes
+        truncated = truncated or bounded.truncated
+    capped["output_sha256"] = digest_of[0] if digest_of else ""
+    capped["original_bytes"] = original_bytes
+    capped["truncated"] = truncated or bool(payload.get("truncated", False))
+    return capped
 
 
 def idempotency_key(call: ToolCall) -> str:
@@ -215,6 +245,10 @@ class ToolActivities:
                 "rule_id": result.rule_id,
                 "detail": result.detail,
                 "replayed": result.replayed,
+                # Evidence that a cap was applied, and of what it hid.
+                "output_sha256": result.output_sha256,
+                "output_bytes": result.output_bytes,
+                "output_truncated": result.output_truncated,
             },
         )
         record_span(
@@ -337,12 +371,16 @@ class ToolActivities:
         reports = _dlp_reports(payload)
         if reports is not None:
             self._audit_dlp(call, reports)
+        capped = bounded_payload(payload)
         return ToolResult(
             status="executed",
             tool=call.tool,
             rule_id="tool.executed",
             detail=f"{call.tool} executed as {payload.get('allowlist_id')}",
-            output=payload,
+            output=capped,
+            output_sha256=str(capped.get("output_sha256", "")),
+            output_bytes=int(capped.get("original_bytes", 0)),
+            output_truncated=bool(capped.get("truncated", False)),
         )
 
     def _audit_dlp(self, call: ToolCall, reports: list[Any]) -> None:

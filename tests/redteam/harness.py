@@ -532,6 +532,50 @@ def exec_approval_replay(case_: Case, _: Path) -> Outcome:
     return Outcome(ok, f"{first.status_code}/{second.status_code} calls={len(stub.calls)}")
 
 
+def exec_output_cap(case_: Case, _: Path) -> Outcome:
+    """RT-DLP-06: the whole stream is scanned, so a secret past the cap is caught.
+
+    The earlier order clipped to 64 KB and then ran the detector over the prefix:
+    a token at byte 90 000 was dropped before it was ever looked at, and the run
+    was told its output had passed DLP. The detector is stubbed to return
+    nothing, so only the hard credential rule can catch this - which is the point,
+    since a credential is random characters that NER will always miss.
+    """
+    from types import SimpleNamespace
+    from unittest import mock
+
+    from fastapi.testclient import TestClient
+
+    from citadel.tools import runner
+    from tests.redteam import support
+
+    secret = "ghp_" + "A" * 36
+    stdout = f"{'x' * 90_000}\n token={secret}\n"
+
+    def fake_run(_argv: list[str]) -> SimpleNamespace:
+        return SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+
+    with (
+        mock.patch.object(dlp, "urlopen", support.DetectorStub([])),
+        mock.patch.object(runner, "run", fake_run),
+    ):
+        client = TestClient(runner.app)
+        response = client.post(
+            "/execute",
+            json={"agent": "docker", "tool": "read_logs", "arguments": {"service": "checkout-api"}},
+        )
+
+    refused = response.status_code == 403 and "dlp_blocked" in response.text
+    leaked = secret in response.text
+    ok = refused and not leaked
+    detail = (
+        f"403 dlp_blocked over {len(stdout)} bytes, secret absent from the body"
+        if ok
+        else f"{response.status_code}, refused={refused}, secret in body={leaked}"
+    )
+    return Outcome(ok, detail)
+
+
 def exec_secret_in_tool_args(case_: Case, _: Path) -> Outcome:
     """RT-DLP-03: a credential in approved arguments blocks before the operator runs.
 
@@ -974,6 +1018,7 @@ EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-DLP-03": exec_secret_in_tool_args,
     "RT-DLP-04": exec_dlp_unavailable,
     "RT-DLP-05": exec_egress_allowlist,
+    "RT-DLP-06": exec_output_cap,
     "RT-HITL-05": exec_approval_preview,
     "RT-EVAL-01": exec_eval_gate,
     "RT-INJ-01": exec_direct_override,
