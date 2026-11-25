@@ -49,7 +49,7 @@ A model that obeys a malicious instruction still cannot act:
 
 1. every requested tool goes through `authorize()` — the chokepoint, not a copy
    of it, so the four identity rules and the tier rules apply unchanged;
-2. `requires_approval` is a refusal here: no approval token is minted, nothing
+2. `requires_approval` is a refusal here: no approval reference is issued, nothing
    executes;
 3. tool output is gated on the `output` surface before it becomes context, so an
    instruction inside a log line or a PR body never reaches a second turn.

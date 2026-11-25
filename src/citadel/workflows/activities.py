@@ -194,14 +194,11 @@ class ToolActivities:
                         "the detector could not check the approval arguments,"
                         " so the call was refused"
                         if unavailable
-                        else "DLP found sensitive content in the approval"
-                        " arguments and refused it"
+                        else "DLP found sensitive content in the approval arguments and refused it"
                     ),
                     tier=decision.tier,
                 )
-            record_request(
-                dsn=self._dsn, call=call, tier=decision.tier, rule_id=decision.rule_id
-            )
+            record_request(dsn=self._dsn, call=call, tier=decision.tier, rule_id=decision.rule_id)
 
         return PolicyOutcome(
             outcome=decision.outcome,
@@ -353,12 +350,12 @@ class ToolActivities:
         return self._invoke_sandbox(call)
 
     def _invoke_operator(self, call: ToolCall) -> ToolResult:
-        if not call.approval_token:
+        if not call.approval_ref:
             return ToolResult(
                 status="denied",
                 tool=call.tool,
-                rule_id="approval.missing_token",
-                detail="T1 execution requires a signed approval token",
+                rule_id="approval.missing_ref",
+                detail="T1 execution requires an approved action reference",
             )
         body = json.dumps(
             {
@@ -366,7 +363,7 @@ class ToolActivities:
                 "run_id": call.run_id,
                 "tool": call.tool,
                 "arguments": call.arguments,
-                "approval_token": call.approval_token,
+                "approval_ref": call.approval_ref,
             }
         ).encode()
         return self._post(f"{self._operator_url}/execute", body, call)

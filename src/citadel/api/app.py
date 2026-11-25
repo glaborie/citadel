@@ -21,9 +21,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from citadel import __version__, dlp, telemetry, tool_outputs
 from citadel.approval_requests import close_request
-from citadel.approvals import mint_approval_token
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
+from citadel.hashing import arguments_hash
 from citadel.identity import IdentityError, KeycloakVerifier, Principal, mint_run_token
 from citadel.identity.run_token import private_key_from_env
 from citadel.policy import AuthorizationRequest, RelationChecker, authorize
@@ -205,9 +205,7 @@ def create_app(
                 "risk_tier": body.risk_tier,
                 # The task itself stays out of the ledger; the hash proves which
                 # text ran without storing it.
-                "task_sha256": hashlib.sha256(body.task.encode()).hexdigest()
-                if body.task
-                else "",
+                "task_sha256": hashlib.sha256(body.task.encode()).hexdigest() if body.task else "",
                 "task_chars": len(body.task),
             },
         )
@@ -368,17 +366,6 @@ def create_app(
                 status_code=exc.status, detail={"reason": exc.reason, "dlp": [exc.report]}
             ) from exc
 
-        token: str | None = None
-        if body.approved:
-            token = mint_approval_token(
-                tenant_id=principal.tenant_id,
-                run_id=body.run_id,
-                tool=body.tool,
-                arguments=body.arguments,
-                approver=principal.user_id,
-                private_key=_key(),
-            )
-
         ref = AuditLedger(_dsn()).append(
             tenant_id=principal.tenant_id,
             event_type="approval.decision",
@@ -392,6 +379,7 @@ def create_app(
                 "decision": "approved" if body.approved else "denied",
                 "reason": body.reason,
                 "ttl": APPROVAL_TTL,
+                "args_hash": arguments_hash(body.arguments),
                 "rule_id": "approval.approved" if body.approved else "approval.denied",
             },
         )
@@ -419,7 +407,7 @@ def create_app(
             approved=body.approved,
             approver=principal.user_id,
             reason=body.reason,
-            token=token,
+            approval_ref=ref.audit_id if body.approved else None,
         )
         # Audit is written before the workflow is resumed.
         asyncio.run(_signal_decision(child_workflow_id(body.run_id, body.tool), decision))

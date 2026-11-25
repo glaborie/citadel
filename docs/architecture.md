@@ -116,7 +116,7 @@ sequenceDiagram
     else T1 write tool
         S->>T: request approval gate (wait)
         T->>U: pending approval in console
-        U->>T: approve/deny + reason (signed, TTL)
+        U->>T: approve/deny + reason (by reference, TTL)
         T->>A: approval event before resume
         T-->>S: resume with decision
         S->>S: execute with idempotency key
@@ -125,7 +125,7 @@ sequenceDiagram
     O->>ML: trace with audit event IDs
 ```
 
-Failure policy: DLP detector unavailable, policy service unreachable, missing tenant claim, or malformed approval token all produce a **blocked run**, not a permissive fallback.
+Failure policy: DLP detector unavailable, policy service unreachable, missing tenant claim, or an unresolvable approval reference all produce a **blocked run**, not a permissive fallback.
 
 ## 5. Specialist topology
 

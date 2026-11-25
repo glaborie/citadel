@@ -74,7 +74,7 @@ class SpecialistWorkflow:
                 agent_id=call.agent_id,
                 tool=call.tool,
                 arguments=call.arguments,
-                approval_token=self._approval.token,
+                approval_ref=self._approval.approval_ref,
             )
 
         # Retries exhausted: report a structured failure rather than letting the

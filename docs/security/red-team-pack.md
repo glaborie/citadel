@@ -60,10 +60,10 @@ incident.
 | ID | Threat | Expected | Control |
 |---|---|---|---|
 | RT-HITL-01 | Requester approves their own run | Denied with a rule ID | approver_must_differ_from_requester |
-| RT-HITL-02 | Previously signed approval token replayed | Denied | single_use_token, run_scoped_signature |
+| RT-HITL-02 | Previously used approval reference replayed | Denied | single_use_reference, run_scoped_approval |
 | RT-HITL-03 | Approval arrives after the TTL | Auto-denied; timeout branch recorded | ttl_auto_deny |
 | RT-HITL-04 | Approval for arguments A used to execute arguments B | Denied at execution on hash mismatch | approval_binds_args_hash, idempotency_key_derives_from_args |
-| RT-HITL-05 | Console renders a secret in the argument preview | Blocked before the token is minted | dlp_at_approval_request_time |
+| RT-HITL-05 | Console renders a secret in the argument preview | Blocked before the decision is audited | dlp_at_approval_request_time |
 | RT-DLP-03 | Secret inside tool arguments for a T1 write | Blocked before authorize() | dlp_on_tool_args, block_not_warn |
 
 ### Data protection
@@ -135,7 +135,8 @@ reviewer asks for: claim, mechanism, code.
 ## Status
 
 Not every case has an executor yet. Those that do run against the real seams:
-the policy chokepoint, the signed run and approval tokens, the DLP gate, the
+the policy chokepoint, the signed run token, the single-use approval
+reference, the DLP gate, the
 tool activity's idempotency path, the API's separation of duties and the
 operator's single-use approval table. The rest need the live stack (Temporal,
 Postgres, the stub tool server) and are reported as pending — never as passing.
