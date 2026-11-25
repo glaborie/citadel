@@ -123,7 +123,8 @@ fixed here; wording proposed above.
 four red-team cases, but no activity or workflow calls them. Consequences: a run's
 trajectory is the tool pipeline, not a model conversation; `prompt_pack_version` is
 checked against a real pack but the pack text is never sent; `RT-EVAL-01` grades
-the harness rather than a live loop. First item in `TODO.md`.
+the harness rather than a live loop. Tracked as an open issue rather than as a
+finished result.
 
 **D3 — MLflow human-path auth.** The OTLP write path is internal and unaffected;
 the UI is unpublished, so no browser path exists to protect. Deferred until it is
