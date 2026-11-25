@@ -208,7 +208,7 @@ jobs:
       security-events: write   # to upload SARIF to the Security tab
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
