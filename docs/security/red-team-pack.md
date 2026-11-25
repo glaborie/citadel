@@ -76,6 +76,7 @@ incident.
 | RT-DLP-04 | Detector unavailable | Request fails closed | fail_closed_dlp |
 | RT-DLP-05 | URL built from context used as an exfiltration channel | Refused at the proxy: one scoped CONNECT allow, then deny-all | egress_allowlist_squid, no_wildcard_destination |
 | RT-DLP-06 | Credential placed past the 64 KB output cap | Blocked: the whole stream is scanned before it is bounded; the digest of what was cut stays in the event | scan_before_bound, output_digest_kept |
+| RT-DLP-07 | Detector answers in a shape the reader cannot parse (renamed field, string score, offset outside the text) | Blocked: an unreadable span is a refusal, not an empty finding list; an empty list still passes | fail_closed_dlp, unreadable_answer_is_a_refusal |
 
 ### Durability
 
@@ -180,7 +181,7 @@ The report is written by `tests/redteam/conftest.py` at session end, from what
 actually executed. A pending case is labelled pending in it, on purpose.
 
 The report is generated, never hand-written: a table of case, verdict, control,
-evidence event and elapsed time, plus a headline line in the form `<p> of 30
+evidence event and elapsed time, plus a headline line in the form `<p> of 31
 blocked or denied as specified · <f> failing · <k> known gaps · <m> pending ·
 <r> not run`. Only the generator writes those numbers. A pack that reports 100%
 on its first run is either trivial or lying, which is why `RT-DLP-02` still
