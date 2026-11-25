@@ -37,6 +37,23 @@ migrate:  ## Re-apply migrations/*.sql to an existing database
 		docker compose exec -T postgres psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -v ON_ERROR_STOP=1 -f "/$$f" || exit 1; \
 	done
 
+.PHONY: lint
+
+# Same command as the CI lint step.
+lint:  ## Lint with ruff
+	uv run ruff check .
+
+.PHONY: typecheck
+
+# Same command as the CI type step: mypy strict over src and tests.
+typecheck:  ## Type-check with mypy (strict)
+	uv run mypy
+
+.PHONY: check
+
+# The four gates CI runs, in the same order, so a local pass means a green run.
+check: lint typecheck test eval  ## Run every CI gate: lint, types, tests, eval
+
 .PHONY: test
 
 # The offline suite: live tests skip themselves unless CITADEL_LIVE_TESTS is set.
