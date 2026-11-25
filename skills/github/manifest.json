@@ -1,0 +1,10 @@
+{
+  "agent": "github",
+  "pack": "github-1.0.0",
+  "version": "1.0.0",
+  "files": {
+    "SKILL.md": "sha256:8e53d18ea64bc3318de23d999b649830f0c694efa9ebebf9cc46710c8bb6ce86",
+    "references/pr-triage.md": "sha256:972007e2fd861ab2c5e6ccb51296d8bfca3f3ab239935f26fc122e478d299381",
+    "references/remediation-pr.md": "sha256:aceab7e18d6b295f5394fac4329d9818a63e633eef3bc61da2fca4bca73f3671"
+  }
+}

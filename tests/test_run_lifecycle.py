@@ -83,6 +83,36 @@ def test_run_start_records_pinned_provenance(
     assert event["payload"]["run_id"] == response.json()["run_id"]
 
 
+def test_a_pack_version_the_deployment_does_not_have_is_rejected(
+    client: tuple[TestClient, FakeLedger], rsa_key: rsa.RSAPrivateKey
+) -> None:
+    http, ledger = client
+    token = user_token(rsa_key, tenant="lab-a")
+    body = _body()
+    body["prompt_pack_version"] = "docker-9.9.9"
+
+    response = http.post("/runs", json=body, headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 400
+    assert "docker-1.0.0" in response.json()["detail"]
+    assert ledger.events == []
+
+
+def test_an_agent_without_a_skill_pack_cannot_start_a_run(
+    client: tuple[TestClient, FakeLedger], rsa_key: rsa.RSAPrivateKey
+) -> None:
+    http, ledger = client
+    token = user_token(rsa_key, tenant="lab-a")
+    body = _body()
+    body["agent_id"] = "nobody"
+
+    response = http.post("/runs", json=body, headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 400
+    assert "no skill pack" in response.json()["detail"]
+    assert ledger.events == []
+
+
 def test_unpinned_provenance_is_rejected(
     client: tuple[TestClient, FakeLedger], rsa_key: rsa.RSAPrivateKey
 ) -> None:

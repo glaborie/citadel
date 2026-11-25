@@ -1,0 +1,10 @@
+{
+  "agent": "docker",
+  "pack": "docker-1.0.0",
+  "version": "1.0.0",
+  "files": {
+    "SKILL.md": "sha256:f184d9dc2ebecd56721a5353a143c3c3cc325a67cb16989c71d44be8f7f5769f",
+    "references/restart-playbook.md": "sha256:a8f0cddbc6f9759b4eb395dc2329393ca16d3dd3a9a9e205b5e4944445c81666",
+    "references/triage.md": "sha256:af566d7ab2211895218efe3f543892efe40ac9da38fd9f9941b1877337718697"
+  }
+}

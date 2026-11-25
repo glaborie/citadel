@@ -32,6 +32,7 @@ RUN useradd --create-home --uid 10001 citadel
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
 COPY policy /app/policy
+COPY skills /app/skills
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 USER citadel
