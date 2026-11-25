@@ -42,3 +42,8 @@ eval:
 .PHONY: redteam
 redteam:
 	.venv/bin/python -m pytest -m redteam -v
+
+# Red-team report: regenerates docs/evals/red-team-report.md from a real run.
+.PHONY: redteam-report
+redteam-report:
+	CITADEL_REDTEAM_REPORT=1 .venv/bin/python -m pytest -m redteam -q

@@ -1,0 +1,9 @@
+{
+  "description": "The researcher specialist asks for a Docker write tool.",
+  "tenant": "lab-a",
+  "run": "run-1",
+  "caller": {"agent": "researcher", "user": "alice"},
+  "tool": "restart_service",
+  "owner_agent": "docker",
+  "expected": {"outcome": "deny", "rule_id": "tool.agent_mismatch"}
+}
