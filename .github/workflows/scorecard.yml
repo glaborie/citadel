@@ -1,0 +1,55 @@
+name: Scorecard supply-chain security
+on:
+  # Weekly on Monday at 02:30 UTC
+  schedule:
+    - cron: '30 2 * * 1'
+  # Run on pushes to the default branch
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+# Declare default permissions as read-only for the workflow
+permissions: read-all
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-24.04
+    permissions:
+      security-events: write  # Required to upload SARIF to the Security tab
+      id-token: write         # Required if publish_results is true
+      contents: read
+      actions: read
+      issues: read
+      pull-requests: read
+      checks: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard analysis
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true  # Publishes to OpenSSF REST API for the badge
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+          category: scorecard
