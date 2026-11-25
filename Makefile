@@ -79,3 +79,9 @@ model-smoke:
 	cd $$HOME/projects/citadel && docker compose run --rm --no-deps \
 		-v $(CURDIR):/repo:ro -e PYTHONPATH=/repo/src \
 		api python /repo/scripts/model_smoke.py
+
+# The report as evidence: offline cases plus the live ones. Requires the
+# stack; live cases skip loudly when it is not reachable.
+.PHONY: redteam-report-live
+redteam-report-live:
+	CITADEL_LIVE=1 CITADEL_REDTEAM_REPORT=1 .venv/bin/python -m pytest -m "redteam or live" -q
