@@ -17,6 +17,8 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
+from citadel.net import open_url
+
 KC = os.environ.get("KEYCLOAK_URL", "http://127.0.0.1:18081")
 REALM = os.environ.get("KEYCLOAK_REALM", "citadel")
 
@@ -31,7 +33,7 @@ USERS = [
 def call(url: str, data: bytes | None, headers: dict[str, str], method: str = "GET") -> Any:
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=20) as r:
+        with open_url(req, timeout=20) as r:
             body = r.read()
             return json.loads(body) if body else {"_status": r.status}
     except urllib.error.HTTPError as e:
