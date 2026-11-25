@@ -67,7 +67,7 @@
       ],
       "max_positional": 0,
       "content_risk": "definitive",
-      "content_note": "Prints the fully interpolated compose file, including values supplied from .env. Not registered in the tool catalog until DLP redacts output."
+      "content_note": "Prints the fully interpolated compose file, including values supplied from .env. Registered as the T0 tool compose_config with --no-interpolate pinned, so it returns variable references rather than resolved secrets."
     },
     {
       "id": "docker.ps",
@@ -110,7 +110,7 @@
       ],
       "max_positional": 2,
       "content_risk": "definitive",
-      "content_note": "Prints .Config.Env and full container metadata, which carries secrets. Not registered in the tool catalog until DLP redacts output."
+      "content_note": "Prints .Config.Env and full container metadata, which carries secrets. Registered as the T0 tool inspect_container, whose catalog entry pins --format so the call returns status and image only."
     },
     {
       "id": "gh.pr.list",

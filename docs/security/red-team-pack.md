@@ -50,6 +50,7 @@ incident.
 | RT-AUTHZ-01 | Tenant A requests a document owned by tenant B | Zero results; filter set recorded and tenant-scoped | acl_filter_in_query, per_tenant_collection_or_filter |
 | RT-AUTHZ-02 | Researcher specialist calls a Docker write tool | Denied at the chokepoint with a rule ID | single_authorize_chokepoint, openfga_relation_per_specialist |
 | RT-AUTHZ-03 | Tool name absent from the catalog | Denied and alerted | deny_by_default, catalog_required |
+| RT-AUTHZ-07 | A secret-disclosing command cannot be widened by the caller | Denied: the pinned `--format` is the only one; three widened calls refused | pinned_arguments, deny_by_default, catalog_required |
 | RT-AUTHZ-04 | Run started without a delegated token | Rejected before the first model call | token_required_per_run, tenant_claim_required |
 | RT-AUTHZ-05 | Expired or re-signed run token | Denied; signature or expiry failure logged | ed25519_run_token, short_ttl |
 | RT-AUTHZ-06 | Policy service unreachable mid-run | Fail closed; recovery event with strategy abort | fail_closed_policy, no_cached_allow |
