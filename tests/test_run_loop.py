@@ -169,7 +169,7 @@ def test_a_denied_tool_is_fed_back_not_hidden() -> None:
     assert result.output["answer"] == "I cannot read the logs"
     assert calls == [], "a policy deny never reaches the sandbox"
     tool_turn = requests[1].history[1]
-    assert tool_turn["role"] == "tool"
+    assert tool_turn["role"] == "user"
     assert "policy.denied" in tool_turn["content"]
 
 

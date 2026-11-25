@@ -4,7 +4,7 @@
 
 Citadel is a clean-slate Python + Docker Compose stack that runs a small fleet of specialised agents (Docker, GitHub, Researcher) against a real homelab. It treats identity, tenancy, authorisation, sandboxing, DLP, audit and evaluation as first-class runtime properties rather than middleware added at the end. It is a portfolio piece aimed at senior AI-engineering roles and is deliberately usable outside the demo.
 
-**Status: v0.1 complete, with its exit review in `docs/exit-review-v0.1.md`.** Identity, policy, orchestration, sandboxing, the write path, DLP, the approval console, hash-pinned skill packs, the offline eval harness, the trajectory recorder and OTLP export to MLflow are built and verified on a live host; four of the five exit criteria are met as written, and the fifth cannot be (a clean clone carries no secrets by design). One scope delta is recorded rather than hidden: the model loop and the gateway client exist and are tested, but no workflow calls them yet, so no run sends a prompt. See `TODO.md` for open work and `docs/implementation-notes/v0.1-verification.md` for what was executed, on which host, and what it printed.
+**Status: v0.1 complete, with its exit review in `docs/exit-review-v0.1.md`.** Identity, policy, orchestration, sandboxing, the write path, DLP, the approval console, hash-pinned skill packs, the model loop inside the orchestrator workflow and the API that submits it are built and verified on a live host. A task posted to `POST /runs` now runs the whole chain: pack plus tool manifest as the system prompt, a model call, the requested tool through the policy chokepoint and DLP gates, and the answer on `run.end`. Four of the five exit criteria are met as written, and the fifth cannot be (a clean clone carries no secrets by design). See `TODO.md` for open work and `docs/implementation-notes/v0.1-verification.md` for what was executed, on which host, and what it printed.
 
 ## What demonstrates what
 
@@ -32,7 +32,7 @@ The table is the architecture; the **Status** column says which rows exist as co
 
 ## What runs today
 
-`make up` starts 17 services, unwrapping secrets through SOPS first so no plaintext copy is written to disk. All health-checked services report healthy; `./scripts/clean-clone-check.sh` installs and passes 357 tests (31 skipped: live-network cases) from a fresh clone with no hidden files.
+`make up` starts 17 services, unwrapping secrets through SOPS first so no plaintext copy is written to disk. All health-checked services report healthy; `./scripts/clean-clone-check.sh` installs and passes 381 tests (32 skipped: live-network and live-model cases) from a fresh clone with no hidden files.
 
 | Control | Evidence |
 |---|---|
@@ -127,7 +127,7 @@ src/citadel/
   audit.py                    # hash-chained ledger
   telemetry.py                # one MLflow trace per run, spans carry audit IDs
   worker.py                   # role-scoped Temporal workers
-tests/                        # 357 hermetic tests + opt-in live suites
+tests/                        # 381 hermetic tests + opt-in live suites
 ```
 
 ## Verification status

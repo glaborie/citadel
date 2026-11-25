@@ -443,6 +443,7 @@ class RunActivities:
                 "outcome": end.outcome,
                 "citation_ids": end.citation_ids,
                 "safety_flags": end.safety_flags,
+                "answer": end.answer[:4000],
             },
         )
         record_span(

@@ -456,12 +456,18 @@ def test_finish_run_writes_the_end_event(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(activities, "tenant_connection", db.connect)
 
     RunActivities(dsn="unused", audit=cast(Any, ledger)).finish_run(
-        RunEnd(run_id="run-1", tenant_id="lab-a", outcome="completed")
+        RunEnd(
+            run_id="run-1",
+            tenant_id="lab-a",
+            outcome="completed",
+            answer="two containers are running",
+        )
     )
 
     assert db.status == "completed"
     assert [event["event_type"] for event in ledger.events] == ["run.end"]
     assert ledger.events[0]["payload"]["outcome"] == "completed"
+    assert ledger.events[0]["payload"]["answer"] == "two containers are running"
 
 
 def test_finish_run_does_not_fork_an_existing_end(monkeypatch: pytest.MonkeyPatch) -> None:
