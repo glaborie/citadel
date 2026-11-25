@@ -147,7 +147,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           online-audits:  true
-        allowed-skips: codeql   # remove if you disable CodeQL entirely
 
   # ─────────────────────────── Gate ──────────────────────────────
   security-check:
@@ -160,3 +159,4 @@ jobs:
         uses: re-actors/alls-green@release/v1
         with:
           jobs: ${{ toJSON(needs) }}
+          allowed-skips: codeql   # remove if you disable CodeQL entirely
