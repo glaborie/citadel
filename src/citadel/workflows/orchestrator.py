@@ -1,19 +1,42 @@
-"""Orchestrator workflow: owns delegation and holds no side-effecting tools."""
+"""Orchestrator workflow: owns sequencing and holds no side-effecting tools.
+
+Two shapes of run, one code path for finishing:
+
+* a **tool run** names a tool and its arguments, and the orchestrator delegates
+  that single call to a specialist - the pre-loop behaviour, kept because the red
+  team exercises it directly;
+* a **task run** carries a task instead, and the orchestrator iterates: ask the
+  model for one step, delegate whatever tool it requests to a specialist, feed the
+  result back, and stop on an answer or on the budget.
+
+The workflow decides *how many* steps and *what order*; every model call and every
+tool call is an activity or a child workflow, so nothing here is replayed
+non-deterministically.
+"""
 
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import Any
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
+from citadel.model import Budget, Usage
 from citadel.workflows import activities
+from citadel.workflows.model_step import (
+    ModelActivities,
+    ModelStepRequest,
+    assistant_turn,
+    tool_turn,
+)
 from citadel.workflows.specialist import SpecialistWorkflow
 from citadel.workflows.types import TASK_QUEUES, RunEnd, RunInput, ToolCall, ToolResult
 
 
-def child_workflow_id(run_id: str, tool: str) -> str:
-    return f"run-{run_id}-{tool}"
+def child_workflow_id(run_id: str, tool: str, step: int = 0) -> str:
+    """Step-scoped: two calls to the same tool are two child workflows."""
+    return f"run-{run_id}-{step}-{tool}"
 
 
 def _outcome(result: ToolResult) -> str:
@@ -25,36 +48,21 @@ def _outcome(result: ToolResult) -> str:
 
 
 def _safety_flags(result: ToolResult) -> list[str]:
-    return ["dlp_blocked"] if result.rule_id.startswith("dlp.") else []
+    flags: list[str] = []
+    if result.rule_id.startswith("dlp."):
+        flags.append("dlp_blocked")
+    if result.rule_id.startswith("budget."):
+        flags.append("budget_exceeded")
+    return flags
 
 
 @workflow.defn
 class RunWorkflow:
     @workflow.run
     async def run(self, item: RunInput) -> ToolResult:
-        queue = TASK_QUEUES.get(item.agent_id)
-        if queue is None:
-            result = ToolResult(
-                status="denied",
-                tool=item.tool,
-                rule_id="delegation.unknown_agent",
-                detail=f"no specialist worker for agent {item.agent_id!r}",
-            )
-        else:
-            call = ToolCall(
-                run_id=item.run_id,
-                tenant_id=item.tenant_id,
-                user_id=item.user_id,
-                agent_id=item.agent_id,
-                tool=item.tool,
-                arguments=item.arguments,
-            )
-            result = await workflow.execute_child_workflow(
-                SpecialistWorkflow.run,
-                call,
-                id=child_workflow_id(item.run_id, item.tool),
-                task_queue=queue,
-            )
+        result = (
+            await self._task_run(item) if item.task else await self._tool_run(item)
+        )
 
         # run.end is written by an activity, never by the workflow itself, so a
         # retried finish cannot fork the trajectory.
@@ -70,3 +78,134 @@ class RunWorkflow:
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
         return result
+
+    async def _tool_run(self, item: RunInput) -> ToolResult:
+        queue = TASK_QUEUES.get(item.agent_id)
+        if queue is None:
+            return ToolResult(
+                status="denied",
+                tool=item.tool,
+                rule_id="delegation.unknown_agent",
+                detail=f"no specialist worker for agent {item.agent_id!r}",
+            )
+        call = ToolCall(
+            run_id=item.run_id,
+            tenant_id=item.tenant_id,
+            user_id=item.user_id,
+            agent_id=item.agent_id,
+            tool=item.tool,
+            arguments=item.arguments,
+        )
+        return await workflow.execute_child_workflow(
+            SpecialistWorkflow.run,
+            call,
+            id=child_workflow_id(item.run_id, item.tool),
+            task_queue=queue,
+        )
+
+    async def _task_run(self, item: RunInput) -> ToolResult:
+        budget = Budget(max_steps=item.max_steps)
+        usage = Usage.zero()
+        history: list[dict[str, Any]] = []
+        tool_name = item.tool or "model"
+
+        for step_no in range(1, item.max_steps + 1):
+            step = await workflow.execute_activity_method(
+                ModelActivities.next_step,
+                ModelStepRequest(
+                    run_id=item.run_id,
+                    tenant_id=item.tenant_id,
+                    user_id=item.user_id,
+                    agent_id=item.agent_id,
+                    task=item.task,
+                    model_alias=item.model_alias,
+                    pack_version=item.prompt_pack_version,
+                    history=history,
+                ),
+                start_to_close_timeout=timedelta(minutes=3),
+                retry_policy=RetryPolicy(maximum_attempts=2),
+            )
+            usage = usage.add(
+                Usage(
+                    prompt_tokens=step.prompt_tokens,
+                    completion_tokens=step.completion_tokens,
+                    cost_usd=step.cost_usd,
+                    cost_source="reported" if step.cost_source == "reported" else "unreported",
+                )
+            )
+
+            if step.status == "answered":
+                return ToolResult(
+                    status="executed",
+                    tool=tool_name,
+                    rule_id="model.answered",
+                    detail=step.detail,
+                    output={
+                        "answer": step.content,
+                        "prompt_pack": step.prompt_pack,
+                        "prompt_digest": step.prompt_digest,
+                        "steps": step_no,
+                        "tokens": usage.total,
+                        "cost_usd": usage.cost_usd,
+                        "cost_source": usage.cost_source,
+                    },
+                )
+            if step.status in {"refused", "dlp_blocked"}:
+                return ToolResult(
+                    status="denied", tool=tool_name, rule_id=step.rule_id, detail=step.detail
+                )
+            if step.status != "tool_requested":
+                return ToolResult(
+                    status="failed", tool=tool_name, rule_id=step.rule_id, detail=step.detail
+                )
+
+            queue = TASK_QUEUES.get(item.agent_id)
+            if queue is None:
+                return ToolResult(
+                    status="denied",
+                    tool=step.tool,
+                    rule_id="delegation.unknown_agent",
+                    detail=f"no specialist worker for agent {item.agent_id!r}",
+                )
+
+            call = ToolCall(
+                run_id=item.run_id,
+                tenant_id=item.tenant_id,
+                user_id=item.user_id,
+                agent_id=item.agent_id,
+                tool=step.tool,
+                arguments=step.arguments,
+            )
+            tool_result = await workflow.execute_child_workflow(
+                SpecialistWorkflow.run,
+                call,
+                id=child_workflow_id(item.run_id, step.tool, step_no),
+                task_queue=queue,
+            )
+
+            history.append(assistant_turn(step))
+            history.append(
+                tool_turn(
+                    {
+                        "detail": f"{tool_result.rule_id}: {tool_result.detail}",
+                        "status": tool_result.status,
+                    }
+                )
+            )
+            exceeded = budget.exceeded(usage, step_no)
+            if exceeded is not None:
+                return ToolResult(
+                    status="failed",
+                    tool=tool_name,
+                    rule_id="budget.exceeded",
+                    detail=f"stopped after {step_no} steps: {exceeded}",
+                    output={"steps": step_no, "tokens": usage.total, "cost_usd": usage.cost_usd},
+                )
+
+        return ToolResult(
+            status="failed",
+            tool=tool_name,
+            rule_id="budget.exceeded",
+            detail=f"no answer within {item.max_steps} steps",
+            output={"steps": item.max_steps, "tokens": usage.total, "cost_usd": usage.cost_usd},
+        )

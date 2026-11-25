@@ -67,6 +67,43 @@ totals. Steps are counted, tokens and cost are measured — the difference matte
 because a model that never answers is a cost problem even when every individual
 call is cheap.
 
+## In the workflow
+
+`run_agent` is the loop as a library. The workflow uses the same pieces through
+one activity and one child workflow, so replay stays deterministic:
+
+```
+RunWorkflow.run(RunInput)
+  │  task empty  → delegate the named tool to a specialist, exactly as before
+  │  task present
+  ├─ ModelActivities.next_step   ── one completion: pack text + tool manifest,
+  │                                  DLP on the task before it leaves the process,
+  │                                  DLP on the reply before it enters context
+  ├─ status=tool_requested  → child workflow: authorise → approval → execute
+  │                          → the result is appended to history and the loop runs again
+  └─ status=answered        → finished; status=budget.exceeded → failed
+```
+
+Three properties are worth naming, because each one is a place the design could
+have gone wrong:
+
+**The activity asks, it does not act.** `next_step` returns the tool the model
+wanted and the arguments it supplied. It cannot run anything: authorisation lives
+in the specialist, so a step that obeys an injected instruction still produces a
+denied tool result rather than a side effect.
+
+**Provenance is checked, not assumed.** A run names `prompt_pack_version`; if the
+pack on disk disagrees, the step is refused with `pack.version_mismatch` instead
+of quietly using a newer prompt. The reply's `prompt_digest` is what a trajectory
+cites, so "which prompt produced this answer" has an answer.
+
+**Cost accumulates across steps, and doubt accumulates with it.** Each step adds
+its usage; one unreported call makes the run's total unreported, and the budget
+check sees `None` rather than a zero that would look free.
+
+The workflow decides sequencing only - how many steps, and whether to delegate.
+Everything that touches the world is an activity or a child workflow.
+
 ## What is deliberately not here
 
 * **No retries.** A retry hides a failure behind spend, and the caller (a
