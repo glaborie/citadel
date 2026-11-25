@@ -500,7 +500,7 @@ def exec_approval_replay(case_: Case, _: Path) -> Outcome:
         seen.append(jti)
         return len(seen) > 1
 
-    def passthrough(text: str, *, surface: str) -> tuple[str, dict[str, object]]:
+    def passthrough(text: str, *, surface: str, **_: object) -> tuple[str, dict[str, object]]:
         return text, {"surface": surface, "action": "pass"}
 
     payload = {
@@ -577,6 +577,7 @@ def exec_secret_in_tool_args(case_: Case, _: Path) -> Outcome:
         mock.patch.dict(os.environ, env),
         mock.patch.object(operator, "public_key_from_env", lambda _v: private.public_key()),
         mock.patch.object(operator, "_already_used", lambda *_: False),
+        mock.patch.object(operator, "AuditLedger", lambda _dsn: support.FakeAudit()),
         mock.patch.object(dlp, "urlopen", support.DetectorStub([])),
         mock.patch("citadel.tools.runner.run", stub.run),
     ):

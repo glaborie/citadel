@@ -220,6 +220,24 @@ def create_app(
                 analyzer_url=DLP_URL,
             )
         except dlp.DlpBlocked as exc:
+            # A refused approval is an event the ledger must show, even though
+            # nothing was signed and the decision never happened.
+            blocked = AuditLedger(_dsn()).append(
+                tenant_id=principal.tenant_id,
+                event_type="dlp.event",
+                actor_type="user",
+                actor_id=principal.user_id,
+                payload={"run_id": body.run_id, "tool": body.tool, **exc.report},
+            )
+            telemetry.record_span(
+                "dlp.event",
+                run_id=body.run_id,
+                audit_id=blocked.audit_id,
+                tool=body.tool,
+                surface=str(exc.report.get("surface", "")),
+                action=str(exc.report.get("action", "")),
+                detector_version=str(exc.report.get("detector_version", "")),
+            )
             raise HTTPException(
                 status_code=exc.status, detail={"reason": exc.reason, "dlp": [exc.report]}
             ) from exc

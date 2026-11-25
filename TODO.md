@@ -7,11 +7,6 @@ Open work. Done items get deleted, not ticked.
       Decide between accepting the gap or adding a recognizer that separates
       names from technical nouns.
 
-- [ ] The approval route's DLP refusal writes no audit row. A blocked
-      `POST /approvals` returns 403 but leaves no `dlp.event`, so the ledger
-      cannot show that an approval was refused for a secret. The operator's
-      DLP blocks have the same gap.
-
 - [ ] An approval-preview endpoint must render only checked payloads. The
       check sits on the decision POST; a console read path that serves raw run
       arguments would reopen RT-HITL-05.

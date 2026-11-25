@@ -304,7 +304,7 @@
       "fixture": "fixtures/approval/secret_in_args.json",
       "expect": {
         "verdict": "blocked",
-        "evidence": "403 before the token is minted; no approval.decision event",
+        "evidence": "403 plus a dlp.event row, before the token is minted",
         "side_effects": "none"
       },
       "controls": [
