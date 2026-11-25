@@ -54,3 +54,8 @@ redteam:
 .PHONY: redteam-report
 redteam-report:
 	CITADEL_REDTEAM_REPORT=1 .venv/bin/python -m pytest -m redteam -q
+
+# Live cases: needs the compose stack up (make up) and its .env readable.
+.PHONY: redteam-live
+redteam-live:
+	CITADEL_LIVE=1 .venv/bin/python -m pytest -m live -v

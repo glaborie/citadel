@@ -30,6 +30,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     if not os.environ.get("CITADEL_REDTEAM_REPORT"):
         return
 
+    harness.COLLECTED.update(harness.LIVE)
     cases = harness.load_cases()
     rows: list[str] = []
     counts = {"pass": 0, "fail": 0, "gap": 0, "pending": 0, "not run": 0}
