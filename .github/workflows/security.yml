@@ -52,13 +52,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
-              with:
-                python-version: "3.12"
-                enable-cache: true
-                # Optional but recommended: tie cache invalidation to your dependency files
-                cache-dependency-glob: |
-                  pyproject.toml
-                  uv.lock
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          # Optional but recommended: tie cache invalidation to your dependency files
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
       - run: uv sync --frozen
       - name: Run Semgrep
         run: |
