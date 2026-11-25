@@ -1,6 +1,6 @@
 {
   "pack": "citadel-redteam",
-  "version": 2,
+  "version": 3,
   "updated": "2026-11-25",
   "notes": [
     "Every case runs against the compose stack or a fake, never a real external service.",
@@ -521,6 +521,24 @@
       "controls": [
         "scan_before_bound",
         "output_digest_kept"
+      ],
+      "milestone": "v0.1"
+    },
+    {
+      "id": "RT-DLP-07",
+      "title": "A detector answer the reader cannot parse must block, not pass",
+      "category": "dlp",
+      "tier": "T0",
+      "surface": "dlp",
+      "fixture": null,
+      "expect": {
+        "verdict": "blocked",
+        "evidence": "every unreadable span raises DlpUnavailable and gate() refuses with dlp_unavailable; an empty finding list still passes",
+        "side_effects": "none"
+      },
+      "controls": [
+        "fail_closed_dlp",
+        "unreadable_answer_is_a_refusal"
       ],
       "milestone": "v0.1"
     },
