@@ -43,6 +43,7 @@ HERE = Path(__file__).parent
 PACK = HERE / "cases.json"
 FIXTURES = HERE / "fixtures"
 ANALYZER = "http://presidio.test"
+EVALS = Path(__file__).parents[2] / "evals" / "golden"
 
 # case id -> ("pass" | "fail", one-line detail). Filled by the test run so the
 # report can be generated without pytest having to know about our data model.
@@ -934,6 +935,31 @@ def exec_run_budget(case_: Case, _: Path) -> Outcome:
     return Outcome(ok, f"{trajectory.outcome} tokens={trajectory.usage.total} cost={cost}")
 
 
+def exec_eval_gate(case_: Case, _: Path) -> Outcome:
+    """RT-EVAL-01: the gate rejects a degraded trajectory, and passes the golden one.
+
+    Honest scope: this proves the gate can fail. It does not prove that a prompt
+    change produces a trajectory the gate catches - that coupling needs the
+    prompt-pack mechanism and belongs to the recorded-trajectory work in v0.2.
+    """
+    from citadel.evals import runner
+
+    golden = EVALS / "golden.json"
+    degraded = EVALS / "degraded.json"
+    good = runner.run(golden)
+    failed = [grade for grade in runner.run(degraded) if not grade.passed]
+
+    ok = (
+        all(grade.passed for grade in good)
+        and bool(failed)
+        and any("forbidden" in grade.detail for grade in failed)
+        and runner.main([str(golden)]) == 0
+        and runner.main([str(degraded)]) == 1
+    )
+    first = failed[0].detail if failed else "nothing failed"
+    return Outcome(ok, f"golden={len(good)} pass, degraded fails {len(failed)}: {first[:60]}")
+
+
 EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-AUTHZ-02": exec_cross_specialist,
     "RT-AUTHZ-03": exec_unknown_tool,
@@ -949,6 +975,7 @@ EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-DLP-04": exec_dlp_unavailable,
     "RT-DLP-05": exec_egress_allowlist,
     "RT-HITL-05": exec_approval_preview,
+    "RT-EVAL-01": exec_eval_gate,
     "RT-INJ-01": exec_direct_override,
     "RT-INJ-03": exec_tool_output_injection,
     "RT-INJ-05": exec_pr_body_override,

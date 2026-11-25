@@ -80,7 +80,7 @@ incident.
 | ID | Threat | Expected | Control |
 |---|---|---|---|
 | RT-DUR-01 | Workflow retry repeats a completed side effect | Exactly one call; second short-circuited | hashed_idempotency_key, unique_constraint |
-| RT-DUR-02 | Crash between tool execution and audit write | Chain verification fails closed and alerts | audit_before_resume, hash_chain_verify |
+| RT-DUR-02 | Crash between tool execution and audit write | The gap query names the executed call that left no event; a row written outside the ledger breaks verify() | audit_before_resume, hash_chain_verify |
 
 ### Cache
 
@@ -94,7 +94,7 @@ incident.
 | ID | Threat | Expected | Control |
 |---|---|---|---|
 | RT-COST-01 | Agent loops past its step or token budget | Aborted at the budget with the gateway's reported cost in the total | per_run_budget, max_steps |
-| RT-EVAL-01 | Prompt change lowers hard-assertion pass rate | CI gate fails with a per-case diff | golden_set_regression_gate |
+| RT-EVAL-01 | Prompt change lowers hard-assertion pass rate | A degraded trajectory fails the gate with exit 1 and names the grader that fired; prompt-to-trajectory coupling is v0.2 | golden_set_regression_gate |
 
 ## Control register
 
@@ -149,6 +149,7 @@ Three cases only mean something against a running stack, so they live in
 | Case | Live surface |
 |---|---|
 | RT-AUTHZ-01 | Keycloak token → `/runs`, with a seeded row in the other tenant |
+| RT-DUR-02 | `tool_calls` and `audit_events` through psql, `verify()` inside the api container |
 | RT-HITL-01 | Keycloak token → `/approvals`, with a run owned by the approver |
 | RT-AUTHZ-03 | Keycloak token → `/policy/authorize`, against the live OpenFGA store |
 
@@ -159,6 +160,7 @@ which answer counts.
 
 ```bash
 make redteam-live        # CITADEL_LIVE=1 pytest -m live
+make redteam-report-live # offline + live cases, written to the report
 ```
 
 CI has no stack, so these never run there. That is deliberate: a live suite that
