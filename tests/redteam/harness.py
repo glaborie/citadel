@@ -356,6 +356,35 @@ def exec_dlp_unavailable(case_: Case, _: Path) -> Outcome:
     return Outcome(False, "detector outage passed")
 
 
+def exec_dlp_unreadable_answer(case_: Case, _: Path) -> Outcome:
+    """RT-DLP-07: a detector answer the reader cannot parse must block.
+
+    DLP parses an HTTP dependency with no schema, so "slightly different shape" is
+    a realistic failure. Every one of these used to leave the finding list empty,
+    which reads as "nothing sensitive here" and serves the output unchanged.
+    """
+    text = "contact alice@example.com now"
+    malformed: list[Any] = [
+        ("EMAIL_ADDRESS", 8, 20, 0.9),
+        {"entity_type": "EMAIL_ADDRESS", "start": 8, "end": 20},
+        {"type": "EMAIL_ADDRESS", "start": 8, "end": 20, "score": 0.9},
+        {"entity_type": "EMAIL_ADDRESS", "start": None, "end": 20, "score": 0.9},
+        {"entity_type": "EMAIL_ADDRESS", "start": 8, "end": 20, "score": "high"},
+        {"entity_type": "EMAIL_ADDRESS", "start": 8, "end": 999, "score": 0.9},
+    ]
+    refused = 0
+    for item in malformed:
+        try:
+            dlp.inspect(text, surface="output", analyzer_url=ANALYZER, opener=detector([item]))
+        except dlp.DlpUnavailable:
+            refused += 1
+        else:
+            pass
+    clean = dlp.inspect(text, surface="output", analyzer_url=ANALYZER, opener=detector([]))
+    ok = refused == len(malformed) and clean.action == "pass" and clean.text == text
+    return Outcome(ok, f"{refused}/{len(malformed)} refused; empty answer passes")
+
+
 def exec_idempotency_key(case_: Case, _: Path) -> Outcome:
     """RT-DUR-01: the key is stable per call and changes with the arguments."""
     first = ToolCall(
@@ -1073,6 +1102,7 @@ EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-DLP-04": exec_dlp_unavailable,
     "RT-DLP-05": exec_egress_allowlist,
     "RT-DLP-06": exec_output_cap,
+    "RT-DLP-07": exec_dlp_unreadable_answer,
     "RT-HITL-05": exec_approval_preview,
     "RT-EVAL-01": exec_eval_gate,
     "RT-INJ-01": exec_direct_override,

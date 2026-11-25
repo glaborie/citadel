@@ -13,8 +13,12 @@ Two rules decide the action:
   a human approved.
 * **output** — credentials block, PII is redacted in place.
 
-A detector that is unreachable, slow or malformed raises `DlpUnavailable` and
-the caller must refuse. There is no permissive path.
+A detector that is unreachable, slow or unreadable raises `DlpUnavailable` and
+the caller must refuse. Unreadable includes a span in the wrong shape: a missing
+field, a score that is a string, an offset outside the text it came from. Dropping
+such an item would leave the finding list empty, and an empty finding list is
+indistinguishable from "nothing sensitive here" - which is the one failure this
+layer exists to prevent. There is no permissive path.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ from __future__ import annotations
 import json
 import re
 import urllib.error
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from ipaddress import ip_address
 from typing import Any
@@ -198,7 +202,7 @@ def inspect(
         return Verdict(action="pass", text=text, findings=())
 
     detected = _analyze(text, analyzer_url, opener or urlopen)
-    findings = _findings(text, detected)
+    findings = _findings(text, _spans(detected, len(text)))
     merged = _merge(findings)
 
     if not merged:
@@ -238,7 +242,7 @@ def gate(
     return verdict.text, report
 
 
-def _analyze(text: str, analyzer_url: str, opener: Opener) -> list[dict[str, Any]]:
+def _analyze(text: str, analyzer_url: str, opener: Opener) -> Any:  # noqa: ANN401
     body = json.dumps(
         {
             "text": text,
@@ -260,17 +264,49 @@ def _analyze(text: str, analyzer_url: str, opener: Opener) -> list[dict[str, Any
     except (urllib.error.URLError, OSError, ValueError) as exc:
         # HTTPError is a URLError; a timeout is an OSError; bad JSON is a ValueError.
         raise DlpUnavailable(f"detector unreachable or unusable: {exc}") from exc
+    return payload
+
+
+def _spans(payload: Any, text_length: int) -> list[tuple[int, int, str, float]]:  # noqa: ANN401
+    """Read the detector's answer as spans, refusing anything that is not one.
+
+    An item this reader cannot understand is not an item that found nothing. The
+    detector answers over HTTP with no schema, so "slightly different shape" is a
+    realistic failure - a renamed field, a camelCase payload, a partial item - and
+    silently skipping it would switch redaction off while every layer reports
+    success. Same for an offset outside the text the span was computed from.
+    """
     if not isinstance(payload, list):
         raise DlpUnavailable("detector returned an unexpected payload")
-    return [item for item in payload if isinstance(item, dict)]
+
+    spans: list[tuple[int, int, str, float]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            raise DlpUnavailable(f"detector returned a {type(item).__name__} where a span belongs")
+        missing = [key for key in ("start", "end", "entity_type", "score") if key not in item]
+        if missing:
+            raise DlpUnavailable(f"detector span is missing {', '.join(missing)}")
+
+        start, end = item["start"], item["end"]
+        score, entity = item["score"], item["entity_type"]
+        if not _is_int(start) or not _is_int(end):
+            raise DlpUnavailable("detector span has a non-integer offset")
+        if not isinstance(score, (int, float)) or isinstance(score, bool):
+            raise DlpUnavailable("detector span has a non-numeric score")
+        if not isinstance(entity, str) or not entity:
+            raise DlpUnavailable("detector span names no entity type")
+        if not 0 <= start < end <= text_length:
+            raise DlpUnavailable(f"detector span {start}:{end} is outside the text it came from")
+
+        spans.append((start, end, entity, float(score)))
+    return spans
 
 
-def _findings(text: str, detected: Iterable[dict[str, Any]]) -> list[Finding]:
-    spans = [
-        (int(item["start"]), int(item["end"]), str(item["entity_type"]), float(item["score"]))
-        for item in detected
-        if {"start", "end", "entity_type", "score"} <= set(item)
-    ]
+def _is_int(value: Any) -> bool:  # noqa: ANN401 - a JSON value, narrowed here
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _findings(text: str, spans: list[tuple[int, int, str, float]]) -> list[Finding]:
     findings = [
         Finding(
             category=entity,

@@ -125,7 +125,7 @@ sequenceDiagram
     O->>ML: trace with audit event IDs
 ```
 
-Failure policy: DLP detector unavailable, policy service unreachable, missing tenant claim, or an unresolvable approval reference all produce a **blocked run**, not a permissive fallback.
+Failure policy: DLP detector unavailable, a detector answer the reader cannot parse (a span missing a field, a non-numeric score, an offset outside the text), policy service unreachable, missing tenant claim, or malformed approval token all produce a **blocked run**, not a permissive fallback.
 
 ## 5. Specialist topology
 

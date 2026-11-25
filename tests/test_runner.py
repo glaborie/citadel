@@ -104,7 +104,7 @@ def test_pii_in_output_is_redacted_before_it_is_served(
     client: TestClient, analyzer: dict[str, list[dict[str, Any]]]
 ) -> None:
     analyzer["a@example.ch"] = [
-        {"entity_type": "EMAIL_ADDRESS", "start": 0, "end": 13, "score": 1.0}
+        {"entity_type": "EMAIL_ADDRESS", "start": 0, "end": 12, "score": 1.0}
     ]
     client.captured["stdout"] = "a@example.ch"
 
