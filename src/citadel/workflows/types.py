@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from citadel.model.types import Reply
+
 TASK_QUEUES = {"orchestrator": "orchestrator", "docker": "docker", "github": "github"}
 
 APPROVAL_TTL = 15 * 60  # seconds; docs/security/tool-tiers.md
@@ -64,8 +66,39 @@ class RunInput:
     tenant_id: str
     user_id: str
     agent_id: str
-    tool: str
+    # A prompt makes this a model-driven run; without one the workflow executes
+    # the single named tool, which is the drill path.
+    prompt: str = ""
+    model_alias: str = ""
+    tool: str = ""
     arguments: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ModelRequest:
+    """One completion, with everything the trajectory needs to record it."""
+
+    run_id: str
+    tenant_id: str
+    agent_id: str
+    alias: str
+    messages: list[dict[str, Any]] = field(default_factory=list)
+    tools: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class ModelTurn:
+    """One completion attempt, including the two ways it can legitimately fail.
+
+    The activity never raises for these: a workflow cannot catch a Python
+    exception across the activity boundary by type, and a retried DLP block is
+    the wrong behaviour. The workflow turns the status back into the exception
+    the loop already handles.
+    """
+
+    reply: Reply | None = None
+    blocked: str = ""  # "" | "dlp" | "unavailable"
+    detail: str = ""
 
 
 @dataclass
@@ -75,3 +108,6 @@ class RunEnd:
     outcome: str
     citation_ids: list[str] = field(default_factory=list)
     safety_flags: list[str] = field(default_factory=list)
+    # The gated answer, bounded: run.end is where a person reads what the run
+    # concluded, and the console has no other surface for it.
+    answer: str = ""

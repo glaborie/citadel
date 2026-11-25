@@ -23,11 +23,20 @@ from citadel.approval_requests import record_request
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
 from citadel.hashing import arguments_hash
+from citadel.model.client import ModelUnavailable, OmniRouteClient
+from citadel.model.prompt import system_prompt, tool_schemas
 from citadel.policy import AuthorizationRequest, RelationChecker, RunStore, authorize
 from citadel.policy.catalog import load_catalog
 from citadel.telemetry import record_span
 from citadel.tools.bounds import DEFAULT_EVENT_LIMIT, bound
-from citadel.workflows.types import PolicyOutcome, RunEnd, ToolCall, ToolResult
+from citadel.workflows.types import (
+    ModelRequest,
+    ModelTurn,
+    PolicyOutcome,
+    RunEnd,
+    ToolCall,
+    ToolResult,
+)
 
 DLP_URL = os.environ.get("CITADEL_DLP_URL", "http://presidio:3000")
 # A tool result is part of the activity's return value, which Temporal
@@ -443,6 +452,9 @@ class RunActivities:
                 "outcome": end.outcome,
                 "citation_ids": end.citation_ids,
                 "safety_flags": end.safety_flags,
+                # Empty for a tool-driven run; for a model run it is the gated
+                # answer, and the console has no other place to show it.
+                "answer": end.answer[:4000],
             },
         )
         record_span(
@@ -452,6 +464,119 @@ class RunActivities:
             outcome=end.outcome,
             safety_flags=",".join(end.safety_flags),
         )
+
+
+class ModelActivities:
+    """Model turns. The only place the runtime talks to the gateway.
+
+    The prompt arrives already assembled from the agent's pack and tool
+    manifest, and the gateway's own DLP gate runs inside the client before the
+    request leaves the process. What this adds is the `model.call` audit row:
+    one per completion, with the provider's token and cost figures.
+    """
+
+    def __init__(
+        self,
+        *,
+        dsn: str,
+        audit: AuditLedger,
+        gateway_url: str,
+        api_key: str,
+        analyzer_url: str,
+        default_alias: str,
+    ) -> None:
+        self._dsn = dsn
+        self._audit = audit
+        self._gateway_url = gateway_url
+        self._api_key = api_key
+        self._analyzer_url = analyzer_url
+        self._default_alias = default_alias
+
+    @activity.defn
+    def system_prompt(self, agent: str) -> str:
+        return system_prompt(agent)
+
+    @activity.defn
+    def tools(self, agent: str) -> list[dict[str, Any]]:
+        return tool_schemas(agent)
+
+    @activity.defn
+    def complete(self, request: ModelRequest) -> ModelTurn:
+        client = OmniRouteClient(
+            base_url=self._gateway_url,
+            api_key=self._api_key,
+            analyzer_url=self._analyzer_url,
+            alias=self._default_alias,
+        )
+        try:
+            reply = client.complete(
+                messages=request.messages,
+                tools=request.tools,
+                alias=request.alias or None,
+                run_id=request.run_id,
+            )
+        except dlp.DlpBlocked as exc:
+            # The prompt never left the process. Recorded like any other DLP
+            # refusal so the trajectory shows why there is no answer.
+            self._audit.append(
+                tenant_id=request.tenant_id,
+                event_type="dlp.event",
+                actor_type="agent",
+                actor_id=request.agent_id,
+                payload={"run_id": request.run_id, **exc.report},
+            )
+            return ModelTurn(blocked="dlp", detail=exc.reason)
+        except ModelUnavailable as exc:
+            return ModelTurn(blocked="unavailable", detail=str(exc)[:200])
+
+        ref = self._audit.append(
+            tenant_id=request.tenant_id,
+            event_type="model.call",
+            actor_type="agent",
+            actor_id=request.agent_id,
+            payload={
+                "run_id": request.run_id,
+                "alias": request.alias or self._default_alias,
+                # The gateway is the provider boundary; the alias and the model
+                # it resolved to are what a comparison needs.
+                "provider": "omniroute",
+                "model": reply.model,
+                "input_hash": f"sha256:{_sha(json.dumps(request.messages, sort_keys=True))}",
+                "output_hash": f"sha256:{_sha(_reply_text(reply))}",
+                "tokens": reply.usage.total,
+                "cost": reply.usage.cost_usd,
+                "latency": reply.latency_ms,
+            },
+        )
+        record_span(
+            "model.call",
+            run_id=request.run_id,
+            audit_id=ref.audit_id,
+            model=reply.model,
+            alias=request.alias or self._default_alias,
+            tokens=reply.usage.total,
+        )
+        return ModelTurn(reply=reply)
+
+    @activity.defn
+    def gate(self, text: str, surface: str) -> str:
+        return dlp.gate(text, surface=surface, analyzer_url=self._analyzer_url)[0]
+
+
+def _reply_text(reply: Any) -> str:
+    return json.dumps(
+        {
+            "content": reply.content,
+            "tools": [
+                {"name": call.name, "arguments": call.arguments} for call in reply.tools
+            ],
+        },
+        sort_keys=True,
+    )
+
+
+def _sha(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _json_or_none(text: str) -> Any:

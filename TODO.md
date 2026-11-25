@@ -2,10 +2,15 @@
 
 Open work. Done items get deleted, not ticked.
 
-- [ ] No runtime assembles a prompt from a skill pack. `skills.py` loads and
-      verifies the packs and `POST /runs` checks the version, but the model loop
-      is not called by the workflow, so the text is never sent. Wire the loop
-      (prompt from the pack + the agent's tool manifest) as its own step.
+- [ ] A model-driven run cannot perform a T1 write. The loop treats
+      `requires_approval` as a denial, and the approval wait lives on the
+      tool-driven child workflow, so a prompt can read and answer but not ask a
+      human for a restart. Wire the approval wait into the loop before demoing
+      the two together.
+
+- [ ] The run budget is hardcoded in workflow code ($0.25, 32k tokens, 6 steps)
+      to stay replay-deterministic. A tenant cannot set its own ceiling; pass it
+      on `RunInput` from the API when one needs to.
 
 - [ ] Console sessions have no refresh. The session cookie and the Keycloak
       access token both last 300 s, so a review longer than five minutes ends
@@ -44,9 +49,9 @@ Open work. Done items get deleted, not ticked.
       `citadel-trajectories`; a fresh volume needs it before traces resolve.
       Fold it into `make up` or a one-shot init container.
 
-- [ ] Recorded trajectories cover run start/end, policy, DLP, approval and tool
-      spans. `model.call` and `retrieval.*` have no producer until the model and
-      retrieval paths exist, so those event types remain fixture-only.
+- [ ] Recorded trajectories cover run start/end, model, policy, DLP, approval
+      and tool spans. `retrieval.*` has no producer until the v0.2 retrieval
+      path exists, so that event type remains fixture-only.
 
 - [ ] No argument-value grader. `tool.call` carries `args_hash`, not the
       canonical arguments, so "argument values match expected form" cannot be

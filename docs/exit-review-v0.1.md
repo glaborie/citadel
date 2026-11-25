@@ -13,8 +13,8 @@ criteria are met as written. The fifth cannot be met as written, because it asks
 for something the project's own ground rules forbid — recorded as **D1** and left
 for the owner to reword rather than quietly changed here. Two scope deltas
 (**D2**, **D3**) mean the milestone is complete as *specified* but not as
-*imagined*: the model loop is not wired into the workflow, so no run sends a
-prompt.
+*imagined*: at review time the model loop was not wired into the workflow, so no
+run sent a prompt. **D2 was closed the same day (ADR-024).**
 
 | # | Exit criterion | Verdict |
 |---|---|---|
@@ -22,7 +22,7 @@ prompt.
 | 2 | Red-team suite proves the five listed attacks are blocked | **Met** — 21 of 21 v0.1 cases pass, live |
 | 3 | One recorded trace shows policy, DLP, approval and tool with matching audit IDs | **Met** — re-verified in MLflow and in `audit_events` |
 | 4 | `ADR-008` roadmap reconciled with delivered scope | **Met** — reconciliation section added to the ADR |
-| 5 | Skill packs for the three specialists, hash-pinned and versioned | **Met** — content, loader and checked provenance; consumption is **D2** |
+| 5 | Skill packs for the three specialists, hash-pinned and versioned | **Met** — content, loader, checked provenance, and consumption since ADR-024 |
 
 ## Criterion 1 — clean clone
 
@@ -96,7 +96,7 @@ The ledger chain itself verifies for both tenants (`lab-a` 104 events, `lab-b` 2
 
 See the reconciliation section in `docs/adr/ADR-008.md`. In short: v0.1 delivered
 what it listed, with the model gateway delivered as library code rather than a
-wired path (**D2**); three v0.2/v0.4 red-team surfaces were exercised early and
+wired path at review time, wired since ADR-024 (**D2**); three v0.2/v0.4 red-team surfaces were exercised early and
 pass; no milestone scope moved *out* silently.
 
 ## Delivered scope against `docs/milestones.md` v0.1
@@ -118,12 +118,13 @@ pass; no milestone scope moved *out* silently.
 **D1 — clean-clone stack start.** Criterion conflicts with ground rule 7. Not
 fixed here; wording proposed above.
 
-**D2 — the model loop is not wired.** `citadel.model.run_agent` and
-`OmniRouteClient` exist, are typed, and are exercised by `tests/test_model.py` and
-four red-team cases, but no activity or workflow calls them. Consequences: a run's
-trajectory is the tool pipeline, not a model conversation; `prompt_pack_version` is
-checked against a real pack but the pack text is never sent; `RT-EVAL-01` grades
-the harness rather than a live loop. First item in `TODO.md`.
+**D2 — the model loop is not wired.** *(Closed 2026-11-25, ADR-024.)* At review
+time `citadel.model.run_agent` and `OmniRouteClient` existed and were exercised by
+tests and red-team cases, but no activity or workflow called them: a run's
+trajectory was the tool pipeline, and the pack was verified but never sent. The
+loop now runs inside the orchestrator workflow, with the pack and tool manifest as
+the system prompt, one `model.call` audit row per turn and the gated answer on
+`run.end`. See `docs/implementation-notes/v0.1-verification.md` §22.
 
 **D3 — MLflow human-path auth.** The OTLP write path is internal and unaffected;
 the UI is unpublished, so no browser path exists to protect. Deferred until it is
@@ -165,6 +166,6 @@ surface; the v0.1 case passes on the surface that exists.
 
 ## What v0.2 inherits
 
-Wire the model loop to the skill packs (D2/D4); retrieval with ACL filtering and
+Retrieval with ACL filtering and
 the Researcher worker; SOPS + age; judge rubrics; MLflow human-path auth only if
 the UI is published; close the audit window in residual finding 1.

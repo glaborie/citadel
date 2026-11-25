@@ -13,6 +13,7 @@ parsing prose.
 
 from __future__ import annotations
 
+import inspect
 import json
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
@@ -29,13 +30,23 @@ from citadel.model.types import (
 )
 from citadel.policy import Decision
 
-Authorize = Callable[[str], Decision]
-Execute = Callable[[str, Mapping[str, Any]], str]
-Gate = Callable[[str, str], str]
-Complete = Callable[..., Reply]
+# Callbacks may be plain functions or coroutines. The workflow passes
+# activity-backed coroutines; the tests and the red-team harness pass plain
+# functions, and both drive the same loop.
+Authorize = Callable[[str, Mapping[str, Any]], Any]
+Execute = Callable[[str, Mapping[str, Any]], Any]
+Gate = Callable[[str, str], Any]
+Complete = Callable[..., Any]
 
 
-def run_agent(
+async def _value(result: Any) -> Any:
+    """Await a coroutine callback, pass a plain result through unchanged."""
+    if inspect.isawaitable(result):
+        return await result
+    return result
+
+
+async def run_agent(
     *,
     complete: Complete,
     messages: Sequence[Mapping[str, Any]],
@@ -54,8 +65,8 @@ def run_agent(
 
     for step_index in range(1, plan.max_steps + 1):
         try:
-            reply = complete(
-                messages=conversation, tools=tools, alias=alias, run_id=run_id
+            reply: Reply = await _value(
+                complete(messages=conversation, tools=tools, alias=alias, run_id=run_id)
             )
         except dlp.DlpBlocked as exc:
             steps.append(Step("dlp.blocked", f"surface=input reason={exc.reason}"))
@@ -96,7 +107,9 @@ def run_agent(
 
         conversation.append(_assistant_turn(reply))
         for requested in reply.tools:
-            decision = authorize(requested.name)
+            decision: Decision = await _value(
+                authorize(requested.name, requested.arguments)
+            )
             steps.append(
                 Step(
                     "policy.decision",
@@ -113,10 +126,12 @@ def run_agent(
                 )
                 return Trajectory(outcome, tuple(steps), usage)
 
-            output = execute(requested.name, requested.arguments)
+            output: str = await _value(
+                execute(requested.name, requested.arguments)
+            )
             steps.append(Step("tool.call", requested.name, tool=requested.name))
             try:
-                gated = gate(output, "output")
+                gated: str = await _value(gate(output, "output"))
             except dlp.DlpBlocked as exc:
                 steps.append(
                     Step("dlp.blocked", f"surface=output reason={exc.reason}", tool=requested.name)

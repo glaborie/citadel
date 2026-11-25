@@ -73,7 +73,7 @@ Expectation keys beyond the example above:
 
 `approval.decision.decision` is `approved` or `denied`; a `tool` field ties the decision to the call it authorises.
 
-Still missing: judge-scored rubrics and MLflow dataset/scorer logging. `model.call` and `retrieval.*` have no producer until those paths exist; this harness is deterministic only.
+Still missing: judge-scored rubrics and MLflow dataset/scorer logging. `retrieval.*` has no producer until the v0.2 retrieval path exists; `model.call` is produced by the runtime since ADR-024, and the harness remains deterministic only.
 
 ## Graders
 

@@ -7,7 +7,7 @@ from typing import Any
 
 from citadel.audit import AuditLedger
 from citadel.policy import RelationChecker, RunStore
-from citadel.workflows.activities import RunActivities, ToolActivities
+from citadel.workflows.activities import ModelActivities, RunActivities, ToolActivities
 from citadel.workflows.orchestrator import RunWorkflow
 from citadel.workflows.specialist import SpecialistWorkflow
 
@@ -32,7 +32,21 @@ def activities_for(
     audit = AuditLedger(dsn)
     if role == "orchestrator":
         run_activities = RunActivities(dsn=dsn, audit=audit)
-        return [run_activities.finish_run]
+        model_activities = ModelActivities(
+            dsn=dsn,
+            audit=audit,
+            gateway_url=os.environ.get("OMNIROUTE_URL", ""),
+            api_key=os.environ.get("OMNIROUTE_API_KEY", ""),
+            analyzer_url=os.environ.get("CITADEL_DLP_URL", "http://presidio:3000"),
+            default_alias=os.environ.get("MODEL_ALIAS_FAST", "auto/best-fast"),
+        )
+        return [
+            run_activities.finish_run,
+            model_activities.system_prompt,
+            model_activities.tools,
+            model_activities.complete,
+            model_activities.gate,
+        ]
     if checker is None or run_store is None:
         raise ValueError(f"{role} activities need a policy checker and run store")
     impl = ToolActivities(

@@ -6,6 +6,7 @@ the loop does with a reply, not what a provider decides to say.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Mapping
 from typing import Any
@@ -80,6 +81,11 @@ class _Checker:
 class _Runs:
     def exists(self, *, tenant_id: str, run_id: str) -> bool:
         return True
+
+
+def _run(**kwargs: Any) -> Any:
+    """The loop is async; the tests drive it to completion."""
+    return asyncio.run(run_agent(**kwargs))
 
 
 def decision_for(tool: str, *, allowed: bool = True) -> Any:
@@ -230,10 +236,10 @@ def test_an_allowed_tool_runs_once_and_the_run_completes() -> None:
             reply(text="three containers are healthy"),
         ]
     )
-    trajectory = run_agent(
+    trajectory = _run(
         complete=model.complete,
         messages=[{"role": "user", "content": "how are the containers?"}],
-        authorize=lambda tool: decision_for(tool),
+        authorize=lambda tool, args: decision_for(tool),
         execute=execute,
         gate=gate,
     )
@@ -253,10 +259,10 @@ def test_a_t1_tool_without_approval_is_refused_and_never_executes() -> None:
     model = ScriptedClient(
         [reply(tools=(RequestedTool("restart_service", {"service": "checkout-api"}, "c1"),))]
     )
-    trajectory = run_agent(
+    trajectory = _run(
         complete=model.complete,
         messages=[{"role": "user", "content": "restart checkout"}],
-        authorize=lambda tool: decision_for(tool),
+        authorize=lambda tool, args: decision_for(tool),
         execute=execute,
         gate=gate,
     )
@@ -268,10 +274,10 @@ def test_a_t1_tool_without_approval_is_refused_and_never_executes() -> None:
 
 def test_a_denied_tool_is_reported_as_a_policy_denial() -> None:
     model = ScriptedClient([reply(tools=(RequestedTool("inspect_containers", {}, "c1"),))])
-    trajectory = run_agent(
+    trajectory = _run(
         complete=model.complete,
         messages=[{"role": "user", "content": "list"}],
-        authorize=lambda tool: decision_for(tool, allowed=False),
+        authorize=lambda tool, args: decision_for(tool, allowed=False),
         execute=lambda name, arguments: "should not run",
         gate=gate,
     )
@@ -289,10 +295,10 @@ def test_poisoned_tool_output_is_blocked_before_it_becomes_context() -> None:
     model = ScriptedClient(
         [reply(tools=(RequestedTool("read_logs", {"service": "checkout"}, "c1"),))]
     )
-    trajectory = run_agent(
+    trajectory = _run(
         complete=model.complete,
         messages=[{"role": "user", "content": "check the logs"}],
-        authorize=lambda tool: decision_for(tool),
+        authorize=lambda tool, args: decision_for(tool),
         execute=execute,
         gate=gate,
     )
@@ -311,10 +317,10 @@ def test_the_token_budget_stops_a_model_that_keeps_calling_tools() -> None:
             for index in range(4)
         ]
     )
-    trajectory = run_agent(
+    trajectory = _run(
         complete=model.complete,
         messages=[{"role": "user", "content": "keep checking"}],
-        authorize=lambda tool: decision_for(tool),
+        authorize=lambda tool, args: decision_for(tool),
         execute=lambda name, arguments: "unchanged",
         gate=gate,
         budget=Budget(max_steps=4, max_tokens=5000, max_cost_usd=1.0),
@@ -333,10 +339,10 @@ def test_the_step_ceiling_stops_a_model_that_never_answers() -> None:
             for index in range(5)
         ]
     )
-    trajectory = run_agent(
+    trajectory = _run(
         complete=model.complete,
         messages=[{"role": "user", "content": "go"}],
-        authorize=lambda tool: decision_for(tool),
+        authorize=lambda tool, args: decision_for(tool),
         execute=lambda name, arguments: "unchanged",
         gate=gate,
         budget=Budget(max_steps=2, max_tokens=100000, max_cost_usd=None),

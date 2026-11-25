@@ -113,6 +113,74 @@ def test_an_agent_without_a_skill_pack_cannot_start_a_run(
     assert ledger.events == []
 
 
+def test_a_prompt_starts_the_workflow_and_never_lands_in_the_ledger(
+    client: tuple[TestClient, FakeLedger],
+    rsa_key: rsa.RSAPrivateKey,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    http, ledger = client
+    token = user_token(rsa_key, tenant="lab-a")
+    started: list[Any] = []
+
+    async def fake_start(item: Any) -> None:
+        started.append(item)
+
+    monkeypatch.setattr(api_app, "start_run", fake_start)
+    body = _body() | {"prompt": "which containers are running?"}
+
+    response = http.post("/runs", json=body, headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 201, response.text
+    assert len(started) == 1
+    assert started[0].prompt == "which containers are running?"
+    assert started[0].model_alias == "auto/best-fast"
+    assert started[0].run_id == response.json()["run_id"]
+    payload = ledger.events[0]["payload"]
+    assert payload["prompt_chars"] == len("which containers are running?")
+    assert len(payload["prompt_sha256"]) == 64
+    assert "which containers" not in str(payload)
+
+
+def test_a_workflow_that_does_not_start_is_not_reported_as_started(
+    client: tuple[TestClient, FakeLedger],
+    rsa_key: rsa.RSAPrivateKey,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    http, ledger = client
+    token = user_token(rsa_key, tenant="lab-a")
+
+    async def failing_start(item: Any) -> None:
+        raise RuntimeError("temporal is down")
+
+    monkeypatch.setattr(api_app, "start_run", failing_start)
+    body = _body() | {"prompt": "restart nothing"}
+
+    response = http.post("/runs", json=body, headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 503
+    assert "was recorded but its workflow did not start" in response.json()["detail"]
+    assert [event["event_type"] for event in ledger.events] == ["run.start", "run.end"]
+    assert ledger.events[1]["payload"]["safety_flags"] == ["workflow_not_started"]
+
+
+def test_a_run_without_a_prompt_is_recorded_only(
+    client: tuple[TestClient, FakeLedger],
+    rsa_key: rsa.RSAPrivateKey,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    http, _ledger = client
+    token = user_token(rsa_key, tenant="lab-a")
+
+    async def unexpected(item: Any) -> None:
+        raise AssertionError("a run without a prompt must not start a workflow")
+
+    monkeypatch.setattr(api_app, "start_run", unexpected)
+
+    response = http.post("/runs", json=_body(), headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 201, response.text
+
+
 def test_unpinned_provenance_is_rejected(
     client: tuple[TestClient, FakeLedger], rsa_key: rsa.RSAPrivateKey
 ) -> None:

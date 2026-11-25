@@ -18,6 +18,7 @@ Run it inside the compose network, where both services are reachable:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
@@ -31,11 +32,16 @@ from citadel.policy import Decision
 ALLOWED = "inspect_containers"
 
 
-def authorize_tool(tool: str) -> Decision:
+def authorize_tool(tool: str, arguments: Mapping[str, Any]) -> Decision:
     """Smoke-only: allow the read tool, deny everything else."""
     if tool == ALLOWED:
         return Decision(outcome="allow", rule_id="policy.allowed", reason="smoke", tier="T0")
     return Decision(outcome="deny", rule_id="tool.unknown", reason="smoke denies", tier="unknown")
+
+
+def _run(**kwargs: Any):
+    """The loop is async; the smoke test drives it to completion."""
+    return asyncio.run(run_agent(**kwargs))
 
 
 def main() -> int:
@@ -55,7 +61,7 @@ def main() -> int:
             text, surface=surface, analyzer_url=os.environ["CITADEL_DLP_URL"]
         )[0]
 
-    trajectory = run_agent(
+    trajectory = _run(
         complete=client.complete,
         messages=[
             {

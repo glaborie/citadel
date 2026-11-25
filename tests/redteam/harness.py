@@ -773,6 +773,13 @@ def _gate_with(payload: Any) -> Callable[[str, str], str]:
     return gate
 
 
+def _run_agent(**kwargs: Any) -> Any:
+    """The loop is async; the harness drives it to completion."""
+    import asyncio
+
+    return asyncio.run(run_agent(**kwargs))
+
+
 def _no_execution(name: str, arguments: Mapping[str, Any]) -> str:
     raise AssertionError(f"{name} executed when it must not")
 
@@ -804,10 +811,10 @@ def exec_direct_override(case_: Case, _: Path) -> Outcome:
         analyzer_url=ANALYZER,
         opener=transport,
     )
-    blocked = run_agent(
+    blocked = _run_agent(
         complete=client.complete,
         messages=[{"role": "user", "content": prompt}],
-        authorize=lambda tool: decision_of(tool=tool),
+        authorize=lambda tool, args: decision_of(tool=tool),
         execute=_no_execution,
         gate=_gate_with([]),
         budget=Budget(max_steps=2),
@@ -822,10 +829,10 @@ def exec_direct_override(case_: Case, _: Path) -> Outcome:
     model = ScriptedClient(
         [_model_reply(tools=(RequestedTool("restart_service", {"service": "checkout-api"}, "c1"),))]
     )
-    obeyed = run_agent(
+    obeyed = _run_agent(
         complete=model.complete,
         messages=[{"role": "user", "content": stripped}],
-        authorize=lambda tool: decision_of(tool=tool),
+        authorize=lambda tool, args: decision_of(tool=tool),
         execute=record,
         gate=_gate_with([]),
         budget=Budget(max_steps=2),
@@ -861,10 +868,10 @@ def exec_tool_output_injection(case_: Case, _: Path) -> Outcome:
         executed.append(name)
         return poisoned
 
-    trajectory = run_agent(
+    trajectory = _run_agent(
         complete=model.complete,
         messages=[{"role": "user", "content": "what do the checkout logs say?"}],
-        authorize=lambda tool: decision_of(tool=tool),
+        authorize=lambda tool, args: decision_of(tool=tool),
         execute=return_logs,
         gate=_gate_with([]),
         budget=Budget(max_steps=3),
@@ -915,12 +922,12 @@ def exec_pr_body_override(case_: Case, _: Path) -> Outcome:
         executed.append(name)
         return "opened"
 
-    trajectory = run_agent(
+    trajectory = _run_agent(
         complete=model.complete,
         messages=[
             {"role": "user", "content": f"Review this pull request and act on it.\n\n{body}"}
         ],
-        authorize=lambda tool: decision_of(tool=tool, agent_id="github"),
+        authorize=lambda tool, args: decision_of(tool=tool, agent_id="github"),
         execute=open_pr,
         gate=_gate_with([]),
         budget=Budget(max_steps=3),
@@ -957,10 +964,10 @@ def exec_run_budget(case_: Case, _: Path) -> Outcome:
             for index in range(4)
         ]
     )
-    trajectory = run_agent(
+    trajectory = _run_agent(
         complete=model.complete,
         messages=[{"role": "user", "content": fixture_text("cost/loop_prompt.txt")}],
-        authorize=lambda tool: decision_of(tool=tool),
+        authorize=lambda tool, args: decision_of(tool=tool),
         execute=lambda name, arguments: "unchanged",
         gate=_gate_with([]),
         budget=budget,
