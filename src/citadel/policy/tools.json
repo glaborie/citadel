@@ -116,6 +116,56 @@
       "agent": "github",
       "command": null,
       "params": []
+    },
+    "inspect_container": {
+      "tier": "T0",
+      "agent": "docker",
+      "command": "docker.inspect",
+      "args": [
+        "--format",
+        "{{.Name}} status={{.State.Status}} restarts={{.RestartCount}} image={{.Config.Image}}"
+      ],
+      "params": [
+        {
+          "name": "container",
+          "in": "positional",
+          "max_length": 64,
+          "required": true
+        }
+      ],
+      "note": "docker.inspect prints .Config.Env, which carries secrets by design. The catalog pins --format so the call returns status and image only; a caller cannot supply its own template. Output still passes DLP before it is served."
+    },
+    "compose_config": {
+      "tier": "T0",
+      "agent": "docker",
+      "command": "docker.compose.config",
+      "args": [
+        "--no-interpolate",
+        "--quiet"
+      ],
+      "params": [],
+      "note": "Without --no-interpolate this prints values resolved from .env. Pinned, so the tool returns the file as written: variable references instead of secrets. Anything committed in clear still passes DLP."
+    },
+    "pr_diff": {
+      "tier": "T0",
+      "agent": "github",
+      "command": "gh.pr.diff",
+      "params": [
+        {
+          "name": "repo",
+          "in": "flag",
+          "flag": "--repo",
+          "max_length": 128,
+          "required": true
+        },
+        {
+          "name": "number",
+          "in": "positional",
+          "max_length": 8,
+          "required": true
+        }
+      ],
+      "note": "Diffs routinely contain credentials, so output is gated: a hard-rule hit blocks the result rather than redacting it, because a redacted diff is not the change under review."
     }
   }
 }

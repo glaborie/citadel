@@ -58,7 +58,9 @@ def build_argv(
         raise CommandDenied(f"unexpected arguments for {tool}: {sorted(unexpected)}")
 
     resolved = _resolve(arguments)
-    tokens: list[str] = []
+    # Pinned arguments first: the catalog decides what the command is allowed to
+    # disclose, and the caller's parameters are appended after them.
+    tokens: list[str] = list(spec.args)
     for param in spec.params:
         value = resolved.get(param.name)
         if value is None:
