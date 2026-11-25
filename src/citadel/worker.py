@@ -11,6 +11,7 @@ import asyncio
 import os
 import signal
 import sys
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -26,7 +27,7 @@ from citadel.runs import PostgresRunStore
 from citadel.workflows import activities_for, namespace, temporal_address, workflows_for
 from citadel.workflows.types import TASK_QUEUES
 
-HEARTBEAT = Path("/tmp/citadel-heartbeat")
+HEARTBEAT = Path(tempfile.gettempdir()) / "citadel-heartbeat"
 HEARTBEAT_INTERVAL = 5
 MAX_WORKERS = 8
 
