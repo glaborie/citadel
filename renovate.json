@@ -1,0 +1,23 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+
+  // Group non-major updates into a single PR to reduce noise
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "non-major dependencies",
+      "automerge": true
+    }
+  ],
+
+  // Weekly refresh of transitive dependencies in uv.lock
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 5am on monday"]
+  },
+
+  // Respect uv's cooldown if you use `exclude-newer`
+  // This example assumes a 1-week cooldown for PyPI packages
+  "minimumReleaseAge": "7 days"
+}
