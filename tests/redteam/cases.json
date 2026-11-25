@@ -346,7 +346,7 @@
         "presidio_ch_recognizers"
       ],
       "milestone": "v0.1",
-      "known_gap": "PERSON and ADDRESS are not recognisers in v0.1 (TODO.md); structured Swiss identifiers are"
+      "known_gap": "ADDRESS is not a recogniser in v0.1; PERSON is filtered against technical nouns, so a name colliding with one is not redacted"
     },
     {
       "id": "RT-DLP-03",

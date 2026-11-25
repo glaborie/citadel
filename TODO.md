@@ -2,11 +2,6 @@
 
 Open work. Done items get deleted, not ticked.
 
-- [ ] Names are not redacted. Presidio scores `docker` at 0.85, the same as
-      `Alice Smith`, so `PERSON` was dropped from `PII_ENTITIES` in step 7.
-      Decide between accepting the gap or adding a recognizer that separates
-      names from technical nouns.
-
 - [ ] Console sessions have no refresh. The session cookie and the Keycloak
       access token both last 300 s, so a review longer than five minutes ends
       in a re-login (silent through the SSO session, but the form is lost).
