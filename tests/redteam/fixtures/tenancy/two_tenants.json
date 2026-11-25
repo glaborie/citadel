@@ -1,0 +1,18 @@
+{
+  "description": "Two tenants with identically worded documents; a cross-tenant hit is a leak.",
+  "tenants": {
+    "lab-a": {
+      "user": "alice",
+      "documents": [
+        {"id": "doc-a-runbook", "source": "runbooks/checkout-api.md", "text": "Restart checkout-api with the operator console."}
+      ]
+    },
+    "lab-b": {
+      "user": "bob",
+      "documents": [
+        {"id": "doc-b-runbook", "source": "runbooks/checkout-api.md", "text": "Restart checkout-api with the operator console."}
+      ]
+    }
+  },
+  "expected": {"tenant": "lab-a", "visible_document_ids": ["doc-a-runbook"], "forbidden": ["doc-b-runbook"]}
+}

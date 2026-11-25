@@ -1,0 +1,9 @@
+{
+  "description": "A human approves restarting checkout-api; the caller substitutes billing-worker.",
+  "tool": "restart_service",
+  "approved_arguments": {"service": "checkout-api"},
+  "executed_arguments": {"service": "billing-worker"},
+  "approver": "carol",
+  "requester": "alice",
+  "expected": {"outcome": "deny", "reason": "approval does not match these arguments"}
+}
