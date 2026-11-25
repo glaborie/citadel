@@ -27,9 +27,11 @@ Open work. Done items get deleted, not ticked.
       the run means running the tool again. Offload to object storage keyed by
       that digest before diffs and logs are expected to be reviewed.
 
-- [ ] Judge-scored rubrics are absent. Only deterministic hard assertions run;
-      `mlflow.genai.evaluate()` and the built-in groundedness/safety scorers
-      belong with the v0.2 eval suite.
+- [ ] The judge is built and uncalibrated. `--judge` scores four dimensions and
+      every one ships report-only because no kappa has been measured: the 30-item
+      stratified sample and two raters from docs/evals/judge-calibration.md have
+      not been run. Until then the judge may report and may not gate, and the
+      gating flag stays false in the catalogue.
 
 - [ ] MLflow human-path auth. The UI is internal-only and unpublished, so no
       browser path exists yet. If it is exposed, add the Keycloak OAuth2 proxy
