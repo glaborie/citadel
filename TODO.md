@@ -2,12 +2,6 @@
 
 Open work. Done items get deleted, not ticked.
 
-- [ ] `POST /runs` creates a row and never submits the workflow. The loop runs in
-      `RunWorkflow`, and nothing outside the tests starts it: the API has no
-      Temporal client, so a created run stays at `status = 'created'` until
-      something else picks it up. Add the client and submit on create, with the
-      pack version and model alias the request already carries.
-
 - [ ] Console sessions have no refresh. The session cookie and the Keycloak
       access token both last 300 s, so a review longer than five minutes ends
       in a re-login (silent through the SSO session, but the form is lost).

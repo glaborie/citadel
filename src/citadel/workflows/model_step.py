@@ -9,6 +9,8 @@ when the gateway refuses to report one.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -100,12 +102,25 @@ class ModelActivities:
         return None
 
     def _record(self, request: ModelStepRequest, payload: dict[str, Any]) -> Any:
+        # The trajectory schema requires the provenance fields on every
+        # `model.call`, refusals included: a run that spent nothing still has to
+        # say which prompt was attempted. Call sites override what they know.
+        body: dict[str, Any] = {
+            "alias": request.model_alias or DEFAULT_ALIAS,
+            "provider": "omniroute",
+            "tokens": 0,
+            "cost": None,
+            "latency": 0,
+            "input_hash": _hash({"task": request.task, "history": request.history}),
+            "output_hash": "",
+            **payload,
+        }
         return self._audit.append(
             tenant_id=request.tenant_id,
             event_type="model.call",
             actor_type="agent",
             actor_id=request.agent_id,
-            payload={"run_id": request.run_id, **payload},
+            payload={"run_id": request.run_id, **body},
         )
 
     def _refuse(
@@ -149,8 +164,9 @@ class ModelActivities:
 
         alias = request.model_alias or DEFAULT_ALIAS
         client = self._client_factory(alias)
+        messages = _messages(request, prompt.system)
         try:
-            reply = client.complete(messages=_messages(request, prompt.system), tools=prompt.tools)
+            reply = client.complete(messages=messages, tools=prompt.tools)
         except ModelUnavailable as exc:
             return self._refuse(
                 request,
@@ -186,6 +202,19 @@ class ModelActivities:
             {
                 "status": "tool_requested" if tool is not None else "answered",
                 "model": reply.model,
+                "input_hash": _hash(messages),
+                "output_hash": _hash(
+                    {
+                        "content": reply.content,
+                        "tools": [
+                            {"name": call.name, "arguments": call.arguments}
+                            for call in reply.tools
+                        ],
+                    }
+                ),
+                "tokens": reply.usage.total,
+                "cost": reply.usage.cost_usd,
+                "latency": reply.latency_ms,
                 "prompt_pack": prompt.pack_id,
                 "prompt_digest": prompt.digest,
                 "prompt_tokens": reply.usage.prompt_tokens,
@@ -224,6 +253,11 @@ class ModelActivities:
         )
 
 
+def _hash(value: Any) -> str:
+    canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    return f"sha256:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
+
+
 def assistant_turn(reply: ModelStepResult) -> dict[str, Any]:
     """The reply as a message, so a later step can see what it said.
 
@@ -239,5 +273,14 @@ def assistant_turn(reply: ModelStepResult) -> dict[str, Any]:
 
 
 def tool_turn(result: Mapping[str, Any]) -> dict[str, Any]:
-    """Whatever came back from a delegated tool call, bounded and named."""
-    return {"role": "tool", "content": str(result.get("detail", ""))[:2_000]}
+    """Whatever came back from a delegated tool call, bounded and named.
+
+    `role: "user"`, not `role: "tool"`: the assistant turn above is prose, so
+    there is no `tool_call_id` for a provider to match, and an OpenAI-compatible
+    endpoint rejects an orphan tool message with a 400 - which the gateway
+    surfaces as a 502. The label keeps the provenance visible to the model.
+    """
+    return {
+        "role": "user",
+        "content": f"[tool result] {str(result.get('detail', ''))[:2_000]}",
+    }

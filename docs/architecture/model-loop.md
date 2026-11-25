@@ -67,6 +67,14 @@ totals. Steps are counted, tokens and cost are measured — the difference matte
 because a model that never answers is a cost problem even when every individual
 call is cheap.
 
+## Who starts a run
+
+`POST /runs` submits `RunWorkflow` when the request carries a `task`, with the run
+id as the workflow id, so a duplicate submit is a duplicate rather than a second
+execution. The task text stays out of the ledger - `run.start` records its SHA-256
+and length - and a submit that fails is answered 503 and closed with
+`workflow_not_started` rather than reported as created.
+
 ## In the workflow
 
 `run_agent` is the loop as a library. The workflow uses the same pieces through

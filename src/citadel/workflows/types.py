@@ -81,3 +81,6 @@ class RunEnd:
     outcome: str
     citation_ids: list[str] = field(default_factory=list)
     safety_flags: list[str] = field(default_factory=list)
+    # The model's gated answer, bounded. A submitted run has no other surface a
+    # person can read, and `run.end` is already the event they look at.
+    answer: str = ""

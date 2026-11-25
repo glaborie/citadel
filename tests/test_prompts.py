@@ -38,7 +38,7 @@ def test_the_prompt_carries_the_pack_text_and_the_task() -> None:
 
     assert pack.index in prompt.system
     assert prompt.task == "why is checkout-api restarting?"
-    assert prompt.pack_id == f"{pack.name}@{pack.version}"
+    assert prompt.pack_id == pack.name == "docker-1.0.0"
     messages = prompt.messages()
     assert [message["role"] for message in messages] == ["system", "user"]
     assert messages[1]["content"] == prompt.task

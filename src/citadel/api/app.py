@@ -8,6 +8,7 @@ provider all fail closed.
 # No `from __future__ import annotations`: FastAPI must see the real Depends
 # objects, and the dependency is a closure over create_app's arguments.
 import asyncio
+import hashlib
 import json
 import os
 import uuid
@@ -29,9 +30,9 @@ from citadel.policy import AuthorizationRequest, RelationChecker, authorize
 from citadel.policy.openfga import build_checker
 from citadel.runs import PostgresRunStore
 from citadel.skills import SkillPack, SkillPackError, SkillPackMissing, load_pack
-from citadel.workflows.orchestrator import child_workflow_id
+from citadel.workflows.orchestrator import RunWorkflow, child_workflow_id
 from citadel.workflows.specialist import SpecialistWorkflow
-from citadel.workflows.types import APPROVAL_TTL, ApprovalDecision
+from citadel.workflows.types import APPROVAL_TTL, ApprovalDecision, RunInput
 
 DLP_URL = os.environ.get("CITADEL_DLP_URL", "http://presidio:3000")
 
@@ -66,6 +67,30 @@ class RunRequest(BaseModel):
     # reproducible, so the caller has to name them.
     prompt_pack_version: str = Field(min_length=1)
     model_alias: str = Field(min_length=1)
+    # A task turns the run into a model-driven one and starts its workflow. No
+    # task means the API only records the run, which is what the tenancy and
+    # policy tests rely on.
+    task: str = Field(default="", max_length=8000)
+
+
+async def start_run(item: RunInput) -> None:
+    """Submit the orchestrator workflow for a created run.
+
+    The run id is the workflow id, so a second submit for the same run is a
+    duplicate rather than a second execution.
+    """
+    from temporalio.client import Client as TemporalClient
+
+    client = await TemporalClient.connect(
+        os.environ.get("TEMPORAL_ADDRESS", "temporal:7233"),
+        namespace=os.environ.get("TEMPORAL_NAMESPACE", "default"),
+    )
+    await client.start_workflow(
+        RunWorkflow.run,
+        item,
+        id=f"run-{item.run_id}",
+        task_queue="orchestrator",
+    )
 
 
 def _verifier_from_env() -> KeycloakVerifier:
@@ -134,7 +159,7 @@ def create_app(
             raise HTTPException(status_code=503, detail=f"skill pack unusable: {exc}") from exc
 
     @app.post("/runs", status_code=201)
-    def create_run(
+    async def create_run(
         body: RunRequest, principal: Annotated[Principal, Depends(current_principal)]
     ) -> dict[str, Any]:
         # Provenance is only reproducible if it names content this deployment
@@ -178,6 +203,12 @@ def create_app(
                 "prompt_pack_version": body.prompt_pack_version,
                 "model_alias": body.model_alias,
                 "risk_tier": body.risk_tier,
+                # The task itself stays out of the ledger; the hash proves which
+                # text ran without storing it.
+                "task_sha256": hashlib.sha256(body.task.encode()).hexdigest()
+                if body.task
+                else "",
+                "task_chars": len(body.task),
             },
         )
         telemetry.record_span(
@@ -190,6 +221,45 @@ def create_app(
             prompt_pack_version=body.prompt_pack_version,
             model_alias=body.model_alias,
         )
+        if body.task:
+            try:
+                await start_run(
+                    RunInput(
+                        run_id=run_id,
+                        tenant_id=principal.tenant_id,
+                        user_id=principal.user_id,
+                        agent_id=body.agent_id,
+                        tool="",
+                        task=body.task,
+                        model_alias=body.model_alias,
+                        prompt_pack_version=body.prompt_pack_version,
+                    )
+                )
+            except Exception as exc:
+                # The row and the run.start audit exist, so say what happened:
+                # recorded, not started. A 201 here would be a lie.
+                with tenant_connection(_dsn(), principal.tenant_id) as conn:
+                    conn.execute("UPDATE runs SET status = 'failed' WHERE id = %s", (run_id,))
+                AuditLedger(_dsn()).append(
+                    tenant_id=principal.tenant_id,
+                    event_type="run.end",
+                    actor_type="user",
+                    actor_id=principal.user_id,
+                    payload={
+                        "run_id": run_id,
+                        "outcome": "failed",
+                        "citation_ids": [],
+                        "safety_flags": ["workflow_not_started"],
+                    },
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        f"run {run_id} was recorded but its workflow did not start:"
+                        f" {str(exc)[:200]}"
+                    ),
+                ) from exc
+
         return {"run_id": context.run_id, "tenant_id": context.tenant_id, "run_token": token}
 
     @app.get("/runs")

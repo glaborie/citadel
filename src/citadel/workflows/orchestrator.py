@@ -73,6 +73,7 @@ class RunWorkflow:
                 tenant_id=item.tenant_id,
                 outcome=_outcome(result),
                 safety_flags=_safety_flags(result),
+                answer=str(result.output.get("answer", ""))[:4000],
             ),
             start_to_close_timeout=timedelta(seconds=30),
             retry_policy=RetryPolicy(maximum_attempts=3),
@@ -183,11 +184,19 @@ class RunWorkflow:
                 task_queue=queue,
             )
 
+            # The model needs the observation, not the rule that produced it.
+            # Without the tool's own output the next step can only ask again,
+            # and a repeated call replays on its idempotency key.
+            observation = (
+                tool_result.output.get("stdout")
+                or tool_result.output.get("stderr")
+                or tool_result.detail
+            )
             history.append(assistant_turn(step))
             history.append(
                 tool_turn(
                     {
-                        "detail": f"{tool_result.rule_id}: {tool_result.detail}",
+                        "detail": f"{tool_result.rule_id}: {observation}",
                         "status": tool_result.status,
                     }
                 )
