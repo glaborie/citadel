@@ -63,7 +63,7 @@ All were resolved during v0.1 except the last; each has a recorded measurement i
    redacted data leaving the box — still open, and a v0.2 question.
 
 The v0.1 exit review is `docs/exit-review-v0.1.md`. Open work, including the one
-scope delta it records, is `TODO.md`.
+scope delta it records, is the issue tracker.
 
 ## Style
 

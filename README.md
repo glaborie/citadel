@@ -4,7 +4,7 @@
 
 Citadel is a clean-slate Python + Docker Compose stack that runs a small fleet of specialised agents (Docker, GitHub, Researcher) against a real homelab. It treats identity, tenancy, authorisation, sandboxing, DLP, audit and evaluation as first-class runtime properties rather than middleware added at the end. It is a portfolio piece aimed at senior AI-engineering roles and is deliberately usable outside the demo.
 
-**Status: v0.1 complete, with its exit review in `docs/exit-review-v0.1.md`.** Identity, policy, orchestration, sandboxing, the write path, DLP, the approval console, hash-pinned skill packs, the model loop inside the orchestrator workflow and the API that submits it are built and verified on a live host. A task posted to `POST /runs` now runs the whole chain: pack plus tool manifest as the system prompt, a model call, the requested tool through the policy chokepoint and DLP gates, and the answer on `run.end`. Four of the five exit criteria are met as written, and the fifth cannot be (a clean clone carries no secrets by design). See `TODO.md` for open work and `docs/implementation-notes/v0.1-verification.md` for what was executed, on which host, and what it printed.
+**Status: v0.1 complete, with its exit review in `docs/exit-review-v0.1.md`.** Identity, policy, orchestration, sandboxing, the write path, DLP, the approval console, hash-pinned skill packs, the model loop inside the orchestrator workflow and the API that submits it are built and verified on a live host. A task posted to `POST /runs` now runs the whole chain: pack plus tool manifest as the system prompt, a model call, the requested tool through the policy chokepoint and DLP gates, and the answer on `run.end`. Four of the five exit criteria are met as written, and the fifth cannot be (a clean clone carries no secrets by design). See the [open issues](https://github.com/glaborie/citadel/issues) for known work and `docs/implementation-notes/v0.1-verification.md` for what was executed, on which host, and what it printed.
 
 ## What demonstrates what
 
@@ -100,7 +100,6 @@ No local GPU inference. No multi-tenant SaaS control plane. No fine-grained bill
 ```
 README.md
 AGENTS.md                     # handover spec for the implementing agent
-TODO.md                       # open work, next item first
 docs/architecture.md          # components, lifecycle, threat model
 docs/milestones.md            # scope and exit criteria
 docs/implementation-notes/    # what was executed and what it printed

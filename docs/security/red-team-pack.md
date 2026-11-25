@@ -181,10 +181,9 @@ actually executed. A pending case is labelled pending in it, on purpose.
 
 The report is generated, never hand-written: a table of case, verdict, control,
 evidence event and elapsed time, plus a headline line in the form `<n> of 28
-blocked, <m> known gaps, both documented in TODO.md`. Only the generator writes
+executed, <m> pending, <k> known gaps`, each gap naming an open issue. Only the generator writes
 those numbers. A pack that reports 100% on its first run is either trivial or
-lying, which is why `RT-DLP-02` ships with `known_gap` until its TODO item
-closes.
+lying, which is why `RT-DLP-02` shipped with `known_gap` until its issue closed.
 
 ## Rules for adding a case
 
