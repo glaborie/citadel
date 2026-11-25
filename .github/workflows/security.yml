@@ -27,10 +27,14 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: "3.12"
           enable-cache: true
+          # Optional but recommended: tie cache invalidation to your dependency files
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
       - run: uv sync --frozen
       - name: Run Bandit
         # adjust `src` if your package layout differs
@@ -47,10 +51,14 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          enable-cache: true
+      - uses: astral-sh/setup-uv@v6
+              with:
+                python-version: "3.12"
+                enable-cache: true
+                # Optional but recommended: tie cache invalidation to your dependency files
+                cache-dependency-glob: |
+                  pyproject.toml
+                  uv.lock
       - run: uv sync --frozen
       - name: Run Semgrep
         run: |
@@ -79,7 +87,7 @@ jobs:
         with:
           languages: python
           queries: security-extended
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
@@ -94,7 +102,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
