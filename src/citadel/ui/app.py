@@ -44,6 +44,15 @@ COOKIE = "citadel_console"
 LOGIN_COOKIE = "citadel_login"
 SESSION_TTL = 300  # seconds; matches the realm access-token lifespan
 READ_ROLES = {"operator", "approver", "viewer", "admin", "auditor"}
+RUN_COLUMNS = {
+    "id": "id",
+    "user": "user_id",
+    "agent": "agent_id",
+    "tier": "risk_tier",
+    "status": "status",
+    "created": "created_at",
+}
+AUDIT_COLUMNS = {"seq": "seq", "event": "event_type", "actor": "actor_id", "at": "created_at"}
 
 STYLE = """
 body{font:14px/1.5 system-ui,sans-serif;margin:2rem;color:#111}
@@ -54,6 +63,9 @@ pre{background:#f6f6f6;padding:.75rem;overflow:auto}
 .error{color:#a00}
 form.decide{display:grid;gap:.5rem;max-width:32rem;margin-top:1rem}
 textarea{min-height:5rem}
+th a{color:#06c;text-decoration:none;white-space:nowrap}
+tr.filters th{padding-top:0}
+tr.filters input{width:100%;box-sizing:border-box}
 """
 
 
@@ -84,10 +96,37 @@ def _page(
     )
 
 
+def _tbody(rows: list[list[str]]) -> str:
+    return "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>" for row in rows)
+
+
 def _table(headers: tuple[str, ...], rows: list[list[str]]) -> str:
     head = "".join(f"<th>{_esc(item)}</th>" for item in headers)
-    body = "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>" for row in rows)
-    return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+    return f"<table><thead><tr>{head}</tr></thead><tbody>{_tbody(rows)}</tbody></table>"
+
+
+def _order(columns: dict[str, str], sort: str, direction: str, default: str) -> str:
+    """Only a whitelisted column reaches SQL; an unknown sort falls back."""
+    column = columns.get(sort, columns[default])
+    return f"{column} {'DESC' if direction == 'desc' else 'ASC'}"
+
+
+def _sort_header(
+    label: str, key: str, sort: str, direction: str, filters: dict[str, str]
+) -> str:
+    marker = ""
+    if key == sort:
+        marker = " ▲" if direction == "asc" else " ▼"
+    next_direction = "desc" if key == sort and direction == "asc" else "asc"
+    query = urllib.parse.urlencode({**filters, "sort": key, "dir": next_direction})
+    return f'<th><a href="?{query}">{_esc(label)}{marker}</a></th>'
+
+
+def _filter(name: str, value: str, placeholder: str = "") -> str:
+    return (
+        f'<th><input name="{_esc(name)}" value="{_esc(value)}"'
+        f' placeholder="{_esc(placeholder)}"></th>'
+    )
 
 
 def _challenge(verifier: str) -> str:
@@ -328,26 +367,75 @@ def create_app(
         return response
 
     @app.get("/runs")
-    def runs(request: Request) -> Response:
+    def runs(  # noqa: PLR0913 - one query parameter per column
+        request: Request,
+        sort: str = "created",
+        dir: str = "desc",
+        run: str = "",
+        user: str = "",
+        agent: str = "",
+        tier: str = "",
+        status: str = "",
+    ) -> Response:
         _, principal = _require(request)
+        filters = {"run": run, "user": user, "agent": agent, "tier": tier, "status": status}
+        clauses = (
+            "(%s = '' OR id::text ILIKE %s)",
+            "(%s = '' OR user_id ILIKE %s)",
+            "(%s = '' OR agent_id ILIKE %s)",
+            "(%s = '' OR risk_tier ILIKE %s)",
+            "(%s = '' OR status ILIKE %s)",
+        )
+        params: list[Any] = []
+        for value in filters.values():
+            params.extend([value, f"%{value}%"])
+        order = _order(RUN_COLUMNS, sort, dir, "created")
         with tenant_connection(_dsn(), principal.tenant_id) as conn:
             rows = conn.execute(
                 "SELECT id, user_id, agent_id, risk_tier, status, created_at"
-                " FROM runs ORDER BY created_at DESC LIMIT 100"
+                " FROM runs WHERE " + " AND ".join(clauses) + f" ORDER BY {order} LIMIT 100",
+                tuple(params),
             ).fetchall()
-        body = "<h1>Runs</h1>" + _table(
-            ("Run", "User", "Agent", "Tier", "Status", "Created"),
-            [
+        headers = "".join(
+            _sort_header(label, key, sort, dir, filters)
+            for label, key in (
+                ("Run", "id"),
+                ("User", "user"),
+                ("Agent", "agent"),
+                ("Tier", "tier"),
+                ("Status", "status"),
+                ("Created", "created"),
+            )
+        )
+        inputs = (
+            _filter("run", run, "id")
+            + _filter("user", user)
+            + _filter("agent", agent)
+            + _filter("tier", tier)
+            + _filter("status", status)
+            + "<th><button>Filter</button></th>"
+        )
+        body = (
+            "<h1>Runs</h1>"
+            '<form method="get" action="/runs">'
+            f'<input type="hidden" name="sort" value="{_esc(sort)}">'
+            f'<input type="hidden" name="dir" value="{_esc(dir)}">'
+            f'<table><thead><tr>{headers}</tr><tr class="filters">{inputs}</tr></thead>'
+            "<tbody>"
+            + _tbody(
                 [
-                    f'<a href="/runs/{_esc(row[0])}">{_esc(str(row[0])[:8])}</a>',
-                    _esc(row[1]),
-                    _esc(row[2]),
-                    _esc(row[3]),
-                    _esc(row[4]),
-                    _esc(row[5]),
+                    [
+                        f'<a href="/runs/{_esc(row[0])}">{_esc(str(row[0])[:8])}</a>',
+                        _esc(row[1]),
+                        _esc(row[2]),
+                        _esc(row[3]),
+                        _esc(row[4]),
+                        _esc(row[5]),
+                    ]
+                    for row in rows
                 ]
-                for row in rows
-            ],
+            )
+            + "</tbody></table></form>"
         )
         return _page("Runs", body, principal)
 
@@ -515,27 +603,51 @@ def create_app(
         return RedirectResponse("/approvals", status_code=303)
 
     @app.get("/audit")
-    def audit(request: Request, event_type: str = "", q: str = "") -> Response:
+    def audit(
+        request: Request,
+        sort: str = "seq",
+        dir: str = "desc",
+        event_type: str = "",
+        actor: str = "",
+        q: str = "",
+    ) -> Response:
         _, principal = _require(request)
         event_type = event_type.strip()
+        actor = actor.strip()
         q = q.strip()
+        filters = {"event_type": event_type, "actor": actor, "q": q}
+        order = _order(AUDIT_COLUMNS, sort, dir, "seq")
         with tenant_connection(_dsn(), principal.tenant_id) as conn:
             rows = conn.execute(
                 "SELECT seq, event_type, actor_type, actor_id, payload, created_at"
                 " FROM audit_events"
                 " WHERE (%s = '' OR event_type = %s)"
+                " AND (%s = '' OR actor_id ILIKE %s)"
                 " AND (%s = '' OR payload::text ILIKE %s)"
-                " ORDER BY seq DESC LIMIT 100",
-                (event_type, event_type, q, f"%{q}%"),
+                f" ORDER BY {order} LIMIT 100",
+                (event_type, event_type, actor, f"%{actor}%", q, f"%{q}%"),
             ).fetchall()
+        headers = (
+            _sort_header("Seq", "seq", sort, dir, filters)
+            + _sort_header("Event", "event", sort, dir, filters)
+            + _sort_header("Actor", "actor", sort, dir, filters)
+            + "<th>Payload</th>"
+            + _sort_header("At", "at", sort, dir, filters)
+        )
+        inputs = (
+            _filter("event_type", event_type)
+            + _filter("actor", actor)
+            + _filter("q", q, "payload contains")
+            + "<th></th><th><button>Filter</button></th>"
+        )
         body = (
             "<h1>Audit</h1>"
             '<form method="get" action="/audit">'
-            f'<input name="event_type" placeholder="event type" value="{_esc(event_type)}">'
-            f'<input name="q" placeholder="payload contains" value="{_esc(q)}">'
-            "<button>Search</button></form>"
-            + _table(
-                ("Seq", "Event", "Actor", "Payload", "At"),
+            f'<input type="hidden" name="sort" value="{_esc(sort)}">'
+            f'<input type="hidden" name="dir" value="{_esc(dir)}">'
+            f'<table><thead><tr>{headers}</tr><tr class="filters">{inputs}</tr></thead>'
+            "<tbody>"
+            + _tbody(
                 [
                     [
                         _esc(row[0]),
@@ -545,8 +657,9 @@ def create_app(
                         _esc(row[5]),
                     ]
                     for row in rows
-                ],
+                ]
             )
+            + "</tbody></table></form>"
         )
         return _page("Audit", body, principal)
 
