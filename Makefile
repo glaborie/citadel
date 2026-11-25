@@ -1,9 +1,15 @@
+.DEFAULT_GOAL := help
+
+.PHONY: help
+help:  ## List the targets and what they do
+	@grep -hE '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sort | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
+
 # Targets that need secrets unwrap secrets/citadel.env through sops, so no
 # plaintext copy is written to disk. Accepted trade-off for now: the values
 # exist in the compose process environment (see the SOPS decision note).
 .PHONY: up
 
-up:
+up:  ## Start the stack, unwrapping secrets through sops
 	sops exec-env secrets/citadel.env 'docker compose up -d'
 
 # OpenFGA CLI pinned by digest; only needed to regenerate the model JSON.
@@ -13,18 +19,18 @@ POLICY_CLI = openfga/cli:latest@sha256:7a7f9fb0a27a788a0fa7907eb5fc751c3134ca077
 
 # model.fga is the source of truth; model.json is the generated artifact the
 # container loads, so the api image never needs the OpenFGA CLI.
-policy-model:
+policy-model:  ## Regenerate policy/model.json from model.fga
 	docker run --rm -v "$(PWD)/policy:/w" -w /w $(POLICY_CLI) \
 		model transform --file=model.fga --output-format=json > policy/model.json
 
-policy-bootstrap:
+policy-bootstrap:  ## Load the OpenFGA model and seed relations
 	docker compose exec -T api python -m citadel.policy.bootstrap
 
 .PHONY: migrate
 
 # Migrations are applied by the postgres init scripts on a fresh volume; this
 # target re-applies them to an existing database. Statements are idempotent.
-migrate:
+migrate:  ## Re-apply migrations/*.sql to an existing database
 	set -a; . ./.env; set +a; \
 	for f in migrations/*.sql; do \
 		echo "applying $$f"; \
@@ -34,30 +40,30 @@ migrate:
 .PHONY: eval
 
 # Deterministic grading of the committed trajectory fixtures.
-eval:
+eval:  ## Grade the committed trajectory fixtures
 	uv run python -m citadel.evals
 
 .PHONY: mlflow-bootstrap
 
 # One-time per fresh MLflow volume: create the traces experiment the OTLP
 # exporter names via MLFLOW_EXPERIMENT_ID.
-mlflow-bootstrap:
+mlflow-bootstrap:  ## Create the MLflow traces experiment on a fresh volume
 	docker compose exec -T api python -m citadel.mlflow_bootstrap
 
 # Red-team pack: manifest lint always, case execution once fixtures exist.
 # Uses the project venv explicitly so it does not depend on an activated shell.
 .PHONY: redteam
-redteam:
+redteam:  ## Run the red-team pack: manifest plus executed cases
 	.venv/bin/python -m pytest -m redteam -v
 
 # Red-team report: regenerates docs/evals/red-team-report.md from a real run.
 .PHONY: redteam-report
-redteam-report:
+redteam-report:  ## Regenerate docs/evals/red-team-report.md
 	CITADEL_REDTEAM_REPORT=1 .venv/bin/python -m pytest -m redteam -q
 
 # Live cases: needs the compose stack up (make up) and its .env readable.
 .PHONY: redteam-live
-redteam-live:
+redteam-live:  ## Run the live red-team cases (stack must be up)
 	CITADEL_LIVE=1 .venv/bin/python -m pytest -m live -v
 
 # One real completion through the gateway. Runs inside the compose network,
