@@ -13,12 +13,13 @@ import json
 import os
 import time
 import urllib.error
+from dataclasses import dataclass
 from typing import Any
 from urllib.request import Request
 
 from temporalio import activity
 
-from citadel import dlp
+from citadel import dlp, tool_outputs
 from citadel.approval_requests import record_request
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
@@ -37,14 +38,25 @@ DLP_URL = os.environ.get("CITADEL_DLP_URL", "http://presidio:3000")
 EVENT_OUTPUT_LIMIT = int(os.environ.get("CITADEL_EVENT_OUTPUT_MAX_BYTES", DEFAULT_EVENT_LIMIT))
 
 
-def bounded_payload(payload: dict[str, Any]) -> dict[str, Any]:
+@dataclass(frozen=True)
+class Bounded:
+    """What the record carries, and what the cap pushed out of it."""
+
+    payload: dict[str, Any]
+    dropped: dict[str, str]
+
+
+def bounded_payload(payload: dict[str, Any]) -> Bounded:
     """Cap the streams that ride in the activity result, keeping their digests.
 
     The digest of the whole stream stays behind, so the cap is visible in the
-    record instead of being implied by an absence of bytes.
+    record instead of being implied by an absence of bytes - and the text that did
+    not fit is returned as `dropped`, so the caller can keep it somewhere a
+    reviewer can reach.
     """
     capped = dict(payload)
-    digest_of: list[str] = []
+    digests: dict[str, str] = {}
+    dropped: dict[str, str] = {}
     original_bytes = 0
     truncated = False
     for stream in ("stdout", "stderr"):
@@ -53,13 +65,46 @@ def bounded_payload(payload: dict[str, Any]) -> dict[str, Any]:
             continue
         bounded = bound(text, limit=EVENT_OUTPUT_LIMIT)
         capped[stream] = bounded.text
-        digest_of.append(bounded.sha256)
+        digests[stream] = bounded.sha256
         original_bytes += bounded.original_bytes
         truncated = truncated or bounded.truncated
-    capped["output_sha256"] = digest_of[0] if digest_of else ""
+        if bounded.text != text:
+            dropped[stream] = text
+    capped["output_sha256"] = digests.get("stdout", "")
+    capped["stream_sha256"] = digests
     capped["original_bytes"] = original_bytes
     capped["truncated"] = truncated or bool(payload.get("truncated", False))
-    return capped
+    return Bounded(payload=capped, dropped=dropped)
+
+
+def cap_and_offload(
+    dsn: str, call: ToolCall, payload: dict[str, Any]
+) -> tuple[dict[str, Any], str, bool]:
+    """Cap for the record, keep the rest by digest, and say which happened.
+
+    Returns the payload that enters history, the digest of the primary stream, and
+    whether anything was stored. A tool whose output fits changes nothing.
+    """
+    bounded = bounded_payload(payload)
+    if not bounded.dropped:
+        return bounded.payload, "", False
+
+    offloaded: dict[str, Any] = {}
+    with tenant_connection(dsn, call.tenant_id) as conn:
+        for stream, text in bounded.dropped.items():
+            kept = tool_outputs.store(
+                conn,
+                tenant_id=call.tenant_id,
+                run_id=call.run_id,
+                tool=call.tool,
+                stream=stream,
+                text=text,
+            )
+            offloaded[stream] = {"digest": kept.digest, "bytes": kept.bytes, "stored": kept.stored}
+    bounded.payload["offloaded"] = offloaded
+    primary = offloaded.get("stdout") or next(iter(offloaded.values()))
+    stored = any(item["stored"] for item in offloaded.values())
+    return bounded.payload, str(primary["digest"]), stored
 
 
 def idempotency_key(call: ToolCall) -> str:
@@ -250,6 +295,9 @@ class ToolActivities:
                 "output_sha256": result.output_sha256,
                 "output_bytes": result.output_bytes,
                 "output_truncated": result.output_truncated,
+                # Where the bytes the cap removed can be read back, when they were kept.
+                "output_ref": result.output_ref,
+                "output_stored": result.output_stored,
             },
         )
         record_span(
@@ -372,7 +420,7 @@ class ToolActivities:
         reports = _dlp_reports(payload)
         if reports is not None:
             self._audit_dlp(call, reports)
-        capped = bounded_payload(payload)
+        capped, output_ref, stored = cap_and_offload(self._dsn, call, payload)
         return ToolResult(
             status="executed",
             tool=call.tool,
@@ -382,6 +430,8 @@ class ToolActivities:
             output_sha256=str(capped.get("output_sha256", "")),
             output_bytes=int(capped.get("original_bytes", 0)),
             output_truncated=bool(capped.get("truncated", False)),
+            output_ref=output_ref,
+            output_stored=stored,
         )
 
     def _audit_dlp(self, call: ToolCall, reports: list[Any]) -> None:
