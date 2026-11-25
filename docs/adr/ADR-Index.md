@@ -27,6 +27,7 @@ Citadel records one ADR per architectural decision. Numbers are sequential; ADR-
 | 021 | MCP and A2A behind adapter seams | Accepted |
 | 022 | Agent approvers for T1 calls | Proposed |
 | 023 | CLI access from the sandbox, never from a worker | Accepted |
+| 024 | Approvals travel as a single-use reference, not a token in history | Accepted |
 
 ## ADR-008 evolution roadmap
 

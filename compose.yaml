@@ -125,8 +125,11 @@ services:
     environment:
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_CORS_ORIGINS: http://localhost:18080
+      # History carries run inputs, DLP verdicts and tool output: read-only,
+      # loopback only, operator debugging only.
+      TEMPORAL_DISABLE_WRITE_ACTIONS: "true"
     ports:
-      - "18080:8080"
+      - "127.0.0.1:18080:8080"
     depends_on:
       temporal:
         condition: service_healthy
@@ -379,7 +382,6 @@ services:
     mem_limit: 256m
     environment:
       CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
       DOCKER_HOST: unix:///var/run/docker.sock
       # The write token is injected here and nowhere else; gh reads GH_TOKEN.
       GH_TOKEN: ${GH_WRITE_TOKEN:-unset}

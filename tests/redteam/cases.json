@@ -244,7 +244,7 @@
     },
     {
       "id": "RT-HITL-02",
-      "title": "Replay a previously signed approval token",
+      "title": "Replay a previously used approval reference",
       "category": "hitl",
       "tier": "T1",
       "surface": "approval",
@@ -255,8 +255,8 @@
         "side_effects": "none"
       },
       "controls": [
-        "single_use_token",
-        "run_scoped_signature"
+        "single_use_reference",
+        "run_scoped_approval"
       ],
       "milestone": "v0.1"
     },
@@ -304,7 +304,7 @@
       "fixture": "fixtures/approval/secret_in_args.json",
       "expect": {
         "verdict": "blocked",
-        "evidence": "403 plus a dlp.event row, before the token is minted",
+        "evidence": "403 plus a dlp.event row, before the decision is audited",
         "side_effects": "none"
       },
       "controls": [

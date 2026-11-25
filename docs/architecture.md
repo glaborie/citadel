@@ -116,7 +116,7 @@ sequenceDiagram
     else T1 write tool
         S->>T: request approval gate (wait)
         T->>U: pending approval in console
-        U->>T: approve/deny + reason (signed, TTL)
+        U->>T: approve/deny + reason (by reference, TTL)
         T->>A: approval event before resume
         T-->>S: resume with decision
         S->>S: execute with idempotency key

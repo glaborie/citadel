@@ -1,4 +1,4 @@
-"""The approval route checks arguments before it signs or audits them."""
+"""The approval route checks arguments before it audits the decision."""
 
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ def test_secret_in_arguments_is_refused_before_mint(
     response = _post(client, token, {"service": "checkout-api", "note": SECRET})
     assert response.status_code == 403
     assert response.json()["detail"]["reason"] == "dlp_blocked"
-    # No token was minted; the refusal itself is the only ledger row.
+    # No decision was recorded; the refusal itself is the only ledger row.
     assert [event["event_type"] for event in events] == ["dlp.event"]
     assert events[0]["payload"]["action"] == "block"
     assert events[0]["payload"]["categories"] == ["GITHUB_TOKEN"]

@@ -23,7 +23,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from citadel import dlp
 from citadel.api import app as api_module
-from citadel.approvals import mint_approval_token, verify_approval_token
+from citadel.approvals import validate_approval
+from citadel.hashing import arguments_hash
 from citadel.identity.keycloak import IdentityError, Principal
 from citadel.identity.run_token import mint_run_token, verify_run_token
 from citadel.model import Budget, Reply, RequestedTool, ScriptedClient, Usage, run_agent
@@ -240,25 +241,25 @@ def exec_policy_unavailable(case_: Case, _: Path) -> Outcome:
 
 def exec_approval_ttl(case_: Case, _: Path) -> Outcome:
     """RT-HITL-03: an approval that expires is unusable, so silence means no."""
-    private = Ed25519PrivateKey.generate()
     arguments = {"service": "checkout-api"}
-    token = mint_approval_token(
-        tenant_id="lab-a",
-        run_id="run-1",
-        tool="restart_service",
-        arguments=arguments,
-        approver="carol",
-        private_key=private,
-        ttl_seconds=-30,
-    )
+    created_at = 900.0
     try:
-        verify_approval_token(
-            token,
-            public_key=private.public_key(),
+        validate_approval(
+            {
+                "run_id": "run-1",
+                "tool": "restart_service",
+                "approver": "carol",
+                "decision": "approved",
+                "ttl": 300,
+                "args_hash": arguments_hash(arguments),
+            },
+            created_at=created_at,
             tenant_id="lab-a",
+            ref="2f0c1e2a-0000-4000-8000-000000000001",
             run_id="run-1",
             tool="restart_service",
             arguments=arguments,
+            now=created_at + 301,
         )
     except IdentityError as exc:
         return Outcome(True, f"rejected: {str(exc)[:60]}")
@@ -267,23 +268,24 @@ def exec_approval_ttl(case_: Case, _: Path) -> Outcome:
 
 def exec_args_substitution(case_: Case, _: Path) -> Outcome:
     """RT-HITL-04: approving service A cannot execute service B."""
-    private = Ed25519PrivateKey.generate()
-    token = mint_approval_token(
-        tenant_id="lab-a",
-        run_id="run-1",
-        tool="restart_service",
-        arguments={"service": "checkout-api"},
-        approver="carol",
-        private_key=private,
-    )
+    approved = {"service": "checkout-api"}
     try:
-        verify_approval_token(
-            token,
-            public_key=private.public_key(),
+        validate_approval(
+            {
+                "run_id": "run-1",
+                "tool": "restart_service",
+                "approver": "carol",
+                "decision": "approved",
+                "ttl": 300,
+                "args_hash": arguments_hash(approved),
+            },
+            created_at=900.0,
             tenant_id="lab-a",
+            ref="2f0c1e2a-0000-4000-8000-000000000001",
             run_id="run-1",
             tool="restart_service",
             arguments={"service": "billing-worker"},
+            now=1000.0,
         )
     except IdentityError as exc:
         return Outcome(True, f"rejected: {str(exc)[:60]}")
@@ -506,30 +508,40 @@ def exec_self_approval(case_: Case, _: Path) -> Outcome:
 def exec_approval_replay(case_: Case, _: Path) -> Outcome:
     """RT-HITL-02: the operator executes once per approval, then returns 409."""
     import os
+    import time
     from unittest import mock
 
     from fastapi.testclient import TestClient
 
-    from citadel.approvals import mint_approval_token
     from citadel.operator import app as operator
     from tests.redteam import support
 
-    private = Ed25519PrivateKey.generate()
     arguments = {"service": "checkout-api"}
-    token = mint_approval_token(
-        tenant_id="lab-a",
-        run_id="run-1",
-        tool="restart_service",
-        arguments=arguments,
-        approver="carol",
-        private_key=private,
-    )
+    record = {
+        "run_id": "run-1",
+        "tool": "restart_service",
+        "approver": "carol",
+        "decision": "approved",
+        "ttl": 300,
+        "args_hash": arguments_hash(arguments),
+    }
     stub = support.StubExecutor()
     seen: list[str] = []
 
-    def already_used(dsn: str, tenant_id: str, jti: str) -> bool:
-        seen.append(jti)
+    def already_used(dsn: str, tenant_id: str, ref: str) -> bool:
+        seen.append(ref)
         return len(seen) > 1
+
+    def resolve(**kwargs: Any) -> Any:
+        return validate_approval(
+            record,
+            created_at=time.time(),
+            tenant_id=kwargs["tenant_id"],
+            ref=kwargs["ref"],
+            run_id=kwargs["run_id"],
+            tool=kwargs["tool"],
+            arguments=kwargs["arguments"],
+        )
 
     def passthrough(text: str, *, surface: str, **_: object) -> tuple[str, dict[str, object]]:
         return text, {"surface": surface, "action": "pass"}
@@ -539,12 +551,12 @@ def exec_approval_replay(case_: Case, _: Path) -> Outcome:
         "run_id": "run-1",
         "tool": "restart_service",
         "arguments": arguments,
-        "approval_token": token,
+        "approval_ref": "2f0c1e2a-0000-4000-8000-000000000001",
     }
-    env = {"CITADEL_RUN_TOKEN_PUBLIC_KEY": "unused", "CITADEL_DB_DSN": "postgres://fake"}
+    env = {"CITADEL_DB_DSN": "postgres://fake"}
     with (
         mock.patch.dict(os.environ, env),
-        mock.patch.object(operator, "public_key_from_env", lambda _v: private.public_key()),
+        mock.patch.object(operator, "resolve_approval", resolve),
         mock.patch.object(operator, "_already_used", already_used),
         mock.patch.object(operator, "_guard", passthrough),
         mock.patch("citadel.tools.runner.run", stub.run),
@@ -614,15 +626,14 @@ def exec_secret_in_tool_args(case_: Case, _: Path) -> Outcome:
     miss it.
     """
     import os
+    import time
     from unittest import mock
 
     from fastapi.testclient import TestClient
 
-    from citadel.approvals import mint_approval_token
     from citadel.operator import app as operator
     from tests.redteam import support
 
-    private = Ed25519PrivateKey.generate()
     secret = fixture_text("dlp/api_key.txt").split()[3]
     arguments = {
         "repo": "glaborie/citadel",
@@ -631,26 +642,38 @@ def exec_secret_in_tool_args(case_: Case, _: Path) -> Outcome:
         "title": "Rotate the deploy token",
         "body": f"Rotated. Old value was {secret}",
     }
-    token = mint_approval_token(
-        tenant_id="lab-a",
-        run_id="run-1",
-        tool="open_remediation_pr",
-        arguments=arguments,
-        approver="carol",
-        private_key=private,
-    )
+    record = {
+        "run_id": "run-1",
+        "tool": "open_remediation_pr",
+        "approver": "carol",
+        "decision": "approved",
+        "ttl": 300,
+        "args_hash": arguments_hash(arguments),
+    }
+
+    def resolve(**kwargs: Any) -> Any:
+        return validate_approval(
+            record,
+            created_at=time.time(),
+            tenant_id=kwargs["tenant_id"],
+            ref=kwargs["ref"],
+            run_id=kwargs["run_id"],
+            tool=kwargs["tool"],
+            arguments=kwargs["arguments"],
+        )
+
     stub = support.StubExecutor()
     payload = {
         "tenant_id": "lab-a",
         "run_id": "run-1",
         "tool": "open_remediation_pr",
         "arguments": arguments,
-        "approval_token": token,
+        "approval_ref": "2f0c1e2a-0000-4000-8000-000000000001",
     }
-    env = {"CITADEL_RUN_TOKEN_PUBLIC_KEY": "unused", "CITADEL_DB_DSN": "postgres://fake"}
+    env = {"CITADEL_DB_DSN": "postgres://fake"}
     with (
         mock.patch.dict(os.environ, env),
-        mock.patch.object(operator, "public_key_from_env", lambda _v: private.public_key()),
+        mock.patch.object(operator, "resolve_approval", resolve),
         mock.patch.object(operator, "_already_used", lambda *_: False),
         mock.patch.object(operator, "AuditLedger", lambda _dsn: support.FakeAudit()),
         mock.patch.object(dlp, "urlopen", support.DetectorStub([])),
