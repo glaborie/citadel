@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -29,8 +30,9 @@ class FakeLedger:
     def __init__(self) -> None:
         self.events: list[dict[str, Any]] = []
 
-    def append(self, **kwargs: Any) -> None:
+    def append(self, **kwargs: Any) -> SimpleNamespace:
         self.events.append(kwargs)
+        return SimpleNamespace(audit_id=f"audit-{len(self.events)}")
 
 
 @pytest.fixture

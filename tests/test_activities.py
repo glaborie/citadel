@@ -14,6 +14,7 @@ import urllib.error
 from collections.abc import Iterator
 from contextlib import contextmanager
 from email.message import Message
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -84,8 +85,9 @@ class FakeAudit:
     def __init__(self) -> None:
         self.events: list[dict[str, Any]] = []
 
-    def append(self, **kwargs: Any) -> None:
+    def append(self, **kwargs: Any) -> SimpleNamespace:
         self.events.append(kwargs)
+        return SimpleNamespace(audit_id=f"audit-{len(self.events)}")
 
 
 def build(
@@ -324,6 +326,21 @@ def test_a_replayed_call_is_audited(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = ledger.events[0]["payload"]
     assert payload["status"] == "replayed"
     assert payload["idempotency_key"] == idempotency_key(item)
+
+
+def test_tool_call_emits_a_span_with_the_audit_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    impl = build(monkeypatch, FakeDB(), recorder([]), FakeAudit())
+    spans: list[tuple[str, dict[str, Any]]] = []
+
+    def record(name: str, **kwargs: Any) -> None:
+        spans.append((name, kwargs))
+
+    monkeypatch.setattr(activities, "record_span", record)
+    impl.execute_tool(call("read_logs"))
+
+    assert spans[0][0] == "tool.call"
+    assert spans[0][1]["audit_id"] == "audit-1"
+    assert spans[0][1]["run_id"] == call("read_logs").run_id
 
 
 class RunFakeDB:
