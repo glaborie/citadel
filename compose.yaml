@@ -242,6 +242,7 @@ services:
       KEYCLOAK_AUDIENCE: citadel-agent
       CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CITADEL_RUN_TOKEN_PRIVATE_KEY: ${CITADEL_RUN_TOKEN_PRIVATE_KEY}
+      CITADEL_DLP_URL: http://presidio:3000
       OPENFGA_API_URL: http://openfga:8080
       KEYCLOAK_ADMIN_URL: http://keycloak:8080
     ports:

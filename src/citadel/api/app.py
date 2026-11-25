@@ -8,6 +8,7 @@ provider all fail closed.
 # No `from __future__ import annotations`: FastAPI must see the real Depends
 # objects, and the dependency is a closure over create_app's arguments.
 import asyncio
+import json
 import os
 import uuid
 from typing import Annotated, Any
@@ -17,7 +18,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from citadel import __version__, telemetry
+from citadel import __version__, dlp, telemetry
 from citadel.approvals import mint_approval_token
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
@@ -29,6 +30,8 @@ from citadel.runs import PostgresRunStore
 from citadel.workflows.orchestrator import child_workflow_id
 from citadel.workflows.specialist import SpecialistWorkflow
 from citadel.workflows.types import APPROVAL_TTL, ApprovalDecision
+
+DLP_URL = os.environ.get("CITADEL_DLP_URL", "http://presidio:3000")
 
 
 class AuthorizeRequest(BaseModel):
@@ -206,6 +209,20 @@ def create_app(
         if str(run[0]) == principal.user_id:
             # Separation of duties: nobody approves their own request.
             raise HTTPException(status_code=403, detail="cannot approve your own run")
+
+        # The approval preview is a rendering surface, so the arguments are
+        # checked before they can be signed, audited or shown to a human. The
+        # operator re-checks at execution; this closes the earlier surface.
+        try:
+            dlp.gate(
+                json.dumps(body.arguments, ensure_ascii=False),
+                surface="input",
+                analyzer_url=DLP_URL,
+            )
+        except dlp.DlpBlocked as exc:
+            raise HTTPException(
+                status_code=exc.status, detail={"reason": exc.reason, "dlp": [exc.report]}
+            ) from exc
 
         token: str | None = None
         if body.approved:

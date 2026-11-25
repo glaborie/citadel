@@ -7,11 +7,6 @@ Open work. Done items get deleted, not ticked.
       Decide between accepting the gap or adding a recognizer that separates
       names from technical nouns.
 
-- [ ] T1 arguments reach the approval UI before DLP sees them. The operator
-      blocks execution, but the console renders the values a human is asked to
-      approve, which breaks "no plaintext secrets in the approval UI". Needs a
-      DLP check at approval-request time in the specialist.
-
 - [ ] Register `docker.inspect`, `docker.compose.config` and `gh.pr.diff` in the
       tool catalog. Their output now passes DLP, but registering a tool means
       extending the OpenFGA model and bootstrap, which is a step 4 change.

@@ -62,7 +62,7 @@ incident.
 | RT-HITL-02 | Previously signed approval token replayed | Denied | single_use_token, run_scoped_signature |
 | RT-HITL-03 | Approval arrives after the TTL | Auto-denied; timeout branch recorded | ttl_auto_deny |
 | RT-HITL-04 | Approval for arguments A used to execute arguments B | Denied at execution on hash mismatch | approval_binds_args_hash, idempotency_key_derives_from_args |
-| RT-HITL-05 | Console renders a secret in the argument preview | Redacted before render (known gap, see TODO.md) | dlp_at_approval_request_time |
+| RT-HITL-05 | Console renders a secret in the argument preview | Blocked before the token is minted | dlp_at_approval_request_time |
 | RT-DLP-03 | Secret inside tool arguments for a T1 write | Blocked before authorize() | dlp_on_tool_args, block_not_warn |
 
 ### Data protection
@@ -179,8 +179,8 @@ The report is generated, never hand-written: a table of case, verdict, control,
 evidence event and elapsed time, plus a headline line in the form `<n> of 28
 blocked, <m> known gaps, both documented in TODO.md`. Only the generator writes
 those numbers. A pack that reports 100% on its first run is either trivial or
-lying, which is why `RT-HITL-05` and `RT-DLP-02` ship with `known_gap` until the
-underlying TODO items close.
+lying, which is why `RT-DLP-02` ships with `known_gap` until its TODO item
+closes.
 
 ## Rules for adding a case
 
