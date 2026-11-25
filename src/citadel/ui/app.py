@@ -38,6 +38,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from citadel import __version__
 from citadel.db import tenant_connection
 from citadel.identity import IdentityError, KeycloakVerifier, Principal
+from citadel.net import open_url
 from citadel.workflows.types import APPROVAL_TTL
 
 COOKIE = "citadel_console"
@@ -264,7 +265,7 @@ def create_app(
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=10) as response:
+            with open_url(request, timeout=10) as response:
                 payload = json.loads(response.read())
         except urllib.error.HTTPError as exc:
             raise HTTPException(
@@ -285,7 +286,7 @@ def create_app(
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=10) as response:
+            with open_url(request, timeout=10) as response:
                 return response.status, response.read().decode()
         except urllib.error.HTTPError as exc:
             return exc.code, exc.read().decode()
@@ -392,7 +393,9 @@ def create_app(
         order = _order(RUN_COLUMNS, sort, dir, "created")
         with tenant_connection(_dsn(), principal.tenant_id) as conn:
             rows = conn.execute(
-                "SELECT id, user_id, agent_id, risk_tier, status, created_at"
+                # `order` comes from the RUN_COLUMNS whitelist; every value is a
+                # bound parameter.
+                "SELECT id, user_id, agent_id, risk_tier, status, created_at"  # nosec B608
                 " FROM runs WHERE " + " AND ".join(clauses) + f" ORDER BY {order} LIMIT 100",
                 tuple(params),
             ).fetchall()
@@ -619,7 +622,9 @@ def create_app(
         order = _order(AUDIT_COLUMNS, sort, dir, "seq")
         with tenant_connection(_dsn(), principal.tenant_id) as conn:
             rows = conn.execute(
-                "SELECT seq, event_type, actor_type, actor_id, payload, created_at"
+                # `order` comes from the AUDIT_COLUMNS whitelist; every value is a
+                # bound parameter.
+                "SELECT seq, event_type, actor_type, actor_id, payload, created_at"  # nosec B608
                 " FROM audit_events"
                 " WHERE (%s = '' OR event_type = %s)"
                 " AND (%s = '' OR actor_id ILIKE %s)"

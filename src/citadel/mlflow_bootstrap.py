@@ -13,6 +13,8 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
+from citadel.net import open_url
+
 BASE = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000").rstrip("/")
 NAME = os.environ.get("MLFLOW_EXPERIMENT_NAME", "citadel-trajectories")
 
@@ -24,7 +26,7 @@ def _call(path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         headers={"Content-Type": "application/json"},
         method="POST" if body is not None else "GET",
     )
-    with urllib.request.urlopen(request, timeout=10) as response:
+    with open_url(request, timeout=10) as response:
         payload: dict[str, Any] = json.loads(response.read())
     return payload
 

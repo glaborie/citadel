@@ -22,6 +22,7 @@ from openfga_sdk.models.create_store_request import CreateStoreRequest
 from openfga_sdk.models.write_authorization_model_request import WriteAuthorizationModelRequest
 from openfga_sdk.sync import OpenFgaClient
 
+from citadel.net import open_url
 from citadel.policy import PolicyError, load_catalog
 from citadel.policy.openfga import configuration, resolve_store_id
 
@@ -37,14 +38,14 @@ def _post_form(url: str, fields: dict[str, str]) -> dict[str, Any]:
         data=urllib.parse.urlencode(fields).encode(),
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
-    with urllib.request.urlopen(req, timeout=20) as r:
+    with open_url(req, timeout=20) as r:
         payload: dict[str, Any] = json.loads(r.read())
     return payload
 
 
 def _admin_get(base: str, path: str, token: str) -> Any:
     req = urllib.request.Request(f"{base}{path}", headers={"Authorization": f"Bearer {token}"})
-    with urllib.request.urlopen(req, timeout=20) as r:
+    with open_url(req, timeout=20) as r:
         return json.loads(r.read())
 
 
