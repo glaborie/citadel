@@ -18,6 +18,23 @@ from citadel.db import tenant_connection
 
 GENESIS = "0" * 64
 
+# A tool call that claims to have run, with no tool.call event behind it. The
+# chain cannot detect this: deleting a row breaks no hash, and a missing event
+# is not an edit. A crash between the tool write and the audit append leaves
+# exactly this shape, so the gap has to be asked for explicitly.
+UNAUDITED_SQL = (
+    "SELECT tc.idempotency_key"
+    " FROM tool_calls tc"
+    " WHERE tc.tenant_id = %s"
+    "   AND tc.status IN ('executed', 'sent')"
+    "   AND NOT EXISTS ("
+    "     SELECT 1 FROM audit_events ae"
+    "      WHERE ae.tenant_id = tc.tenant_id"
+    "        AND ae.event_type = 'tool.call'"
+    "        AND ae.payload->>'idempotency_key' = tc.idempotency_key)"
+    " ORDER BY tc.created_at"
+)
+
 
 @dataclass(frozen=True)
 class AuditRef:
@@ -120,6 +137,13 @@ class AuditLedger:
                 return False, len(rows)
             expected_prev = str(stored)
         return True, len(rows)
+
+
+    def unaudited(self, tenant_id: str) -> list[str]:
+        """Idempotency keys of tool calls that left no tool.call event behind."""
+        with tenant_connection(self._dsn, tenant_id) as conn:
+            rows = conn.execute(UNAUDITED_SQL, (tenant_id,)).fetchall()
+        return [str(row[0]) for row in rows]
 
 
 def new_audit_id() -> str:
