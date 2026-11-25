@@ -48,7 +48,7 @@ The table is the architecture; the **Status** column says which rows exist as co
 | Tool | Tier | Where it runs |
 |---|---|---|
 | `inspect_containers`, `get_service_health` | T0 | sandbox, read-only Docker proxy |
-| `read_logs` | T0 | sandbox (see `TODO.md`: the allowlisted `docker compose logs` cannot execute there yet) |
+| `read_logs` | T0 | sandbox, `docker logs` on the container derived from the service name |
 | `get_pr_status` | T0 | sandbox, `gh` over the egress proxy |
 | `restart_service` | T1 | operator, approval-gated |
 | `open_remediation_pr` | T1 | operator, approval-gated, draft PR from an existing branch |

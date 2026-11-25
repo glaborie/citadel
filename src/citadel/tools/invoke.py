@@ -18,6 +18,25 @@ from citadel.tools.allowlist import AllowedCommand, CommandDenied, match
 _VALUE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.:@/-]*$")
 
 
+def container_name(service: str) -> str:
+    # v0.1 couples to Compose naming; revisit when the project name changes.
+    return f"citadel-{service}-1"
+
+
+def _resolve(arguments: Mapping[str, Any]) -> dict[str, Any]:
+    """Translate the service a caller names into the container that exists.
+
+    The approval token binds the service name, so this runs after approval
+    verification and on the way to argv. A value that would fail the normal
+    argument checks is passed through untouched, so it is refused by the same
+    code path and with the same message.
+    """
+    service = arguments.get("service")
+    if isinstance(service, str) and _VALUE.match(service):
+        return {**arguments, "service": container_name(service)}
+    return dict(arguments)
+
+
 def build_argv(
     tool: str,
     arguments: Mapping[str, Any],
@@ -38,9 +57,10 @@ def build_argv(
     if unexpected:
         raise CommandDenied(f"unexpected arguments for {tool}: {sorted(unexpected)}")
 
+    resolved = _resolve(arguments)
     tokens: list[str] = []
     for param in spec.params:
-        value = arguments.get(param.name)
+        value = resolved.get(param.name)
         if value is None:
             if param.required:
                 raise CommandDenied(f"{tool} requires argument {param.name!r}")

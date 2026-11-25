@@ -18,9 +18,9 @@ def test_allowlist_covers_exactly_the_documented_agents() -> None:
         ["docker", "compose", "ps", "--all"],
         ["docker", "compose", "ps", "--format", "json"],
         ["docker", "compose", "ps", "--format=json"],
-        ["docker", "compose", "logs", "checkout-api"],
-        ["docker", "compose", "logs", "checkout-api", "--tail", "100"],
-        ["docker", "compose", "logs", "--since", "10m", "checkout-api"],
+        ["docker", "logs", "citadel-checkout-api-1"],
+        ["docker", "logs", "citadel-checkout-api-1", "--tail", "100"],
+        ["docker", "logs", "--since", "10m", "citadel-checkout-api-1"],
         ["docker", "compose", "config", "--services"],
         ["docker", "ps", "-a"],
         ["docker", "inspect", "--format", "{{.State.Status}}", "checkout-api"],
@@ -136,7 +136,7 @@ def test_github_escape_hatches_are_denied(tokens: list[str]) -> None:
         ["docker", "compose", "ps", "$(whoami)"],
         ["docker", "compose", "ps", "`id`"],
         ["docker", "compose", "ps", "|", "sh"],
-        ["docker", "compose", "logs", "checkout-api", ">", "/etc/passwd"],
+        ["docker", "logs", "citadel-checkout-api-1", ">", "/etc/passwd"],
     ],
 )
 def test_shell_injection_is_denied(tokens: list[str]) -> None:
@@ -148,7 +148,7 @@ def test_shell_injection_is_denied(tokens: list[str]) -> None:
     "tokens",
     [
         ["docker", "inspect", "../../etc/passwd"],
-        ["docker", "compose", "logs", "/etc/shadow"],
+        ["docker", "logs", "/etc/shadow"],
         ["/usr/bin/docker", "ps"],
         ["/bin/sh", "-c", "docker ps"],
     ],

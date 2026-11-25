@@ -24,7 +24,6 @@ from citadel.identity import IdentityError
 from citadel.identity.run_token import public_key_from_env
 from citadel.tools import CommandDenied, build_argv
 from citadel.tools import runner as executor
-from citadel.tools.allowlist import AllowedCommand
 
 WRITABLE_TIERS = {"T1"}
 DLP_URL = os.environ.get("CITADEL_DLP_URL", "http://presidio:3000")
@@ -40,24 +39,6 @@ class ExecuteRequest(BaseModel):
     tool: str
     arguments: dict[str, Any] = {}
     approval_token: str
-
-
-def container_name(service: str) -> str:
-    # v0.1 couples to Compose naming; revisit when the project name changes.
-    return f"citadel-{service}-1"
-
-
-def _resolved_argv(tool: str, arguments: dict[str, Any]) -> tuple[list[str], AllowedCommand]:
-    """Translate the approved arguments into the argv that actually runs.
-
-    The approver authorised the service name, so the container name is derived
-    here and the derived argv is what gets validated — never a validated argv
-    that is then rewritten.
-    """
-    resolved = dict(arguments)
-    if tool == "restart_service" and "service" in resolved:
-        resolved["service"] = container_name(str(resolved["service"]))
-    return build_argv(tool, resolved)
 
 
 def _already_used(dsn: str, tenant_id: str, jti: str) -> bool:
@@ -103,8 +84,10 @@ def execute(request: ExecuteRequest) -> dict[str, Any]:
     if _already_used(os.environ["CITADEL_DB_DSN"], request.tenant_id, claims.jti):
         raise HTTPException(status_code=409, detail="approval token already used")
 
+    # The approver authorised the service name; build_argv derives the container
+    # name and validates the derived argv — never a validated argv rewritten.
     try:
-        argv, command = _resolved_argv(request.tool, request.arguments)
+        argv, command = build_argv(request.tool, request.arguments)
     except CommandDenied as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     if command.tier not in WRITABLE_TIERS:

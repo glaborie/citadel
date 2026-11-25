@@ -25,19 +25,16 @@
       "content_risk": null
     },
     {
-      "id": "docker.compose.logs",
+      "id": "docker.logs",
       "agent": "docker",
       "tier": "T0",
       "argv": [
         "docker",
-        "compose",
         "logs"
       ],
       "flags": [
-        "--no-color",
+        "--details",
         "--timestamps",
-        "--follow",
-        "-f",
         "-t"
       ],
       "flags_with_value": [
@@ -45,9 +42,9 @@
         "--since",
         "--until"
       ],
-      "max_positional": 2,
+      "max_positional": 1,
       "content_risk": "possible",
-      "content_note": "Applications routinely log secrets. Allowed for troubleshooting; output must pass DLP at step 7."
+      "content_note": "Applications routinely log secrets; output must pass DLP before it is served. The container name is derived from the service name, because the sandbox has no compose project to run `docker compose logs` against. --follow is not allowlisted: it would hold the call open until the sandbox timeout."
     },
     {
       "id": "docker.compose.config",

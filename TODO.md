@@ -2,12 +2,6 @@
 
 Open work. Done items get deleted, not ticked.
 
-- [ ] `read_logs` cannot execute. DLP is no longer the blocker, but the tool maps
-      to `docker compose logs` and the sandbox has neither the compose plugin nor
-      a compose project file: `docker: unknown command: docker compose`, exit 1.
-      Fix by mapping it to `docker logs <container>` (the operator already
-      derives `citadel-<service>-1`) or by giving the sandbox a project file.
-
 - [ ] Names are not redacted. Presidio scores `docker` at 0.85, the same as
       `Alice Smith`, so `PERSON` was dropped from `PII_ENTITIES` in step 7.
       Decide between accepting the gap or adding a recognizer that separates

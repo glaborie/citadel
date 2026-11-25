@@ -8,16 +8,17 @@ from citadel.policy import load_catalog
 from citadel.tools import CommandDenied, build_argv, load_allowlist
 
 
-def test_read_logs_builds_the_compose_logs_command() -> None:
+def test_read_logs_builds_the_container_logs_command() -> None:
+    """`docker logs`, not `docker compose logs`: the sandbox has no compose project."""
     argv, command = build_argv("read_logs", {"service": "checkout-api"})
-    assert argv == ["docker", "compose", "logs", "checkout-api"]
-    assert command.id == "docker.compose.logs"
+    assert argv == ["docker", "logs", "citadel-checkout-api-1"]
+    assert command.id == "docker.logs"
     assert command.tier == "T0"
 
 
 def test_restart_service_builds_the_restart_command() -> None:
     argv, command = build_argv("restart_service", {"service": "checkout-api"})
-    assert argv == ["docker", "restart", "checkout-api"]
+    assert argv == ["docker", "restart", "citadel-checkout-api-1"]
     assert command.tier == "T1"
 
 
@@ -167,5 +168,5 @@ def test_allowlist_marks_output_risk_for_documented_commands() -> None:
     risk = {c.id: c.content_risk for c in load_allowlist()}
     assert risk["docker.inspect"] == "definitive"
     assert risk["docker.compose.config"] == "definitive"
-    assert risk["docker.compose.logs"] == "possible"
+    assert risk["docker.logs"] == "possible"
     assert risk["docker.ps"] is None

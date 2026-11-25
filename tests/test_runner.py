@@ -91,6 +91,7 @@ def test_output_passes_through_dlp_and_is_reported(client: TestClient) -> None:
     response = client.post("/execute", json=LOGS)
 
     assert response.status_code == 200
+    assert client.captured["argv"] == ["docker", "logs", "citadel-checkout-api-1"]
     reports = response.json()["dlp"]
     assert [report["surface"] for report in reports] == ["input", "output", "output"]
     assert all(report["action"] == "pass" for report in reports)

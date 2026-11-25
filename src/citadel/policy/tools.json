@@ -16,7 +16,7 @@
     "read_logs": {
       "tier": "T0",
       "agent": "docker",
-      "command": "docker.compose.logs",
+      "command": "docker.logs",
       "params": [
         {
           "name": "service",
