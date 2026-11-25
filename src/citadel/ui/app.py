@@ -34,6 +34,7 @@ from typing import Any
 import jwt
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from starlette.middleware.base import RequestResponseEndpoint
 
 from citadel import __version__
 from citadel.db import tenant_connection
@@ -169,6 +170,33 @@ def create_app(
     session_key: str | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Citadel Approval Console", version=__version__)
+
+    @app.middleware("http")
+    async def _refuse_to_be_framed(
+        request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        """No console page may be framed, and none may be cached.
+
+        The decision form carries its own CSRF token, so framing
+        `/approvals/<id>` in a decoy page turns a genuine approval into a click on
+        something the approver never read. `SameSite=Lax` does not cover it: Lax
+        separates sites, not ports, and the stack publishes the console beside
+        Keycloak, Temporal and MLflow, so a page on any of them is same-site and
+        gets the cookie. The cookie stays Lax regardless - the OIDC callback is a
+        cross-site navigation, and Strict would drop the session on the way back.
+
+        `Cache-Control: no-store` is part of the same control: a cached approval
+        page is a stale CSRF token and a readable copy of the arguments.
+        """
+        response = await call_next(request)
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Content-Security-Policy"] = (
+            "frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'"
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.exception_handler(LoginRequired)
     def _to_login(_: Request, __: LoginRequired) -> RedirectResponse:
