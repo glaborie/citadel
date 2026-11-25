@@ -2,10 +2,11 @@
 
 Open work. Done items get deleted, not ticked.
 
-- [ ] No runtime assembles a prompt from a skill pack. `skills.py` loads and
-      verifies the packs and `POST /runs` checks the version, but the model loop
-      is not called by the workflow, so the text is never sent. Wire the loop
-      (prompt from the pack + the agent's tool manifest) as its own step.
+- [ ] `POST /runs` creates a row and never submits the workflow. The loop runs in
+      `RunWorkflow`, and nothing outside the tests starts it: the API has no
+      Temporal client, so a created run stays at `status = 'created'` until
+      something else picks it up. Add the client and submit on create, with the
+      pack version and model alias the request already carries.
 
 - [ ] Console sessions have no refresh. The session cookie and the Keycloak
       access token both last 300 s, so a review longer than five minutes ends

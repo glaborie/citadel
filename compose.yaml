@@ -302,6 +302,13 @@ services:
       CITADEL_OPERATOR_URL: http://operator:8030
       CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
+      # The model step runs here, so this worker needs the pack on disk, the
+      # detector and the gateway. It is the only worker that talks to a model.
+      CITADEL_SKILLS_DIR: /app/skills
+      CITADEL_DLP_URL: http://presidio:3000
+      CITADEL_MODEL: ${CITADEL_MODEL:-auto/best-fast}
+      OMNIROUTE_URL: ${OMNIROUTE_URL:-http://omniroute:20128/v1}
+      OMNIROUTE_API_KEY: ${OMNIROUTE_API_KEY:-}
     depends_on:
       temporal:
         condition: service_healthy
