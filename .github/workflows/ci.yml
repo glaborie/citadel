@@ -12,11 +12,13 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# The gates are independent, so they run as parallel jobs. `check` is the
+# aggregator that branch protection requires: it adds no work of its own and
+# fails when any shard does, leaving the required status context stable.
 jobs:
-  check:
+  lint:
     runs-on: ubuntu-24.04
     steps:
-      # Actions are pinned by commit; the tag is the renovate-friendly hint.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
@@ -24,7 +26,46 @@ jobs:
           enable-cache: true
       - run: uv sync --frozen
       - run: uv run ruff check .
+
+  typecheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen
       - run: uv run mypy
+
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen
       # Live tests (CITADEL_LIVE_TESTS) skip themselves; this is the offline suite.
       - run: uv run pytest
+
+  eval:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen
       - run: uv run python -m citadel.evals
+
+  check:
+    needs: [lint, typecheck, test, eval]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Every shard passed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
