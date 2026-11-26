@@ -43,7 +43,7 @@
         "content_flags_on_ingress",
         "no_write_tool_without_approval"
       ],
-            "owner": "#96 - retrieval producers, v0.2 retrieval surface",
+            "owner": "#131 - Researcher specialist, v0.2 web surface",
 "milestone": "v0.2"
     },
     {
