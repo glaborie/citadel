@@ -102,6 +102,7 @@ No local GPU inference. No multi-tenant SaaS control plane. No fine-grained bill
 
 ```
 README.md
+SECURITY.md                   # how to report a vulnerability, and what is in scope
 AGENTS.md                     # handover spec for the implementing agent
 docs/architecture.md          # components, lifecycle, threat model
 docs/milestones.md            # scope and exit criteria
