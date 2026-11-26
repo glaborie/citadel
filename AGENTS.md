@@ -15,6 +15,28 @@ You are implementing Citadel from an approved design. Read the whole document se
 9. **Pin everything**: dependencies with hashes, images by digest, model aliases and prompt packs by version.
 10. **Do not expose OmniRoute admin MCP/A2A** or treat its cache/idempotency as Citadel controls.
 
+## Agent workflow
+
+These are the habits the recent sessions paid for. They are not style advice:
+each one is a failure that cost a cleanup or an hour.
+
+1. **Worktree first.** Before the first edit, `git fetch origin` and create a
+   worktree from `origin/master`, then move the session into it. Never edit the
+   main checkout: it has been polluted and cleaned up three times.
+2. **Claim the work.** Take the next open unassigned issue, assign it to
+   yourself, and say which one before starting.
+3. **Gate before push.** `make check` must pass before every push. It is what CI
+   runs, plus the smell gate at `info`.
+4. **Always a PR.** Push the branch and open a PR. Never commit to `master`; the
+   user merges.
+5. **Close the loop.** After the merge, close the issue and prune the worktree
+   (`make worktree-prune`).
+6. **Wait on CI, do not sleep on it.** `gh pr checks <n> --watch --fail-fast` and
+   `docker compose up -d --wait`. `sleep N` polling cost about 90 minutes across
+   recent sessions.
+7. **Stop on a spawn error.** A `ChildProcess.spawn` or `ENOENT` failure is the
+   environment, not the repo: retry once, then report and stop.
+
 ## Read in this order
 
 1. `README.md` — pitch, capability map, non-goals.
