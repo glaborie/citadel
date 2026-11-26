@@ -678,8 +678,9 @@ services:
       GH_TOKEN_FILE: /run/secrets/gh_read_token
       HTTPS_PROXY: http://github-egress:3128
       HTTP_PROXY: http://github-egress:3128
-      # Qdrant and OmniRoute are in-stack and must never traverse the egress proxy.
-      NO_PROXY: localhost,127.0.0.1,qdrant,omniroute
+      # Qdrant, OmniRoute and Presidio are in-stack and must never traverse the
+      # egress proxy: the proxy allowlist would refuse them.
+      NO_PROXY: localhost,127.0.0.1,qdrant,omniroute,presidio
     secrets:
       - gh_read_token
       - omniroute_api_key
