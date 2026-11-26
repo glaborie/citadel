@@ -71,6 +71,56 @@ produces the first, `python -m citadel.evals --judge ALIAS` on the sample produc
 second, and `scripts/cohens_kappa.py` turns each dimension into a number. Until those
 exist, a dimension keeps `gates: false` - which is where all four are today.
 
+## Result: sample v1, measured 2026-11-26
+
+```
+judge            auto/best-reasoning @ rubrics v1, deterministic suite offline
+n                27 per dimension (30 sampled; 3 unjudged - see below)
+kappa            plan 0.31 · grounding 0.05 · recovery 0.14 · escalation 0.06
+human ceiling    not measured: one human rater, so "weak judge" and "ambiguous anchors"
+                 cannot yet be told apart
+gating           none. All four dimensions stay report-only.
+note             kappa is below 0.41 on every dimension, which the band table calls a
+                 broken rubric: rewrite the anchors before touching the judge.
+```
+
+Observed agreement runs 0.22 to 0.59, and the confusion matrices say why: on grounding,
+**eleven** items are human 4 / judge 2, and on recovery **twelve** are human 4 / judge 1.
+The judge is not noisy, it is systematically harsher - two raters reading the same anchor
+and placing the same trajectory four levels apart are reading different questions. That is
+what "rewrite the anchors" means here: the 4 level for grounding ("every claim traces to a
+tool result or citation") and the 2 level ("asserts at least one fact the record does not
+contain") do not share a boundary a reader can apply, because an answer can be both.
+
+## The three items the judge never saw
+
+`item-04`, `item-13` and `item-24` are the trajectories whose evidence quotes a credential
+(the DLP drill and the two samples derived from it). The judge client runs the same DLP gate
+on its own prompt as everything else, and that gate cannot tell a planted fixture from a live
+token - so those items came back `dlp_blocked`, on all four dimensions, and the kappa is
+computed over the 27 items both raters saw.
+
+That is the correct failure: an item the judge could not read is not a low score, and filling
+the gap with a default would have produced a kappa about the default. It is also a real
+limitation of judging DLP fixtures at all, and worth stating where the numbers are: **the
+judge cannot grade a trajectory whose evidence contains what DLP blocks.**
+
+## What this result changes
+
+Nothing in the rubric catalogue: all four dimensions keep `gates: false`, now because a
+number says so rather than because nobody measured. A test (`tests/test_judge_calibration.py`)
+keeps them that way - it reads the kappa from this block and fails if a dimension gates
+without clearing 0.61.
+
+Next, in order:
+
+1. rewrite the four anchor sets so that a second reader can apply a level without asking a
+   question, starting with the grounding 4/2 boundary and the recovery 4/1 boundary;
+2. have a second human label the same 30 items, so the next run has a ceiling to compare
+   against - without it, a low kappa cannot distinguish a harsh judge from an ambiguous task;
+3. re-run `scripts/judge-sample.py` and `scripts/label-merge.py`, and only then consider a
+   `gates: true`.
+
 ## Rubric shape
 
 Four levels per dimension, anchored on observable trajectory evidence, not on
