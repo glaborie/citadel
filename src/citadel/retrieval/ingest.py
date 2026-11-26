@@ -146,21 +146,21 @@ def _github_json(request: Request, opener: Callable[..., Any] | None) -> Any:
             raise IngestRefused(f"{request.full_url}: GitHub answered with no JSON") from exc
 
 
-def github(
-    repo: str,
-    ref: str,
-    *,
-    token: str,
-    opener: Callable[..., Any] | None = None,
-) -> Iterator[Document]:
-    """Selected repository, read through the token that already exists."""
+def _github_headers(token: str) -> dict[str, str]:
+    """The token that already exists, or a refusal: ingestion never runs anonymous."""
     if not token:
         raise IngestRefused("GitHub ingestion needs GH_TOKEN or GH_TOKEN_FILE")
-    headers = {
+    return {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
+
+
+def _github_blobs(
+    repo: str, ref: str, headers: dict[str, str], opener: Any
+) -> list[dict[str, Any]]:
+    """Every file entry in the tree, or a refusal when the tree cannot be trusted."""
     tree = _github_json(
         Request(
             f"{GITHUB_API}/repos/{repo}/git/trees/{quote(ref, safe='/')}?recursive=1",
@@ -172,21 +172,43 @@ def github(
         raise IngestRefused(f"{repo}@{ref}: GitHub returned no tree")
     if tree.get("truncated"):
         raise IngestRefused(f"{repo}@{ref}: the tree is truncated; narrow the repository")
-    for entry in tree["tree"]:
-        if not isinstance(entry, dict) or entry.get("type") != "blob":
-            continue
-        if int(entry.get("size", 0)) > MAX_FILE_BYTES:
-            continue
-        blob = _github_json(
-            Request(f"{GITHUB_API}/repos/{repo}/git/blobs/{entry['sha']}", headers=headers), opener
-        )
-        if not isinstance(blob, dict) or blob.get("encoding") != "base64":
-            raise IngestRefused(f"{repo}: blob {entry.get('path')!r} is not base64")
-        try:
-            text = base64.b64decode(blob["content"]).decode("utf-8")
-        except (ValueError, UnicodeDecodeError):
-            continue  # a binary is not a document
-        yield Document(source_uri=f"gh:{repo}@{ref}:{entry['path']}", content=text)
+    return [
+        entry
+        for entry in tree["tree"]
+        if isinstance(entry, dict) and entry.get("type") == "blob"
+    ]
+
+
+def _blob_text(
+    repo: str, entry: dict[str, Any], headers: dict[str, str], opener: Any
+) -> str | None:
+    """One file's text, or None when it is too large or is not text at all."""
+    if int(entry.get("size", 0)) > MAX_FILE_BYTES:
+        return None
+    blob = _github_json(
+        Request(f"{GITHUB_API}/repos/{repo}/git/blobs/{entry['sha']}", headers=headers), opener
+    )
+    if not isinstance(blob, dict) or blob.get("encoding") != "base64":
+        raise IngestRefused(f"{repo}: blob {entry.get('path')!r} is not base64")
+    try:
+        return base64.b64decode(blob["content"]).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return None  # a binary is not a document
+
+
+def github(
+    repo: str,
+    ref: str,
+    *,
+    token: str,
+    opener: Callable[..., Any] | None = None,
+) -> Iterator[Document]:
+    """Selected repository, read through the token that already exists."""
+    headers = _github_headers(token)
+    for entry in _github_blobs(repo, ref, headers, opener):
+        text = _blob_text(repo, entry, headers, opener)
+        if text is not None:
+            yield Document(source_uri=f"gh:{repo}@{ref}:{entry['path']}", content=text)
 
 
 def allowed_root(configured: str, requested: str) -> Path:
@@ -208,6 +230,40 @@ def allowed_repos(configured: str, requested: list[str]) -> tuple[str, ...]:
     return tuple(requested)
 
 
+def _ensure_collection(client: QdrantClient, name: str) -> None:
+    if not client.collection_exists(name):
+        client.create_collection(
+            name,
+            vectors_config={},
+            sparse_vectors_config={SPARSE: models.SparseVectorParams(modifier=models.Modifier.IDF)},
+        )
+
+
+def _points(document: Document, tenant: str) -> list[models.PointStruct]:
+    """Every chunk of one document, addressed by the revision it was read at."""
+    rev = revision(document.content)
+    return [
+        models.PointStruct(
+            id=point_id(tenant, document.source_uri, rev, index),
+            vector={SPARSE: sparse(text)},
+            payload={
+                "tenant_id": tenant,
+                "source_uri": document.source_uri,
+                "revision": rev,
+                "chunk_index": index,
+                "text": text,
+                "acl": [f"tenant:{tenant}", f"doc:{document.source_uri}"],
+            },
+        )
+        for index, text in enumerate(chunks(document.content))
+    ]
+
+
+def _upsert(client: QdrantClient, name: str, points: list[models.PointStruct]) -> None:
+    for start in range(0, len(points), BATCH):
+        client.upsert(name, points=points[start : start + BATCH], wait=True)
+
+
 def ingest(
     client: QdrantClient,
     *,
@@ -216,72 +272,61 @@ def ingest(
 ) -> Report:
     """Upsert every chunk into the tenant's collection. Idempotent by point id."""
     name = collection_name(tenant)
-    if not client.collection_exists(name):
-        client.create_collection(
-            name,
-            vectors_config={},
-            sparse_vectors_config={SPARSE: models.SparseVectorParams(modifier=models.Modifier.IDF)},
-        )
-
+    _ensure_collection(client, name)
     points: list[models.PointStruct] = []
     files = 0
     for document in documents:
         files += 1
-        rev = revision(document.content)
-        for index, text in enumerate(chunks(document.content)):
-            points.append(
-                models.PointStruct(
-                    id=point_id(tenant, document.source_uri, rev, index),
-                    vector={SPARSE: sparse(text)},
-                    payload={
-                        "tenant_id": tenant,
-                        "source_uri": document.source_uri,
-                        "revision": rev,
-                        "chunk_index": index,
-                        "text": text,
-                        "acl": [f"tenant:{tenant}", f"doc:{document.source_uri}"],
-                    },
-                )
-            )
-    for start in range(0, len(points), BATCH):
-        client.upsert(name, points=points[start : start + BATCH], wait=True)
+        points.extend(_points(document, tenant))
+    _upsert(client, name, points)
     return Report(collection=name, documents=files, chunks=len(points))
 
 
-def main(argv: list[str] | None = None) -> int:
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Ingest documents into a tenant's collection")
     parser.add_argument("--tenant", required=True)
     parser.add_argument("--root", help="filesystem root (default: CITADEL_INGEST_ROOT)")
     parser.add_argument("--repo", action="append", default=[], help="owner/name (repeatable)")
     parser.add_argument("--ref", default="HEAD")
     parser.add_argument("--qdrant-url", default=DEFAULT_QDRANT_URL)
-    args = parser.parse_args(argv)
+    return parser
 
+
+def _sources(args: argparse.Namespace) -> list[Iterable[Document]]:
+    """What the CLI was allowed to read, or a refusal before anything is opened."""
+    root = args.root or os.environ.get("CITADEL_INGEST_ROOT", "")
+    repos = allowed_repos(
+        os.environ.get("CITADEL_INGEST_REPOS", ""),
+        [repo.strip() for repo in args.repo if repo.strip()],
+    )
+    sources: list[Iterable[Document]] = []
+    if root:
+        sources.append(filesystem(allowed_root(os.environ.get("CITADEL_INGEST_ROOT", ""), root)))
+    if repos:
+        token = env.optional_secret("GH_TOKEN")
+        sources.extend(github(repo, args.ref, token=token) for repo in repos)
+    if not sources:
+        raise IngestRefused("no source given: pass --root, --repo, or both")
+    return sources
+
+
+def _upsert_each(client: QdrantClient, tenant: str, sources: list[Iterable[Document]]) -> None:
+    for source in sources:
+        report = ingest(client, tenant=tenant, documents=source)
+        print(f"{report.collection}: {report.documents} documents, {report.chunks} chunks")
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
     try:
-        root = args.root or os.environ.get("CITADEL_INGEST_ROOT", "")
-        repos = allowed_repos(
-            os.environ.get("CITADEL_INGEST_REPOS", ""),
-            [repo.strip() for repo in args.repo if repo.strip()],
-        )
-        sources: list[Iterable[Document]] = []
-        if root:
-            sources.append(
-                filesystem(allowed_root(os.environ.get("CITADEL_INGEST_ROOT", ""), root))
-            )
-        if repos:
-            token = env.optional_secret("GH_TOKEN")
-            sources.extend(github(repo, args.ref, token=token) for repo in repos)
-        if not sources:
-            raise IngestRefused("no source given: pass --root, --repo, or both")
+        sources = _sources(args)
     except IngestRefused as exc:
         print(f"ingest refused: {exc}", file=sys.stderr)
         return 2
 
     client = QdrantClient(url=args.qdrant_url)
     try:
-        for source in sources:
-            report = ingest(client, tenant=args.tenant, documents=source)
-            print(f"{report.collection}: {report.documents} documents, {report.chunks} chunks")
+        _upsert_each(client, args.tenant, sources)
     except (IngestRefused, OSError) as exc:
         # A source read fails closed: what was already upserted is idempotent, so
         # re-running after the fix completes rather than duplicates.

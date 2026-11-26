@@ -163,6 +163,23 @@ def idempotency_key(call: ToolCall) -> str:
     return f"{call.run_id}:{call.tool}:{digest}"
 
 
+def _parsed_values(
+    text: str, report: dict[str, Any]
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """The values a redaction left behind, and the note to record when it did something.
+
+    A redaction that breaks the JSON keeps no values at all rather than a fragment of
+    one: half an argument object is a wrong record, and the ledger never expires.
+    """
+    try:
+        values = json.loads(text)
+    except ValueError:
+        return None, {**report, "action": "block"}
+    if not isinstance(values, dict):
+        return None, {**report, "action": "block"}
+    return values, report if report.get("action") != "pass" else None
+
+
 class ToolActivities:
     def __init__(
         self,
@@ -382,15 +399,7 @@ class ToolActivities:
         except dlp.DlpBlocked as exc:
             return None, exc.report
 
-        try:
-            values = json.loads(text)
-        except ValueError:
-            # A redaction broke the JSON: keep no values rather than a fragment.
-            return None, {**report, "action": "block"}
-        if not isinstance(values, dict):
-            return None, {**report, "action": "block"}
-        noted = report if report.get("action") != "pass" else None
-        return values, noted
+        return _parsed_values(text, report)
 
     def _settled(
         self, call: ToolCall, key: str, status: str, result: Any, tier: str

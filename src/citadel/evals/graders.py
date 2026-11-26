@@ -84,15 +84,27 @@ def _tool_arguments(case: Case) -> Grade:
         wanted = assertion.get("arguments")
         if not isinstance(tool, str) or not isinstance(wanted, dict):
             continue  # the dataset loader rejects this shape before grading
-        actual = [call.get("arguments") for call in calls if call.get("tool") == tool]
-        matched = any(
-            isinstance(values, dict)
-            and all(values.get(key) == value for key, value in wanted.items())
-            for values in actual
-        )
+        matched, actual = _arguments_match(calls, tool, wanted)
         if not matched:
             problems.append(f"{tool}: expected arguments {wanted!r}, record carries {actual!r}")
     return _grade(case, "tool.arguments", problems)
+
+
+def _arguments_match(
+    calls: list[dict[str, Any]], tool: str, wanted: dict[str, Any]
+) -> tuple[bool, list[Any]]:
+    """Whether one call to `tool` carried every named value, and what the calls held.
+
+    The actual values come back with the verdict because the failure message needs
+    them: a grader that says "arguments did not match" without saying what was there
+    sends a reader to the trajectory to learn what the record itself could have said.
+    """
+    actual = [call.get("arguments") for call in calls if call.get("tool") == tool]
+    matched = any(
+        isinstance(values, dict) and all(values.get(key) == value for key, value in wanted.items())
+        for values in actual
+    )
+    return matched, actual
 
 
 def _tool_sequence(case: Case) -> Grade:

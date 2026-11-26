@@ -1,2211 +1,2218 @@
 {
-  "version": "0.4.0",
-  "generated": "2026-11-26T08:29:05Z",
-  "findings": [
-    {
-      "fingerprint": "f84b324b089a",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC102",
-      "line": 38,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "df538237d264",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC201",
-      "line": 111,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "da3d225fa167",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC208",
-      "line": 111,
-      "name": "Remove Unused Parameters"
-    },
-    {
-      "fingerprint": "04906c98520c",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC601",
-      "line": 129,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "04906c98520c",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC601",
-      "line": 135,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "04906c98520c",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC601",
-      "line": 157,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "04906c98520c",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC601",
-      "line": 160,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "1948b4b02f87",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC201",
-      "line": 163,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "04906c98520c",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC601",
-      "line": 171,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "04906c98520c",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC601",
-      "line": 255,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "04906c98520c",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC601",
-      "line": 258,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "04906c98520c",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC601",
-      "line": 162,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "144759028618",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC305",
-      "line": 265,
-      "name": "Use Unpacking Instead of Indexing"
-    },
-    {
-      "fingerprint": "5d002e467f05",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC201",
-      "line": 280,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "04906c98520c",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC601",
-      "line": 294,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "04906c98520c",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC601",
-      "line": 297,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "66c73487afe7",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC201",
-      "line": 323,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "04906c98520c",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC601",
-      "line": 328,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "04906c98520c",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC601",
-      "line": 333,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "04906c98520c",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC601",
-      "line": 336,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "bc3a218b339d",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC210",
-      "line": 323,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "a23bdc34e631",
-      "file": "src/citadel/api/app.py",
-      "pattern": "SC201",
-      "line": 458,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "eae0b2938b08",
-      "file": "src/citadel/approval_requests.py",
-      "pattern": "SC206",
-      "line": 40,
-      "name": "Reify Parameters"
-    },
-    {
-      "fingerprint": "e046ffd7824d",
-      "file": "src/citadel/approvals.py",
-      "pattern": "SC201",
-      "line": 33,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "ef6291bd0c80",
-      "file": "src/citadel/approvals.py",
-      "pattern": "SC206",
-      "line": 33,
-      "name": "Reify Parameters"
-    },
-    {
-      "fingerprint": "1614ad0aa9bb",
-      "file": "src/citadel/approvals.py",
-      "pattern": "SC201",
-      "line": 71,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "ac5cec032c22",
-      "file": "src/citadel/approvals.py",
-      "pattern": "SC206",
-      "line": 71,
-      "name": "Reify Parameters"
-    },
-    {
-      "fingerprint": "1b5e75b7b803",
-      "file": "src/citadel/audit.py",
-      "pattern": "SC102",
-      "line": 19,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "99f501662dac",
-      "file": "src/citadel/audit.py",
-      "pattern": "SC102",
-      "line": 25,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "7aad1e9617cc",
-      "file": "src/citadel/audit.py",
-      "pattern": "SC206",
-      "line": 51,
-      "name": "Reify Parameters"
-    },
-    {
-      "fingerprint": "522a6389346d",
-      "file": "src/citadel/audit.py",
-      "pattern": "SC201",
-      "line": 71,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "ec506e633cfa",
-      "file": "src/citadel/audit.py",
-      "pattern": "SC201",
-      "line": 111,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "9bc3984acbb7",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC102",
-      "line": 42,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "cfa2c20cea02",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC102",
-      "line": 43,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "014cda8551d5",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC102",
-      "line": 44,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "d6e022a469bf",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC103",
-      "line": 151,
-      "name": "Protect Public Attributes"
-    },
-    {
-      "fingerprint": "09de89617d25",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC601",
-      "line": 155,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "09de89617d25",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC601",
-      "line": 155,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "66faa0207297",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC201",
-      "line": 223,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "09de89617d25",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC601",
-      "line": 242,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "100db82b2c0e",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC201",
-      "line": 276,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "8ce57691d5e7",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC210",
-      "line": 276,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "a34523f3dc7e",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC403",
-      "line": 289,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "72a39bd08e17",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC201",
-      "line": 315,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "a34523f3dc7e",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC403",
-      "line": 329,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "a34523f3dc7e",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC403",
-      "line": 330,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "a34523f3dc7e",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC403",
-      "line": 331,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "a34523f3dc7e",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC403",
-      "line": 387,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "a34523f3dc7e",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC403",
-      "line": 403,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "67fa5ce78dea",
-      "file": "src/citadel/env.py",
-      "pattern": "SC202",
-      "line": 20,
-      "name": "Rename Result Variables"
-    },
-    {
-      "fingerprint": "015cb3960832",
-      "file": "src/citadel/evals/graders.py",
-      "pattern": "SC102",
-      "line": 15,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "759cf7051057",
-      "file": "src/citadel/evals/graders.py",
-      "pattern": "SC202",
-      "line": 34,
-      "name": "Rename Result Variables"
-    },
-    {
-      "fingerprint": "25d907dbb3c1",
-      "file": "src/citadel/evals/graders.py",
-      "pattern": "SC201",
-      "line": 84,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "02d9e77b2984",
-      "file": "src/citadel/evals/graders.py",
-      "pattern": "SC210",
-      "line": 84,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "c20532b5cb13",
-      "file": "src/citadel/evals/graders.py",
-      "pattern": "SC403",
-      "line": 86,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "c20532b5cb13",
-      "file": "src/citadel/evals/graders.py",
-      "pattern": "SC403",
-      "line": 108,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "c20532b5cb13",
-      "file": "src/citadel/evals/graders.py",
-      "pattern": "SC403",
-      "line": 123,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "feef25373286",
-      "file": "src/citadel/evals/graders.py",
-      "pattern": "SC210",
-      "line": 138,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "c20532b5cb13",
-      "file": "src/citadel/evals/graders.py",
-      "pattern": "SC403",
-      "line": 140,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "c20532b5cb13",
-      "file": "src/citadel/evals/graders.py",
-      "pattern": "SC403",
-      "line": 158,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "1a7db9dea38f",
-      "file": "src/citadel/evals/graders.py",
-      "pattern": "SC210",
-      "line": 164,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "c20532b5cb13",
-      "file": "src/citadel/evals/graders.py",
-      "pattern": "SC403",
-      "line": 170,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "c20532b5cb13",
-      "file": "src/citadel/evals/graders.py",
-      "pattern": "SC403",
-      "line": 174,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "c20532b5cb13",
-      "file": "src/citadel/evals/graders.py",
-      "pattern": "SC403",
-      "line": 200,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "a9c1208cae68",
-      "file": "src/citadel/evals/graders.py",
-      "pattern": "SC201",
-      "line": 247,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "9b93ee19d891",
-      "file": "src/citadel/evals/graders.py",
-      "pattern": "SC210",
-      "line": 247,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "850e37914de5",
-      "file": "src/citadel/evals/recorder.py",
-      "pattern": "SC102",
-      "line": 22,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "879636f1b111",
-      "file": "src/citadel/evals/recorder.py",
-      "pattern": "SC305",
-      "line": 34,
-      "name": "Use Unpacking Instead of Indexing"
-    },
-    {
-      "fingerprint": "e4dd225fb072",
-      "file": "src/citadel/evals/recorder.py",
-      "pattern": "SC403",
-      "line": 36,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "2835eb27476f",
-      "file": "src/citadel/evals/recorder.py",
-      "pattern": "SC501",
-      "line": 59,
-      "name": "Replace Error Codes with Exceptions"
-    },
-    {
-      "fingerprint": "b27cb23938c8",
-      "file": "src/citadel/evals/rubric.py",
-      "pattern": "SC601",
-      "line": 90,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "b27cb23938c8",
-      "file": "src/citadel/evals/rubric.py",
-      "pattern": "SC601",
-      "line": 105,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "74ed7b8edf43",
-      "file": "src/citadel/evals/rubric.py",
-      "pattern": "SC201",
-      "line": 171,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "8476b7b3f2f7",
-      "file": "src/citadel/evals/rubric.py",
-      "pattern": "SC402",
-      "line": 171,
-      "name": "Replace Nested Conditional with Guard Clauses"
-    },
-    {
-      "fingerprint": "6131b50ca094",
-      "file": "src/citadel/evals/rubric.py",
-      "pattern": "SC403",
-      "line": 178,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "3217c49f2d2d",
-      "file": "src/citadel/evals/rubric.py",
-      "pattern": "SC407",
-      "line": 180,
-      "name": "Add Default Else Branch"
-    },
-    {
-      "fingerprint": "cc76b2148c65",
-      "file": "src/citadel/evals/rubric.py",
-      "pattern": "SC201",
-      "line": 231,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "6131b50ca094",
-      "file": "src/citadel/evals/rubric.py",
-      "pattern": "SC403",
-      "line": 240,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "ebabdcb18b07",
-      "file": "src/citadel/evals/runner.py",
-      "pattern": "SC102",
-      "line": 16,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "16a92bedd604",
-      "file": "src/citadel/evals/runner.py",
-      "pattern": "SC102",
-      "line": 17,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "7b5363abe3ca",
-      "file": "src/citadel/evals/runner.py",
-      "pattern": "SC201",
-      "line": 53,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "95d81cac1d62",
-      "file": "src/citadel/evals/runner.py",
-      "pattern": "SC210",
-      "line": 53,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "c8d9b6d5218e",
-      "file": "src/citadel/evals/schema.py",
-      "pattern": "SC102",
-      "line": 15,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "2dc24fea5e04",
-      "file": "src/citadel/evals/schema.py",
-      "pattern": "SC102",
-      "line": 90,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "a93daf16b127",
-      "file": "src/citadel/evals/schema.py",
-      "pattern": "SC102",
-      "line": 106,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "16d1ca0fc3a3",
-      "file": "src/citadel/evals/schema.py",
-      "pattern": "SC201",
-      "line": 129,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "e7ff39b980ba",
-      "file": "src/citadel/evals/schema.py",
-      "pattern": "SC402",
-      "line": 129,
-      "name": "Replace Nested Conditional with Guard Clauses"
-    },
-    {
-      "fingerprint": "2f27324cdc1e",
-      "file": "src/citadel/evals/schema.py",
-      "pattern": "SC210",
-      "line": 129,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "e960f2cf373f",
-      "file": "src/citadel/evals/schema.py",
-      "pattern": "SC403",
-      "line": 139,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "3827ae71b892",
-      "file": "src/citadel/evals/schema.py",
-      "pattern": "SC407",
-      "line": 149,
-      "name": "Add Default Else Branch"
-    },
-    {
-      "fingerprint": "e960f2cf373f",
-      "file": "src/citadel/evals/schema.py",
-      "pattern": "SC403",
-      "line": 177,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "3827ae71b892",
-      "file": "src/citadel/evals/schema.py",
-      "pattern": "SC407",
-      "line": 178,
-      "name": "Add Default Else Branch"
-    },
-    {
-      "fingerprint": "ed09c63bba14",
-      "file": "src/citadel/evals/schema.py",
-      "pattern": "SC201",
-      "line": 212,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "9d55b65af5a4",
-      "file": "src/citadel/evals/schema.py",
-      "pattern": "SC210",
-      "line": 212,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "251759cf3d28",
-      "file": "src/citadel/evals/schema.py",
-      "pattern": "SC201",
-      "line": 278,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "a7be560a5377",
-      "file": "src/citadel/evals/schema.py",
-      "pattern": "SC202",
-      "line": 292,
-      "name": "Rename Result Variables"
-    },
-    {
-      "fingerprint": "836979ec5511",
-      "file": "src/citadel/evals/schema.py",
-      "pattern": "SC210",
-      "line": 278,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "d76eedb35ec4",
-      "file": "src/citadel/evals/schema.py",
-      "pattern": "SC208",
-      "line": 278,
-      "name": "Remove Unused Parameters"
-    },
-    {
-      "fingerprint": "decff02b6fca",
-      "file": "src/citadel/identity/keycloak.py",
-      "pattern": "SC201",
-      "line": 34,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "7b5d4ffbfab5",
-      "file": "src/citadel/identity/run_token.py",
-      "pattern": "SC102",
-      "line": 26,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "feaec44e3f00",
-      "file": "src/citadel/identity/run_token.py",
-      "pattern": "SC102",
-      "line": 27,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "1af11fda4fc4",
-      "file": "src/citadel/identity/run_token.py",
-      "pattern": "SC102",
-      "line": 28,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "572fbada83b3",
-      "file": "src/citadel/identity/run_token.py",
-      "pattern": "SC201",
-      "line": 55,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "33d33ee10da7",
-      "file": "src/citadel/identity/run_token.py",
-      "pattern": "SC206",
-      "line": 55,
-      "name": "Reify Parameters"
-    },
-    {
-      "fingerprint": "ee34f9fba105",
-      "file": "src/citadel/identity/run_token.py",
-      "pattern": "SC201",
-      "line": 92,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "4f6ad19649a2",
-      "file": "src/citadel/mlflow_bootstrap.py",
-      "pattern": "SC102",
-      "line": 18,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "8a66c8b2b496",
-      "file": "src/citadel/mlflow_bootstrap.py",
-      "pattern": "SC102",
-      "line": 19,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "e3739f74caff",
-      "file": "src/citadel/mlflow_bootstrap.py",
-      "pattern": "SC601",
-      "line": 40,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "387bf5522421",
-      "file": "src/citadel/mlflow_bootstrap.py",
-      "pattern": "SC501",
-      "line": 46,
-      "name": "Replace Error Codes with Exceptions"
-    },
-    {
-      "fingerprint": "4e4c8c24f2e4",
-      "file": "src/citadel/model/client.py",
-      "pattern": "SC102",
-      "line": 26,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "7cae3479c287",
-      "file": "src/citadel/model/client.py",
-      "pattern": "SC201",
-      "line": 55,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "8b73cf6269f8",
-      "file": "src/citadel/model/client.py",
-      "pattern": "SC403",
-      "line": 69,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "d3dd92522062",
-      "file": "src/citadel/model/client.py",
-      "pattern": "SC103",
-      "line": 115,
-      "name": "Protect Public Attributes"
-    },
-    {
-      "fingerprint": "e4161eaceaec",
-      "file": "src/citadel/model/client.py",
-      "pattern": "SC206",
-      "line": 115,
-      "name": "Reify Parameters"
-    },
-    {
-      "fingerprint": "e93cdd3fa851",
-      "file": "src/citadel/model/client.py",
-      "pattern": "SC201",
-      "line": 137,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "64230b0a93f3",
-      "file": "src/citadel/model/client.py",
-      "pattern": "SC601",
-      "line": 180,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "64230b0a93f3",
-      "file": "src/citadel/model/client.py",
-      "pattern": "SC601",
-      "line": 190,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "2f5174db8d6d",
-      "file": "src/citadel/model/client.py",
-      "pattern": "SC210",
-      "line": 137,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "96f0b154d761",
-      "file": "src/citadel/model/loop.py",
-      "pattern": "SC201",
-      "line": 38,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "e3324eeb1f6b",
-      "file": "src/citadel/model/loop.py",
-      "pattern": "SC206",
-      "line": 38,
-      "name": "Reify Parameters"
-    },
-    {
-      "fingerprint": "df3c955ca06c",
-      "file": "src/citadel/model/loop.py",
-      "pattern": "SC202",
-      "line": 116,
-      "name": "Rename Result Variables"
-    },
-    {
-      "fingerprint": "6d2acbea0be3",
-      "file": "src/citadel/model/loop.py",
-      "pattern": "SC601",
-      "line": 65,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "ef5f6e775f95",
-      "file": "src/citadel/model/loop.py",
-      "pattern": "SC210",
-      "line": 38,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "f71ced42ec46",
-      "file": "src/citadel/model/loop.py",
-      "pattern": "SC403",
-      "line": 55,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "f71ced42ec46",
-      "file": "src/citadel/model/loop.py",
-      "pattern": "SC403",
-      "line": 98,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "8c5be36be4c3",
-      "file": "src/citadel/model/scripted.py",
-      "pattern": "SC208",
-      "line": 23,
-      "name": "Remove Unused Parameters"
-    },
-    {
-      "fingerprint": "a0c3dcb74caa",
-      "file": "src/citadel/net.py",
-      "pattern": "SC102",
-      "line": 20,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "682a9a71f0ab",
-      "file": "src/citadel/operator/app.py",
-      "pattern": "SC102",
-      "line": 30,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "e069aa8cbe6c",
-      "file": "src/citadel/operator/app.py",
-      "pattern": "SC102",
-      "line": 31,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "96e02b15b26a",
-      "file": "src/citadel/operator/app.py",
-      "pattern": "SC106",
-      "line": 33,
-      "name": "Replace Global Variables with DI"
-    },
-    {
-      "fingerprint": "6616f39c6f92",
-      "file": "src/citadel/operator/app.py",
-      "pattern": "SC206",
-      "line": 65,
-      "name": "Reify Parameters"
-    },
-    {
-      "fingerprint": "f22a83884dcb",
-      "file": "src/citadel/operator/app.py",
-      "pattern": "SC201",
-      "line": 92,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "1b8134246bc5",
-      "file": "src/citadel/operator/app.py",
-      "pattern": "SC601",
-      "line": 103,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "1b8134246bc5",
-      "file": "src/citadel/operator/app.py",
-      "pattern": "SC601",
-      "line": 106,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "1b8134246bc5",
-      "file": "src/citadel/operator/app.py",
-      "pattern": "SC601",
-      "line": 113,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "1b8134246bc5",
-      "file": "src/citadel/operator/app.py",
-      "pattern": "SC601",
-      "line": 115,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "1b8134246bc5",
-      "file": "src/citadel/operator/app.py",
-      "pattern": "SC601",
-      "line": 134,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "1b8134246bc5",
-      "file": "src/citadel/operator/app.py",
-      "pattern": "SC601",
-      "line": 136,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "1b8134246bc5",
-      "file": "src/citadel/operator/app.py",
-      "pattern": "SC601",
-      "line": 138,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "1b8134246bc5",
-      "file": "src/citadel/operator/app.py",
-      "pattern": "SC601",
-      "line": 140,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "85dc86b273f0",
-      "file": "src/citadel/policy/authorize.py",
-      "pattern": "SC102",
-      "line": 28,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "acfb7b8e14ab",
-      "file": "src/citadel/policy/authorize.py",
-      "pattern": "SC201",
-      "line": 72,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "1498598595a9",
-      "file": "src/citadel/policy/authorize.py",
-      "pattern": "SC210",
-      "line": 72,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "852d6c0b62c3",
-      "file": "src/citadel/policy/bootstrap.py",
-      "pattern": "SC102",
-      "line": 29,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "0e7a3eab79f3",
-      "file": "src/citadel/policy/bootstrap.py",
-      "pattern": "SC601",
-      "line": 41,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "0e7a3eab79f3",
-      "file": "src/citadel/policy/bootstrap.py",
-      "pattern": "SC601",
-      "line": 48,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "d209e51f516c",
-      "file": "src/citadel/policy/bootstrap.py",
-      "pattern": "SC202",
-      "line": 55,
-      "name": "Rename Result Variables"
-    },
-    {
-      "fingerprint": "a34f4099da82",
-      "file": "src/citadel/policy/bootstrap.py",
-      "pattern": "SC202",
-      "line": 94,
-      "name": "Rename Result Variables"
-    },
-    {
-      "fingerprint": "36a17bdfbda5",
-      "file": "src/citadel/policy/bootstrap.py",
-      "pattern": "SC403",
-      "line": 80,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "36a17bdfbda5",
-      "file": "src/citadel/policy/bootstrap.py",
-      "pattern": "SC403",
-      "line": 81,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "36a17bdfbda5",
-      "file": "src/citadel/policy/bootstrap.py",
-      "pattern": "SC403",
-      "line": 87,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "36a17bdfbda5",
-      "file": "src/citadel/policy/bootstrap.py",
-      "pattern": "SC403",
-      "line": 93,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "81ffd1be5853",
-      "file": "src/citadel/policy/bootstrap.py",
-      "pattern": "SC201",
-      "line": 102,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "1b201ac12000",
-      "file": "src/citadel/policy/catalog.py",
-      "pattern": "SC601",
-      "line": 39,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "621663109ff2",
-      "file": "src/citadel/policy/openfga.py",
-      "pattern": "SC306",
-      "line": 13,
-      "name": "Remove Lazy Class"
-    },
-    {
-      "fingerprint": "d4509fa1ffc4",
-      "file": "src/citadel/prompts.py",
-      "pattern": "SC102",
-      "line": 20,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "500a1668ae6d",
-      "file": "src/citadel/runs.py",
-      "pattern": "SC306",
-      "line": 10,
-      "name": "Remove Lazy Class"
-    },
-    {
-      "fingerprint": "69768bcee9d4",
-      "file": "src/citadel/skills.py",
-      "pattern": "SC102",
-      "line": 26,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "5f4f3660504d",
-      "file": "src/citadel/skills.py",
-      "pattern": "SC102",
-      "line": 27,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "779f4dbdd0be",
-      "file": "src/citadel/skills.py",
-      "pattern": "SC102",
-      "line": 29,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "b60ed7736ada",
-      "file": "src/citadel/skills.py",
-      "pattern": "SC403",
-      "line": 94,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "58d65cd4d51c",
-      "file": "src/citadel/skills.py",
-      "pattern": "SC202",
-      "line": 134,
-      "name": "Rename Result Variables"
-    },
-    {
-      "fingerprint": "f4ce8c72022e",
-      "file": "src/citadel/telemetry.py",
-      "pattern": "SC106",
-      "line": 33,
-      "name": "Replace Global Variables with DI"
-    },
-    {
-      "fingerprint": "7444c81f2b60",
-      "file": "src/citadel/telemetry.py",
-      "pattern": "SC202",
-      "line": 110,
-      "name": "Rename Result Variables"
-    },
-    {
-      "fingerprint": "7444c81f2b60",
-      "file": "src/citadel/telemetry.py",
-      "pattern": "SC202",
-      "line": 114,
-      "name": "Rename Result Variables"
-    },
-    {
-      "fingerprint": "c97b6f19d44e",
-      "file": "src/citadel/telemetry.py",
-      "pattern": "SC601",
-      "line": 114,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "56c77aac67db",
-      "file": "src/citadel/tool_outputs.py",
-      "pattern": "SC102",
-      "line": 27,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "cab5c5247e06",
-      "file": "src/citadel/tool_outputs.py",
-      "pattern": "SC206",
-      "line": 41,
-      "name": "Reify Parameters"
-    },
-    {
-      "fingerprint": "efeb5ac9aaa6",
-      "file": "src/citadel/tools/allowlist.py",
-      "pattern": "SC201",
-      "line": 70,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "d169e30de165",
-      "file": "src/citadel/tools/allowlist.py",
-      "pattern": "SC402",
-      "line": 70,
-      "name": "Replace Nested Conditional with Guard Clauses"
-    },
-    {
-      "fingerprint": "2cf165ff75f4",
-      "file": "src/citadel/tools/allowlist.py",
-      "pattern": "SC210",
-      "line": 70,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "9e5c88bb7d8e",
-      "file": "src/citadel/tools/bounds.py",
-      "pattern": "SC102",
-      "line": 21,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "53a8253ca20c",
-      "file": "src/citadel/tools/bounds.py",
-      "pattern": "SC102",
-      "line": 23,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "56b6fc246d6d",
-      "file": "src/citadel/tools/bounds.py",
-      "pattern": "SC201",
-      "line": 54,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "180f7df1e14f",
-      "file": "src/citadel/tools/bounds.py",
-      "pattern": "SC601",
-      "line": 90,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "19d79d6e0261",
-      "file": "src/citadel/tools/invoke.py",
-      "pattern": "SC201",
-      "line": 40,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "1a628e392436",
-      "file": "src/citadel/tools/invoke.py",
-      "pattern": "SC202",
-      "line": 65,
-      "name": "Rename Result Variables"
-    },
-    {
-      "fingerprint": "ef6dd2190d39",
-      "file": "src/citadel/tools/invoke.py",
-      "pattern": "SC210",
-      "line": 40,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "7e7e5817fb79",
-      "file": "src/citadel/tools/invoke.py",
-      "pattern": "SC210",
-      "line": 82,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "b190f00e7127",
-      "file": "src/citadel/tools/runner.py",
-      "pattern": "SC102",
-      "line": 25,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "6e5c159fb316",
-      "file": "src/citadel/tools/runner.py",
-      "pattern": "SC102",
-      "line": 26,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "2b1095eb9c7d",
-      "file": "src/citadel/tools/runner.py",
-      "pattern": "SC102",
-      "line": 27,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "9ea718301522",
-      "file": "src/citadel/tools/runner.py",
-      "pattern": "SC102",
-      "line": 31,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "d5a0d1aeeb01",
-      "file": "src/citadel/tools/runner.py",
-      "pattern": "SC102",
-      "line": 32,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "7294f3787829",
-      "file": "src/citadel/tools/runner.py",
-      "pattern": "SC106",
-      "line": 34,
-      "name": "Replace Global Variables with DI"
-    },
-    {
-      "fingerprint": "f92188bf7772",
-      "file": "src/citadel/tools/runner.py",
-      "pattern": "SC605",
-      "line": 69,
-      "name": "Remove Empty Catch Block"
-    },
-    {
-      "fingerprint": "83533d21b334",
-      "file": "src/citadel/tools/runner.py",
-      "pattern": "SC201",
-      "line": 106,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "d275bd39559e",
-      "file": "src/citadel/tools/runner.py",
-      "pattern": "SC202",
-      "line": 146,
-      "name": "Rename Result Variables"
-    },
-    {
-      "fingerprint": "43f507d8b2a8",
-      "file": "src/citadel/tools/runner.py",
-      "pattern": "SC601",
-      "line": 110,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "43f507d8b2a8",
-      "file": "src/citadel/tools/runner.py",
-      "pattern": "SC601",
-      "line": 113,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "43f507d8b2a8",
-      "file": "src/citadel/tools/runner.py",
-      "pattern": "SC601",
-      "line": 117,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "43f507d8b2a8",
-      "file": "src/citadel/tools/runner.py",
-      "pattern": "SC601",
-      "line": 130,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "43f507d8b2a8",
-      "file": "src/citadel/tools/runner.py",
-      "pattern": "SC601",
-      "line": 133,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "9ad9e4180f1f",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC102",
-      "line": 46,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "f52c80be9084",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC102",
-      "line": 47,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "fee7bed04e7b",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC102",
-      "line": 48,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "2f5ad8822a0b",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC102",
-      "line": 49,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "5fc7dd93864c",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC102",
-      "line": 50,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "e1bab36ee3d3",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC102",
-      "line": 58,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "a7c4efc641e8",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC102",
-      "line": 60,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "ce8b3db1a941",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC201",
-      "line": 158,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "e70c43db5959",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC206",
-      "line": 158,
-      "name": "Reify Parameters"
-    },
-    {
-      "fingerprint": "8063c4b19894",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC208",
-      "line": 158,
-      "name": "Remove Unused Parameters"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 202,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 215,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 265,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "e45bc729efc2",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC201",
-      "line": 278,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 299,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 302,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 305,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 338,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 342,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 343,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 345,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 359,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 361,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 368,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 370,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 375,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 381,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 384,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 393,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "f0268086d498",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC201",
-      "line": 398,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "7002f625b6f6",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC206",
-      "line": 398,
-      "name": "Reify Parameters"
-    },
-    {
-      "fingerprint": "f4f5a5fb23d2",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC305",
-      "line": 398,
-      "name": "Use Unpacking Instead of Indexing"
-    },
-    {
-      "fingerprint": "7c3654bd8e85",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC603",
-      "line": 441,
-      "name": "Replace String Concatenation"
-    },
-    {
-      "fingerprint": "331ab07b27e2",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC201",
-      "line": 473,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 476,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 495,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "6a7fa3b0a6fd",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC305",
-      "line": 473,
-      "name": "Use Unpacking Instead of Indexing"
-    },
-    {
-      "fingerprint": "f10df8e16398",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC201",
-      "line": 508,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "d1617df6242d",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC305",
-      "line": 508,
-      "name": "Use Unpacking Instead of Indexing"
-    },
-    {
-      "fingerprint": "3636b2b63462",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC201",
-      "line": 540,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 544,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 575,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "7c3654bd8e85",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC603",
-      "line": 563,
-      "name": "Replace String Concatenation"
-    },
-    {
-      "fingerprint": "77acf2b638fb",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC407",
-      "line": 581,
-      "name": "Add Default Else Branch"
-    },
-    {
-      "fingerprint": "44661c07a17e",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC201",
-      "line": 596,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 600,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 602,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 605,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 608,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 611,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 613,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 615,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 627,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 630,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 632,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 633,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "51f6e42d3fd6",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC201",
-      "line": 636,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "0af08f6ff43d",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC206",
-      "line": 636,
-      "name": "Reify Parameters"
-    },
-    {
-      "fingerprint": "88bea407ecc4",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC601",
-      "line": 688,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "ded433ed2242",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC305",
-      "line": 636,
-      "name": "Use Unpacking Instead of Indexing"
-    },
-    {
-      "fingerprint": "7c3654bd8e85",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC603",
-      "line": 663,
-      "name": "Replace String Concatenation"
-    },
-    {
-      "fingerprint": "7c3654bd8e85",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC603",
-      "line": 670,
-      "name": "Replace String Concatenation"
-    },
-    {
-      "fingerprint": "1b24df722069",
-      "file": "src/citadel/ui/app.py",
-      "pattern": "SC106",
-      "line": 701,
-      "name": "Replace Global Variables with DI"
-    },
-    {
-      "fingerprint": "94981253a738",
-      "file": "src/citadel/worker.py",
-      "pattern": "SC102",
-      "line": 31,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "529dd557091e",
-      "file": "src/citadel/worker.py",
-      "pattern": "SC102",
-      "line": 32,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "66ee60add9e6",
-      "file": "src/citadel/worker.py",
-      "pattern": "SC102",
-      "line": 33,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "00e908645d76",
-      "file": "src/citadel/worker.py",
-      "pattern": "SC201",
-      "line": 41,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "ef82a80cdcfe",
-      "file": "src/citadel/workflows/__init__.py",
-      "pattern": "SC201",
-      "line": 24,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "7f5315ca4cf5",
-      "file": "src/citadel/workflows/__init__.py",
-      "pattern": "SC206",
-      "line": 24,
-      "name": "Reify Parameters"
-    },
-    {
-      "fingerprint": "ceb3e437b79b",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC102",
-      "line": 34,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "65ae3bcdd70c",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC102",
-      "line": 38,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "ca42e7a8665a",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC201",
-      "line": 49,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "058514055aac",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC201",
-      "line": 80,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "8dcbd04999d1",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC307",
-      "line": 121,
-      "name": "Remove Temporary Field"
-    },
-    {
-      "fingerprint": "9fc6a4cc8e13",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC307",
-      "line": 121,
-      "name": "Remove Temporary Field"
-    },
-    {
-      "fingerprint": "222003d4dd2d",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC307",
-      "line": 121,
-      "name": "Remove Temporary Field"
-    },
-    {
-      "fingerprint": "61474b606041",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC307",
-      "line": 121,
-      "name": "Remove Temporary Field"
-    },
-    {
-      "fingerprint": "6723592a0f8a",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC206",
-      "line": 122,
-      "name": "Reify Parameters"
-    },
-    {
-      "fingerprint": "8008c3b52e83",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC201",
-      "line": 140,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "3a6624b43175",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC201",
-      "line": 211,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "c1c3669fd7d7",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC202",
-      "line": 249,
-      "name": "Rename Result Variables"
-    },
-    {
-      "fingerprint": "079dcc14c29e",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC601",
-      "line": 247,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "97cd75b1c7f8",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC201",
-      "line": 265,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "6cd20a15a20e",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC206",
-      "line": 265,
-      "name": "Reify Parameters"
-    },
-    {
-      "fingerprint": "dfc86a7c58b4",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC201",
-      "line": 312,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "a70907063ee7",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC201",
-      "line": 377,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "079dcc14c29e",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC601",
-      "line": 385,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "079dcc14c29e",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC601",
-      "line": 395,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "079dcc14c29e",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC601",
-      "line": 406,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "079dcc14c29e",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC601",
-      "line": 407,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "079dcc14c29e",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC601",
-      "line": 407,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "b440c199e482",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC201",
-      "line": 434,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "80dc5739cebb",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC201",
-      "line": 470,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "079dcc14c29e",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC601",
-      "line": 494,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "0f29b5d881bd",
-      "file": "src/citadel/workflows/model_step.py",
-      "pattern": "SC102",
-      "line": 27,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "17bc17caa47a",
-      "file": "src/citadel/workflows/model_step.py",
-      "pattern": "SC102",
-      "line": 28,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "52f06a824a6b",
-      "file": "src/citadel/workflows/model_step.py",
-      "pattern": "SC307",
-      "line": 80,
-      "name": "Remove Temporary Field"
-    },
-    {
-      "fingerprint": "4dd2578ee4b3",
-      "file": "src/citadel/workflows/model_step.py",
-      "pattern": "SC307",
-      "line": 80,
-      "name": "Remove Temporary Field"
-    },
-    {
-      "fingerprint": "5e32803b3cae",
-      "file": "src/citadel/workflows/model_step.py",
-      "pattern": "SC307",
-      "line": 80,
-      "name": "Remove Temporary Field"
-    },
-    {
-      "fingerprint": "b86399f0684f",
-      "file": "src/citadel/workflows/model_step.py",
-      "pattern": "SC307",
-      "line": 80,
-      "name": "Remove Temporary Field"
-    },
-    {
-      "fingerprint": "5e44d06cd9cb",
-      "file": "src/citadel/workflows/model_step.py",
-      "pattern": "SC601",
-      "line": 129,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "c14092703ce7",
-      "file": "src/citadel/workflows/model_step.py",
-      "pattern": "SC201",
-      "line": 133,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "da6002a6f125",
-      "file": "src/citadel/workflows/model_step.py",
-      "pattern": "SC210",
-      "line": 133,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "5e44d06cd9cb",
-      "file": "src/citadel/workflows/model_step.py",
-      "pattern": "SC601",
-      "line": 285,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "269d4108daee",
-      "file": "src/citadel/workflows/orchestrator.py",
-      "pattern": "SC202",
-      "line": 63,
-      "name": "Rename Result Variables"
-    },
-    {
-      "fingerprint": "3e9807f085f4",
-      "file": "src/citadel/workflows/orchestrator.py",
-      "pattern": "SC601",
-      "line": 76,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "3e9807f085f4",
-      "file": "src/citadel/workflows/orchestrator.py",
-      "pattern": "SC601",
-      "line": 78,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "d0acb213e228",
-      "file": "src/citadel/workflows/orchestrator.py",
-      "pattern": "SC201",
-      "line": 107,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "b451ea95fa82",
-      "file": "src/citadel/workflows/orchestrator.py",
-      "pattern": "SC210",
-      "line": 107,
-      "name": "Reduce Cyclomatic Complexity"
-    },
-    {
-      "fingerprint": "d98abb77b199",
-      "file": "src/citadel/workflows/orchestrator.py",
-      "pattern": "SC403",
-      "line": 113,
-      "name": "Replace Loop with Pipeline"
-    },
-    {
-      "fingerprint": "fc02b93499ff",
-      "file": "src/citadel/workflows/specialist.py",
-      "pattern": "SC201",
-      "line": 31,
-      "name": "Extract Method"
-    },
-    {
-      "fingerprint": "8524435e9809",
-      "file": "src/citadel/workflows/specialist.py",
-      "pattern": "SC601",
-      "line": 35,
-      "name": "Extract Constant"
-    },
-    {
-      "fingerprint": "b7c609c1ab21",
-      "file": "src/citadel/workflows/types.py",
-      "pattern": "SC102",
-      "line": 13,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "42c8a7f55ffc",
-      "file": "src/citadel/workflows/types.py",
-      "pattern": "SC102",
-      "line": 16,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "f8dfe963ae38",
-      "file": "src/citadel/workflows/types.py",
-      "pattern": "SC102",
-      "line": 17,
-      "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "28745c917d26",
-      "file": "src/citadel/operator/app.py",
-      "pattern": "SC505",
-      "line": 1,
-      "name": "Shotgun Surgery"
-    },
-    {
-      "fingerprint": "a131ecf93ff7",
-      "file": "src/citadel/db.py",
-      "pattern": "SC505",
-      "line": 1,
-      "name": "Shotgun Surgery"
-    },
-    {
-      "fingerprint": "5eccc210035c",
-      "file": "src/citadel/audit.py",
-      "pattern": "SC505",
-      "line": 1,
-      "name": "Shotgun Surgery"
-    },
-    {
-      "fingerprint": "285d13af5d7a",
-      "file": "src/citadel/dlp.py",
-      "pattern": "SC505",
-      "line": 1,
-      "name": "Shotgun Surgery"
-    },
-    {
-      "fingerprint": "3a7327a36e85",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC801",
-      "line": 121,
-      "name": "Low Class Cohesion"
-    },
-    {
-      "fingerprint": "224f69451024",
-      "file": "src/citadel/workflows/model_step.py",
-      "pattern": "SC801",
-      "line": 80,
-      "name": "Low Class Cohesion"
-    },
-    {
-      "fingerprint": "436d885d24b9",
-      "file": "src/citadel/workflows/activities.py",
-      "pattern": "SC804",
-      "line": 121,
-      "name": "High Response for Class"
-    }
-  ]
+ "version": "0.4.0",
+ "generated": "2026-11-26T08:29:05Z",
+ "findings": [
+  {
+   "fingerprint": "f84b324b089a",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC102",
+   "line": 38,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "df538237d264",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC201",
+   "line": 111,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "da3d225fa167",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC208",
+   "line": 111,
+   "name": "Remove Unused Parameters"
+  },
+  {
+   "fingerprint": "04906c98520c",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC601",
+   "line": 129,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "04906c98520c",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC601",
+   "line": 135,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "04906c98520c",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC601",
+   "line": 157,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "04906c98520c",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC601",
+   "line": 160,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "1948b4b02f87",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC201",
+   "line": 163,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "04906c98520c",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC601",
+   "line": 171,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "04906c98520c",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC601",
+   "line": 255,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "04906c98520c",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC601",
+   "line": 258,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "04906c98520c",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC601",
+   "line": 162,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "144759028618",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC305",
+   "line": 265,
+   "name": "Use Unpacking Instead of Indexing"
+  },
+  {
+   "fingerprint": "5d002e467f05",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC201",
+   "line": 280,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "04906c98520c",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC601",
+   "line": 294,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "04906c98520c",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC601",
+   "line": 297,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "66c73487afe7",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC201",
+   "line": 323,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "04906c98520c",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC601",
+   "line": 328,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "04906c98520c",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC601",
+   "line": 333,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "04906c98520c",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC601",
+   "line": 336,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "bc3a218b339d",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC210",
+   "line": 323,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "a23bdc34e631",
+   "file": "src/citadel/api/app.py",
+   "pattern": "SC201",
+   "line": 458,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "eae0b2938b08",
+   "file": "src/citadel/approval_requests.py",
+   "pattern": "SC206",
+   "line": 40,
+   "name": "Reify Parameters"
+  },
+  {
+   "fingerprint": "e046ffd7824d",
+   "file": "src/citadel/approvals.py",
+   "pattern": "SC201",
+   "line": 33,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "ef6291bd0c80",
+   "file": "src/citadel/approvals.py",
+   "pattern": "SC206",
+   "line": 33,
+   "name": "Reify Parameters"
+  },
+  {
+   "fingerprint": "1614ad0aa9bb",
+   "file": "src/citadel/approvals.py",
+   "pattern": "SC201",
+   "line": 71,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "ac5cec032c22",
+   "file": "src/citadel/approvals.py",
+   "pattern": "SC206",
+   "line": 71,
+   "name": "Reify Parameters"
+  },
+  {
+   "fingerprint": "1b5e75b7b803",
+   "file": "src/citadel/audit.py",
+   "pattern": "SC102",
+   "line": 19,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "99f501662dac",
+   "file": "src/citadel/audit.py",
+   "pattern": "SC102",
+   "line": 25,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "7aad1e9617cc",
+   "file": "src/citadel/audit.py",
+   "pattern": "SC206",
+   "line": 51,
+   "name": "Reify Parameters"
+  },
+  {
+   "fingerprint": "522a6389346d",
+   "file": "src/citadel/audit.py",
+   "pattern": "SC201",
+   "line": 71,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "ec506e633cfa",
+   "file": "src/citadel/audit.py",
+   "pattern": "SC201",
+   "line": 111,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "9bc3984acbb7",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC102",
+   "line": 42,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "cfa2c20cea02",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC102",
+   "line": 43,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "014cda8551d5",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC102",
+   "line": 44,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "d6e022a469bf",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC103",
+   "line": 151,
+   "name": "Protect Public Attributes"
+  },
+  {
+   "fingerprint": "09de89617d25",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC601",
+   "line": 155,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "09de89617d25",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC601",
+   "line": 155,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "66faa0207297",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC201",
+   "line": 223,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "09de89617d25",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC601",
+   "line": 242,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "100db82b2c0e",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC201",
+   "line": 276,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "8ce57691d5e7",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC210",
+   "line": 276,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "a34523f3dc7e",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC403",
+   "line": 289,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "72a39bd08e17",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC201",
+   "line": 315,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "a34523f3dc7e",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC403",
+   "line": 329,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "a34523f3dc7e",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC403",
+   "line": 330,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "a34523f3dc7e",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC403",
+   "line": 331,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "a34523f3dc7e",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC403",
+   "line": 387,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "a34523f3dc7e",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC403",
+   "line": 403,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "67fa5ce78dea",
+   "file": "src/citadel/env.py",
+   "pattern": "SC202",
+   "line": 20,
+   "name": "Rename Result Variables"
+  },
+  {
+   "fingerprint": "015cb3960832",
+   "file": "src/citadel/evals/graders.py",
+   "pattern": "SC102",
+   "line": 15,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "759cf7051057",
+   "file": "src/citadel/evals/graders.py",
+   "pattern": "SC202",
+   "line": 34,
+   "name": "Rename Result Variables"
+  },
+  {
+   "fingerprint": "25d907dbb3c1",
+   "file": "src/citadel/evals/graders.py",
+   "pattern": "SC201",
+   "line": 84,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "02d9e77b2984",
+   "file": "src/citadel/evals/graders.py",
+   "pattern": "SC210",
+   "line": 84,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "c20532b5cb13",
+   "file": "src/citadel/evals/graders.py",
+   "pattern": "SC403",
+   "line": 86,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "c20532b5cb13",
+   "file": "src/citadel/evals/graders.py",
+   "pattern": "SC403",
+   "line": 108,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "c20532b5cb13",
+   "file": "src/citadel/evals/graders.py",
+   "pattern": "SC403",
+   "line": 123,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "feef25373286",
+   "file": "src/citadel/evals/graders.py",
+   "pattern": "SC210",
+   "line": 138,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "c20532b5cb13",
+   "file": "src/citadel/evals/graders.py",
+   "pattern": "SC403",
+   "line": 140,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "c20532b5cb13",
+   "file": "src/citadel/evals/graders.py",
+   "pattern": "SC403",
+   "line": 158,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "1a7db9dea38f",
+   "file": "src/citadel/evals/graders.py",
+   "pattern": "SC210",
+   "line": 164,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "c20532b5cb13",
+   "file": "src/citadel/evals/graders.py",
+   "pattern": "SC403",
+   "line": 170,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "c20532b5cb13",
+   "file": "src/citadel/evals/graders.py",
+   "pattern": "SC403",
+   "line": 174,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "c20532b5cb13",
+   "file": "src/citadel/evals/graders.py",
+   "pattern": "SC403",
+   "line": 200,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "a9c1208cae68",
+   "file": "src/citadel/evals/graders.py",
+   "pattern": "SC201",
+   "line": 247,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "9b93ee19d891",
+   "file": "src/citadel/evals/graders.py",
+   "pattern": "SC210",
+   "line": 247,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "850e37914de5",
+   "file": "src/citadel/evals/recorder.py",
+   "pattern": "SC102",
+   "line": 22,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "879636f1b111",
+   "file": "src/citadel/evals/recorder.py",
+   "pattern": "SC305",
+   "line": 34,
+   "name": "Use Unpacking Instead of Indexing"
+  },
+  {
+   "fingerprint": "e4dd225fb072",
+   "file": "src/citadel/evals/recorder.py",
+   "pattern": "SC403",
+   "line": 36,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "2835eb27476f",
+   "file": "src/citadel/evals/recorder.py",
+   "pattern": "SC501",
+   "line": 59,
+   "name": "Replace Error Codes with Exceptions"
+  },
+  {
+   "fingerprint": "b27cb23938c8",
+   "file": "src/citadel/evals/rubric.py",
+   "pattern": "SC601",
+   "line": 90,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "b27cb23938c8",
+   "file": "src/citadel/evals/rubric.py",
+   "pattern": "SC601",
+   "line": 105,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "74ed7b8edf43",
+   "file": "src/citadel/evals/rubric.py",
+   "pattern": "SC201",
+   "line": 171,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "8476b7b3f2f7",
+   "file": "src/citadel/evals/rubric.py",
+   "pattern": "SC402",
+   "line": 171,
+   "name": "Replace Nested Conditional with Guard Clauses"
+  },
+  {
+   "fingerprint": "6131b50ca094",
+   "file": "src/citadel/evals/rubric.py",
+   "pattern": "SC403",
+   "line": 178,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "3217c49f2d2d",
+   "file": "src/citadel/evals/rubric.py",
+   "pattern": "SC407",
+   "line": 180,
+   "name": "Add Default Else Branch"
+  },
+  {
+   "fingerprint": "cc76b2148c65",
+   "file": "src/citadel/evals/rubric.py",
+   "pattern": "SC201",
+   "line": 231,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "6131b50ca094",
+   "file": "src/citadel/evals/rubric.py",
+   "pattern": "SC403",
+   "line": 240,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "ebabdcb18b07",
+   "file": "src/citadel/evals/runner.py",
+   "pattern": "SC102",
+   "line": 16,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "16a92bedd604",
+   "file": "src/citadel/evals/runner.py",
+   "pattern": "SC102",
+   "line": 17,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "7b5363abe3ca",
+   "file": "src/citadel/evals/runner.py",
+   "pattern": "SC201",
+   "line": 53,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "95d81cac1d62",
+   "file": "src/citadel/evals/runner.py",
+   "pattern": "SC210",
+   "line": 53,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "c8d9b6d5218e",
+   "file": "src/citadel/evals/schema.py",
+   "pattern": "SC102",
+   "line": 15,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "2dc24fea5e04",
+   "file": "src/citadel/evals/schema.py",
+   "pattern": "SC102",
+   "line": 90,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "a93daf16b127",
+   "file": "src/citadel/evals/schema.py",
+   "pattern": "SC102",
+   "line": 106,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "16d1ca0fc3a3",
+   "file": "src/citadel/evals/schema.py",
+   "pattern": "SC201",
+   "line": 129,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "e7ff39b980ba",
+   "file": "src/citadel/evals/schema.py",
+   "pattern": "SC402",
+   "line": 129,
+   "name": "Replace Nested Conditional with Guard Clauses"
+  },
+  {
+   "fingerprint": "2f27324cdc1e",
+   "file": "src/citadel/evals/schema.py",
+   "pattern": "SC210",
+   "line": 129,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "e960f2cf373f",
+   "file": "src/citadel/evals/schema.py",
+   "pattern": "SC403",
+   "line": 139,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "3827ae71b892",
+   "file": "src/citadel/evals/schema.py",
+   "pattern": "SC407",
+   "line": 149,
+   "name": "Add Default Else Branch"
+  },
+  {
+   "fingerprint": "e960f2cf373f",
+   "file": "src/citadel/evals/schema.py",
+   "pattern": "SC403",
+   "line": 177,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "3827ae71b892",
+   "file": "src/citadel/evals/schema.py",
+   "pattern": "SC407",
+   "line": 178,
+   "name": "Add Default Else Branch"
+  },
+  {
+   "fingerprint": "ed09c63bba14",
+   "file": "src/citadel/evals/schema.py",
+   "pattern": "SC201",
+   "line": 212,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "9d55b65af5a4",
+   "file": "src/citadel/evals/schema.py",
+   "pattern": "SC210",
+   "line": 212,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "251759cf3d28",
+   "file": "src/citadel/evals/schema.py",
+   "pattern": "SC201",
+   "line": 278,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "a7be560a5377",
+   "file": "src/citadel/evals/schema.py",
+   "pattern": "SC202",
+   "line": 292,
+   "name": "Rename Result Variables"
+  },
+  {
+   "fingerprint": "836979ec5511",
+   "file": "src/citadel/evals/schema.py",
+   "pattern": "SC210",
+   "line": 278,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "d76eedb35ec4",
+   "file": "src/citadel/evals/schema.py",
+   "pattern": "SC208",
+   "line": 278,
+   "name": "Remove Unused Parameters"
+  },
+  {
+   "fingerprint": "decff02b6fca",
+   "file": "src/citadel/identity/keycloak.py",
+   "pattern": "SC201",
+   "line": 34,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "7b5d4ffbfab5",
+   "file": "src/citadel/identity/run_token.py",
+   "pattern": "SC102",
+   "line": 26,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "feaec44e3f00",
+   "file": "src/citadel/identity/run_token.py",
+   "pattern": "SC102",
+   "line": 27,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "1af11fda4fc4",
+   "file": "src/citadel/identity/run_token.py",
+   "pattern": "SC102",
+   "line": 28,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "572fbada83b3",
+   "file": "src/citadel/identity/run_token.py",
+   "pattern": "SC201",
+   "line": 55,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "33d33ee10da7",
+   "file": "src/citadel/identity/run_token.py",
+   "pattern": "SC206",
+   "line": 55,
+   "name": "Reify Parameters"
+  },
+  {
+   "fingerprint": "ee34f9fba105",
+   "file": "src/citadel/identity/run_token.py",
+   "pattern": "SC201",
+   "line": 92,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "4f6ad19649a2",
+   "file": "src/citadel/mlflow_bootstrap.py",
+   "pattern": "SC102",
+   "line": 18,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "8a66c8b2b496",
+   "file": "src/citadel/mlflow_bootstrap.py",
+   "pattern": "SC102",
+   "line": 19,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "e3739f74caff",
+   "file": "src/citadel/mlflow_bootstrap.py",
+   "pattern": "SC601",
+   "line": 40,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "387bf5522421",
+   "file": "src/citadel/mlflow_bootstrap.py",
+   "pattern": "SC501",
+   "line": 46,
+   "name": "Replace Error Codes with Exceptions"
+  },
+  {
+   "fingerprint": "4e4c8c24f2e4",
+   "file": "src/citadel/model/client.py",
+   "pattern": "SC102",
+   "line": 26,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "7cae3479c287",
+   "file": "src/citadel/model/client.py",
+   "pattern": "SC201",
+   "line": 55,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "8b73cf6269f8",
+   "file": "src/citadel/model/client.py",
+   "pattern": "SC403",
+   "line": 69,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "d3dd92522062",
+   "file": "src/citadel/model/client.py",
+   "pattern": "SC103",
+   "line": 115,
+   "name": "Protect Public Attributes"
+  },
+  {
+   "fingerprint": "e4161eaceaec",
+   "file": "src/citadel/model/client.py",
+   "pattern": "SC206",
+   "line": 115,
+   "name": "Reify Parameters"
+  },
+  {
+   "fingerprint": "e93cdd3fa851",
+   "file": "src/citadel/model/client.py",
+   "pattern": "SC201",
+   "line": 137,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "64230b0a93f3",
+   "file": "src/citadel/model/client.py",
+   "pattern": "SC601",
+   "line": 180,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "64230b0a93f3",
+   "file": "src/citadel/model/client.py",
+   "pattern": "SC601",
+   "line": 190,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "2f5174db8d6d",
+   "file": "src/citadel/model/client.py",
+   "pattern": "SC210",
+   "line": 137,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "96f0b154d761",
+   "file": "src/citadel/model/loop.py",
+   "pattern": "SC201",
+   "line": 38,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "e3324eeb1f6b",
+   "file": "src/citadel/model/loop.py",
+   "pattern": "SC206",
+   "line": 38,
+   "name": "Reify Parameters"
+  },
+  {
+   "fingerprint": "df3c955ca06c",
+   "file": "src/citadel/model/loop.py",
+   "pattern": "SC202",
+   "line": 116,
+   "name": "Rename Result Variables"
+  },
+  {
+   "fingerprint": "6d2acbea0be3",
+   "file": "src/citadel/model/loop.py",
+   "pattern": "SC601",
+   "line": 65,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "ef5f6e775f95",
+   "file": "src/citadel/model/loop.py",
+   "pattern": "SC210",
+   "line": 38,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "f71ced42ec46",
+   "file": "src/citadel/model/loop.py",
+   "pattern": "SC403",
+   "line": 55,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "f71ced42ec46",
+   "file": "src/citadel/model/loop.py",
+   "pattern": "SC403",
+   "line": 98,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "8c5be36be4c3",
+   "file": "src/citadel/model/scripted.py",
+   "pattern": "SC208",
+   "line": 23,
+   "name": "Remove Unused Parameters"
+  },
+  {
+   "fingerprint": "a0c3dcb74caa",
+   "file": "src/citadel/net.py",
+   "pattern": "SC102",
+   "line": 20,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "682a9a71f0ab",
+   "file": "src/citadel/operator/app.py",
+   "pattern": "SC102",
+   "line": 30,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "e069aa8cbe6c",
+   "file": "src/citadel/operator/app.py",
+   "pattern": "SC102",
+   "line": 31,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "96e02b15b26a",
+   "file": "src/citadel/operator/app.py",
+   "pattern": "SC106",
+   "line": 33,
+   "name": "Replace Global Variables with DI"
+  },
+  {
+   "fingerprint": "6616f39c6f92",
+   "file": "src/citadel/operator/app.py",
+   "pattern": "SC206",
+   "line": 65,
+   "name": "Reify Parameters"
+  },
+  {
+   "fingerprint": "f22a83884dcb",
+   "file": "src/citadel/operator/app.py",
+   "pattern": "SC201",
+   "line": 92,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "1b8134246bc5",
+   "file": "src/citadel/operator/app.py",
+   "pattern": "SC601",
+   "line": 103,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "1b8134246bc5",
+   "file": "src/citadel/operator/app.py",
+   "pattern": "SC601",
+   "line": 106,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "1b8134246bc5",
+   "file": "src/citadel/operator/app.py",
+   "pattern": "SC601",
+   "line": 113,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "1b8134246bc5",
+   "file": "src/citadel/operator/app.py",
+   "pattern": "SC601",
+   "line": 115,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "1b8134246bc5",
+   "file": "src/citadel/operator/app.py",
+   "pattern": "SC601",
+   "line": 134,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "1b8134246bc5",
+   "file": "src/citadel/operator/app.py",
+   "pattern": "SC601",
+   "line": 136,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "1b8134246bc5",
+   "file": "src/citadel/operator/app.py",
+   "pattern": "SC601",
+   "line": 138,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "1b8134246bc5",
+   "file": "src/citadel/operator/app.py",
+   "pattern": "SC601",
+   "line": 140,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "85dc86b273f0",
+   "file": "src/citadel/policy/authorize.py",
+   "pattern": "SC102",
+   "line": 28,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "acfb7b8e14ab",
+   "file": "src/citadel/policy/authorize.py",
+   "pattern": "SC201",
+   "line": 72,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "1498598595a9",
+   "file": "src/citadel/policy/authorize.py",
+   "pattern": "SC210",
+   "line": 72,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "852d6c0b62c3",
+   "file": "src/citadel/policy/bootstrap.py",
+   "pattern": "SC102",
+   "line": 29,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "0e7a3eab79f3",
+   "file": "src/citadel/policy/bootstrap.py",
+   "pattern": "SC601",
+   "line": 41,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "0e7a3eab79f3",
+   "file": "src/citadel/policy/bootstrap.py",
+   "pattern": "SC601",
+   "line": 48,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "d209e51f516c",
+   "file": "src/citadel/policy/bootstrap.py",
+   "pattern": "SC202",
+   "line": 55,
+   "name": "Rename Result Variables"
+  },
+  {
+   "fingerprint": "a34f4099da82",
+   "file": "src/citadel/policy/bootstrap.py",
+   "pattern": "SC202",
+   "line": 94,
+   "name": "Rename Result Variables"
+  },
+  {
+   "fingerprint": "36a17bdfbda5",
+   "file": "src/citadel/policy/bootstrap.py",
+   "pattern": "SC403",
+   "line": 80,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "36a17bdfbda5",
+   "file": "src/citadel/policy/bootstrap.py",
+   "pattern": "SC403",
+   "line": 81,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "36a17bdfbda5",
+   "file": "src/citadel/policy/bootstrap.py",
+   "pattern": "SC403",
+   "line": 87,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "36a17bdfbda5",
+   "file": "src/citadel/policy/bootstrap.py",
+   "pattern": "SC403",
+   "line": 93,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "81ffd1be5853",
+   "file": "src/citadel/policy/bootstrap.py",
+   "pattern": "SC201",
+   "line": 102,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "1b201ac12000",
+   "file": "src/citadel/policy/catalog.py",
+   "pattern": "SC601",
+   "line": 39,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "621663109ff2",
+   "file": "src/citadel/policy/openfga.py",
+   "pattern": "SC306",
+   "line": 13,
+   "name": "Remove Lazy Class"
+  },
+  {
+   "fingerprint": "d4509fa1ffc4",
+   "file": "src/citadel/prompts.py",
+   "pattern": "SC102",
+   "line": 20,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "500a1668ae6d",
+   "file": "src/citadel/runs.py",
+   "pattern": "SC306",
+   "line": 10,
+   "name": "Remove Lazy Class"
+  },
+  {
+   "fingerprint": "69768bcee9d4",
+   "file": "src/citadel/skills.py",
+   "pattern": "SC102",
+   "line": 26,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "5f4f3660504d",
+   "file": "src/citadel/skills.py",
+   "pattern": "SC102",
+   "line": 27,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "779f4dbdd0be",
+   "file": "src/citadel/skills.py",
+   "pattern": "SC102",
+   "line": 29,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "b60ed7736ada",
+   "file": "src/citadel/skills.py",
+   "pattern": "SC403",
+   "line": 94,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "58d65cd4d51c",
+   "file": "src/citadel/skills.py",
+   "pattern": "SC202",
+   "line": 134,
+   "name": "Rename Result Variables"
+  },
+  {
+   "fingerprint": "f4ce8c72022e",
+   "file": "src/citadel/telemetry.py",
+   "pattern": "SC106",
+   "line": 33,
+   "name": "Replace Global Variables with DI"
+  },
+  {
+   "fingerprint": "7444c81f2b60",
+   "file": "src/citadel/telemetry.py",
+   "pattern": "SC202",
+   "line": 110,
+   "name": "Rename Result Variables"
+  },
+  {
+   "fingerprint": "7444c81f2b60",
+   "file": "src/citadel/telemetry.py",
+   "pattern": "SC202",
+   "line": 114,
+   "name": "Rename Result Variables"
+  },
+  {
+   "fingerprint": "c97b6f19d44e",
+   "file": "src/citadel/telemetry.py",
+   "pattern": "SC601",
+   "line": 114,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "56c77aac67db",
+   "file": "src/citadel/tool_outputs.py",
+   "pattern": "SC102",
+   "line": 27,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "cab5c5247e06",
+   "file": "src/citadel/tool_outputs.py",
+   "pattern": "SC206",
+   "line": 41,
+   "name": "Reify Parameters"
+  },
+  {
+   "fingerprint": "efeb5ac9aaa6",
+   "file": "src/citadel/tools/allowlist.py",
+   "pattern": "SC201",
+   "line": 70,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "d169e30de165",
+   "file": "src/citadel/tools/allowlist.py",
+   "pattern": "SC402",
+   "line": 70,
+   "name": "Replace Nested Conditional with Guard Clauses"
+  },
+  {
+   "fingerprint": "2cf165ff75f4",
+   "file": "src/citadel/tools/allowlist.py",
+   "pattern": "SC210",
+   "line": 70,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "9e5c88bb7d8e",
+   "file": "src/citadel/tools/bounds.py",
+   "pattern": "SC102",
+   "line": 21,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "53a8253ca20c",
+   "file": "src/citadel/tools/bounds.py",
+   "pattern": "SC102",
+   "line": 23,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "56b6fc246d6d",
+   "file": "src/citadel/tools/bounds.py",
+   "pattern": "SC201",
+   "line": 54,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "180f7df1e14f",
+   "file": "src/citadel/tools/bounds.py",
+   "pattern": "SC601",
+   "line": 90,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "19d79d6e0261",
+   "file": "src/citadel/tools/invoke.py",
+   "pattern": "SC201",
+   "line": 40,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "1a628e392436",
+   "file": "src/citadel/tools/invoke.py",
+   "pattern": "SC202",
+   "line": 65,
+   "name": "Rename Result Variables"
+  },
+  {
+   "fingerprint": "ef6dd2190d39",
+   "file": "src/citadel/tools/invoke.py",
+   "pattern": "SC210",
+   "line": 40,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "7e7e5817fb79",
+   "file": "src/citadel/tools/invoke.py",
+   "pattern": "SC210",
+   "line": 82,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "b190f00e7127",
+   "file": "src/citadel/tools/runner.py",
+   "pattern": "SC102",
+   "line": 25,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "6e5c159fb316",
+   "file": "src/citadel/tools/runner.py",
+   "pattern": "SC102",
+   "line": 26,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "2b1095eb9c7d",
+   "file": "src/citadel/tools/runner.py",
+   "pattern": "SC102",
+   "line": 27,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "9ea718301522",
+   "file": "src/citadel/tools/runner.py",
+   "pattern": "SC102",
+   "line": 31,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "d5a0d1aeeb01",
+   "file": "src/citadel/tools/runner.py",
+   "pattern": "SC102",
+   "line": 32,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "7294f3787829",
+   "file": "src/citadel/tools/runner.py",
+   "pattern": "SC106",
+   "line": 34,
+   "name": "Replace Global Variables with DI"
+  },
+  {
+   "fingerprint": "f92188bf7772",
+   "file": "src/citadel/tools/runner.py",
+   "pattern": "SC605",
+   "line": 69,
+   "name": "Remove Empty Catch Block"
+  },
+  {
+   "fingerprint": "83533d21b334",
+   "file": "src/citadel/tools/runner.py",
+   "pattern": "SC201",
+   "line": 106,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "d275bd39559e",
+   "file": "src/citadel/tools/runner.py",
+   "pattern": "SC202",
+   "line": 146,
+   "name": "Rename Result Variables"
+  },
+  {
+   "fingerprint": "43f507d8b2a8",
+   "file": "src/citadel/tools/runner.py",
+   "pattern": "SC601",
+   "line": 110,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "43f507d8b2a8",
+   "file": "src/citadel/tools/runner.py",
+   "pattern": "SC601",
+   "line": 113,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "43f507d8b2a8",
+   "file": "src/citadel/tools/runner.py",
+   "pattern": "SC601",
+   "line": 117,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "43f507d8b2a8",
+   "file": "src/citadel/tools/runner.py",
+   "pattern": "SC601",
+   "line": 130,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "43f507d8b2a8",
+   "file": "src/citadel/tools/runner.py",
+   "pattern": "SC601",
+   "line": 133,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "9ad9e4180f1f",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC102",
+   "line": 46,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "f52c80be9084",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC102",
+   "line": 47,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "fee7bed04e7b",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC102",
+   "line": 48,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "2f5ad8822a0b",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC102",
+   "line": 49,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "5fc7dd93864c",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC102",
+   "line": 50,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "e1bab36ee3d3",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC102",
+   "line": 58,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "a7c4efc641e8",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC102",
+   "line": 60,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "ce8b3db1a941",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC201",
+   "line": 158,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "e70c43db5959",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC206",
+   "line": 158,
+   "name": "Reify Parameters"
+  },
+  {
+   "fingerprint": "8063c4b19894",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC208",
+   "line": 158,
+   "name": "Remove Unused Parameters"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 202,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 215,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 265,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "e45bc729efc2",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC201",
+   "line": 278,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 299,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 302,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 305,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 338,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 342,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 343,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 345,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 359,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 361,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 368,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 370,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 375,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 381,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 384,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 393,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "f0268086d498",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC201",
+   "line": 398,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "7002f625b6f6",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC206",
+   "line": 398,
+   "name": "Reify Parameters"
+  },
+  {
+   "fingerprint": "f4f5a5fb23d2",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC305",
+   "line": 398,
+   "name": "Use Unpacking Instead of Indexing"
+  },
+  {
+   "fingerprint": "7c3654bd8e85",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC603",
+   "line": 441,
+   "name": "Replace String Concatenation"
+  },
+  {
+   "fingerprint": "331ab07b27e2",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC201",
+   "line": 473,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 476,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 495,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "6a7fa3b0a6fd",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC305",
+   "line": 473,
+   "name": "Use Unpacking Instead of Indexing"
+  },
+  {
+   "fingerprint": "f10df8e16398",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC201",
+   "line": 508,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "d1617df6242d",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC305",
+   "line": 508,
+   "name": "Use Unpacking Instead of Indexing"
+  },
+  {
+   "fingerprint": "3636b2b63462",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC201",
+   "line": 540,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 544,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 575,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "7c3654bd8e85",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC603",
+   "line": 563,
+   "name": "Replace String Concatenation"
+  },
+  {
+   "fingerprint": "77acf2b638fb",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC407",
+   "line": 581,
+   "name": "Add Default Else Branch"
+  },
+  {
+   "fingerprint": "44661c07a17e",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC201",
+   "line": 596,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 600,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 602,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 605,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 608,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 611,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 613,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 615,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 627,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 630,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 632,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 633,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "51f6e42d3fd6",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC201",
+   "line": 636,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "0af08f6ff43d",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC206",
+   "line": 636,
+   "name": "Reify Parameters"
+  },
+  {
+   "fingerprint": "88bea407ecc4",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC601",
+   "line": 688,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "ded433ed2242",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC305",
+   "line": 636,
+   "name": "Use Unpacking Instead of Indexing"
+  },
+  {
+   "fingerprint": "7c3654bd8e85",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC603",
+   "line": 663,
+   "name": "Replace String Concatenation"
+  },
+  {
+   "fingerprint": "7c3654bd8e85",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC603",
+   "line": 670,
+   "name": "Replace String Concatenation"
+  },
+  {
+   "fingerprint": "1b24df722069",
+   "file": "src/citadel/ui/app.py",
+   "pattern": "SC106",
+   "line": 701,
+   "name": "Replace Global Variables with DI"
+  },
+  {
+   "fingerprint": "94981253a738",
+   "file": "src/citadel/worker.py",
+   "pattern": "SC102",
+   "line": 31,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "529dd557091e",
+   "file": "src/citadel/worker.py",
+   "pattern": "SC102",
+   "line": 32,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "66ee60add9e6",
+   "file": "src/citadel/worker.py",
+   "pattern": "SC102",
+   "line": 33,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "00e908645d76",
+   "file": "src/citadel/worker.py",
+   "pattern": "SC201",
+   "line": 41,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "ef82a80cdcfe",
+   "file": "src/citadel/workflows/__init__.py",
+   "pattern": "SC201",
+   "line": 24,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "7f5315ca4cf5",
+   "file": "src/citadel/workflows/__init__.py",
+   "pattern": "SC206",
+   "line": 24,
+   "name": "Reify Parameters"
+  },
+  {
+   "fingerprint": "ceb3e437b79b",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC102",
+   "line": 34,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "65ae3bcdd70c",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC102",
+   "line": 38,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "ca42e7a8665a",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC201",
+   "line": 49,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "058514055aac",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC201",
+   "line": 80,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "8dcbd04999d1",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC307",
+   "line": 121,
+   "name": "Remove Temporary Field"
+  },
+  {
+   "fingerprint": "9fc6a4cc8e13",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC307",
+   "line": 121,
+   "name": "Remove Temporary Field"
+  },
+  {
+   "fingerprint": "222003d4dd2d",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC307",
+   "line": 121,
+   "name": "Remove Temporary Field"
+  },
+  {
+   "fingerprint": "61474b606041",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC307",
+   "line": 121,
+   "name": "Remove Temporary Field"
+  },
+  {
+   "fingerprint": "6723592a0f8a",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC206",
+   "line": 122,
+   "name": "Reify Parameters"
+  },
+  {
+   "fingerprint": "8008c3b52e83",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC201",
+   "line": 140,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "3a6624b43175",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC201",
+   "line": 211,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "c1c3669fd7d7",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC202",
+   "line": 249,
+   "name": "Rename Result Variables"
+  },
+  {
+   "fingerprint": "079dcc14c29e",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC601",
+   "line": 247,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "97cd75b1c7f8",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC201",
+   "line": 265,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "6cd20a15a20e",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC206",
+   "line": 265,
+   "name": "Reify Parameters"
+  },
+  {
+   "fingerprint": "dfc86a7c58b4",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC201",
+   "line": 312,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "a70907063ee7",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC201",
+   "line": 377,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "079dcc14c29e",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC601",
+   "line": 385,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "079dcc14c29e",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC601",
+   "line": 395,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "079dcc14c29e",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC601",
+   "line": 406,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "079dcc14c29e",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC601",
+   "line": 407,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "079dcc14c29e",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC601",
+   "line": 407,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "b440c199e482",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC201",
+   "line": 434,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "80dc5739cebb",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC201",
+   "line": 470,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "079dcc14c29e",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC601",
+   "line": 494,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "0f29b5d881bd",
+   "file": "src/citadel/workflows/model_step.py",
+   "pattern": "SC102",
+   "line": 27,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "17bc17caa47a",
+   "file": "src/citadel/workflows/model_step.py",
+   "pattern": "SC102",
+   "line": 28,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "52f06a824a6b",
+   "file": "src/citadel/workflows/model_step.py",
+   "pattern": "SC307",
+   "line": 80,
+   "name": "Remove Temporary Field"
+  },
+  {
+   "fingerprint": "4dd2578ee4b3",
+   "file": "src/citadel/workflows/model_step.py",
+   "pattern": "SC307",
+   "line": 80,
+   "name": "Remove Temporary Field"
+  },
+  {
+   "fingerprint": "5e32803b3cae",
+   "file": "src/citadel/workflows/model_step.py",
+   "pattern": "SC307",
+   "line": 80,
+   "name": "Remove Temporary Field"
+  },
+  {
+   "fingerprint": "b86399f0684f",
+   "file": "src/citadel/workflows/model_step.py",
+   "pattern": "SC307",
+   "line": 80,
+   "name": "Remove Temporary Field"
+  },
+  {
+   "fingerprint": "5e44d06cd9cb",
+   "file": "src/citadel/workflows/model_step.py",
+   "pattern": "SC601",
+   "line": 129,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "c14092703ce7",
+   "file": "src/citadel/workflows/model_step.py",
+   "pattern": "SC201",
+   "line": 133,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "da6002a6f125",
+   "file": "src/citadel/workflows/model_step.py",
+   "pattern": "SC210",
+   "line": 133,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "5e44d06cd9cb",
+   "file": "src/citadel/workflows/model_step.py",
+   "pattern": "SC601",
+   "line": 285,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "269d4108daee",
+   "file": "src/citadel/workflows/orchestrator.py",
+   "pattern": "SC202",
+   "line": 63,
+   "name": "Rename Result Variables"
+  },
+  {
+   "fingerprint": "3e9807f085f4",
+   "file": "src/citadel/workflows/orchestrator.py",
+   "pattern": "SC601",
+   "line": 76,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "3e9807f085f4",
+   "file": "src/citadel/workflows/orchestrator.py",
+   "pattern": "SC601",
+   "line": 78,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "d0acb213e228",
+   "file": "src/citadel/workflows/orchestrator.py",
+   "pattern": "SC201",
+   "line": 107,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "b451ea95fa82",
+   "file": "src/citadel/workflows/orchestrator.py",
+   "pattern": "SC210",
+   "line": 107,
+   "name": "Reduce Cyclomatic Complexity"
+  },
+  {
+   "fingerprint": "d98abb77b199",
+   "file": "src/citadel/workflows/orchestrator.py",
+   "pattern": "SC403",
+   "line": 113,
+   "name": "Replace Loop with Pipeline"
+  },
+  {
+   "fingerprint": "fc02b93499ff",
+   "file": "src/citadel/workflows/specialist.py",
+   "pattern": "SC201",
+   "line": 31,
+   "name": "Extract Method"
+  },
+  {
+   "fingerprint": "8524435e9809",
+   "file": "src/citadel/workflows/specialist.py",
+   "pattern": "SC601",
+   "line": 35,
+   "name": "Extract Constant"
+  },
+  {
+   "fingerprint": "b7c609c1ab21",
+   "file": "src/citadel/workflows/types.py",
+   "pattern": "SC102",
+   "line": 13,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "42c8a7f55ffc",
+   "file": "src/citadel/workflows/types.py",
+   "pattern": "SC102",
+   "line": 16,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "f8dfe963ae38",
+   "file": "src/citadel/workflows/types.py",
+   "pattern": "SC102",
+   "line": 17,
+   "name": "Convert Variables to Constants"
+  },
+  {
+   "fingerprint": "28745c917d26",
+   "file": "src/citadel/operator/app.py",
+   "pattern": "SC505",
+   "line": 1,
+   "name": "Shotgun Surgery"
+  },
+  {
+   "fingerprint": "a131ecf93ff7",
+   "file": "src/citadel/db.py",
+   "pattern": "SC505",
+   "line": 1,
+   "name": "Shotgun Surgery"
+  },
+  {
+   "fingerprint": "5eccc210035c",
+   "file": "src/citadel/audit.py",
+   "pattern": "SC505",
+   "line": 1,
+   "name": "Shotgun Surgery"
+  },
+  {
+   "fingerprint": "285d13af5d7a",
+   "file": "src/citadel/dlp.py",
+   "pattern": "SC505",
+   "line": 1,
+   "name": "Shotgun Surgery"
+  },
+  {
+   "fingerprint": "3a7327a36e85",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC801",
+   "line": 121,
+   "name": "Low Class Cohesion"
+  },
+  {
+   "fingerprint": "224f69451024",
+   "file": "src/citadel/workflows/model_step.py",
+   "pattern": "SC801",
+   "line": 80,
+   "name": "Low Class Cohesion"
+  },
+  {
+   "fingerprint": "436d885d24b9",
+   "file": "src/citadel/workflows/activities.py",
+   "pattern": "SC804",
+   "line": 121,
+   "name": "High Response for Class"
+  },
+  {
+   "fingerprint": "6b329e1a478f",
+   "file": "src/citadel/retrieval/ingest.py",
+   "pattern": "SC501",
+   "line": 319,
+   "name": "Replace Error Codes with Exceptions"
+  }
+ ]
 }
