@@ -6,7 +6,7 @@ help:  ## List the targets and what they do
 
 # Targets that need secrets unwrap secrets/citadel.env through sops, so no
 # plaintext copy is written to disk. Accepted trade-off for now: the values
-# exist in the compose process environment (see the SOPS decision note).
+# exist in the compose process environment (see docs/security/secrets.md).
 .PHONY: up
 
 up:  ## Start the stack, unwrapping secrets through sops
