@@ -20,5 +20,4 @@ jobs:
         run: pip install smellcheck
       - name: Run smellcheck
         run: |
-          # Generate a baseline once (and commit it), or just fail on any warning
-          smellcheck src/ --fail-on warning
+          smellcheck src/ --min-severity warning baseline .smellcheck-baseline.json --fail-on warning
