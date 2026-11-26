@@ -71,7 +71,7 @@ Expectation keys beyond the example above:
 | `recovery` | a recovery event with the expected `failed_step` and `strategy` |
 | `expected_outcome` | `run.end.outcome` |
 
-`approval.decision.decision` is `approved` or `denied`; a `tool` field ties the decision to the call it authorises.
+`approval.decision.decision` is `approved` or `denied`; a `tool` field ties the decision to the call it authorises. `actor_type` is `user` or `agent`, `relation` names what authorised it (`approver_role` or `can_approve`), and an agent decision carries `on_behalf_of` naming the user whose run the approving agent was started for (ADR-022).
 
 Still missing: judge-scored rubrics and MLflow dataset/scorer logging. `model.call` and `retrieval.*` have no producer until those paths exist; this harness is deterministic only.
 

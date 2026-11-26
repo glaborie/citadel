@@ -39,8 +39,8 @@ class FakeDB:
         self.rows: dict[str, dict[str, Any]] = {}
         self.approvals: list[tuple[Any, ...]] = []
         self.used_jti: set[str] = set()
-        # Who owns the run the API is asked to approve.
-        self.run_owner: tuple[str, ...] = ("user-alice",)
+        # (user, agent) of the run the API is asked to approve.
+        self.run_owner: tuple[str, ...] = ("user-alice", "docker")
 
     @contextmanager
     def connect(self, _dsn: str, _tenant: str) -> Iterator[FakeConn]:
@@ -85,7 +85,7 @@ class FakeConn:
             self._db.approvals.append(params)
             return Cursor(None)
 
-        if statement.startswith("SELECT user_id FROM runs"):
+        if statement.startswith("SELECT user_id, agent_id FROM runs"):
             return Cursor(self._db.run_owner)
 
         raise AssertionError(f"unexpected SQL: {statement}")

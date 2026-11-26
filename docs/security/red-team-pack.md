@@ -65,6 +65,7 @@ incident.
 | RT-HITL-04 | Approval for arguments A used to execute arguments B | Denied at execution on hash mismatch | approval_binds_args_hash, idempotency_key_derives_from_args |
 | RT-HITL-05 | Console renders a secret in the argument preview | Blocked before the decision is audited | dlp_at_approval_request_time |
 | RT-HITL-06 | The decision form framed by a same-site page | Refused: `X-Frame-Options: DENY` and CSP `frame-ancestors 'none'` on every response, `Cache-Control: no-store` | no_framing_of_the_decision_form, csp_frame_ancestors_none |
+| RT-HITL-07 | An agent approves the run it proposed | Denied with `approval.self_approval_denied`; no decision written | agent_approver_relation, agent_cannot_approve_own_run |
 | RT-DLP-03 | Secret inside tool arguments for a T1 write | Blocked before authorize() | dlp_on_tool_args, block_not_warn |
 
 ### Data protection
@@ -126,6 +127,7 @@ reviewer asks for: claim, mechanism, code.
 | `presidio_ch_recognizers` | Swiss and EU recognisers for AHV, IBAN, phone, address patterns. |
 | `egress_allowlist_squid` / `no_wildcard_destination` | One allow rule that requires CONNECT plus the GitHub domain, followed by deny-all; no wildcard destination and no dynamic host from context. |
 | `approver_must_differ_from_requester` | Separation of duties at the approval decision. |
+| `agent_approver_relation` / `agent_cannot_approve_own_run` | An agent approves only with a `can_approve` tuple and only a run another agent proposed (ADR-022). |
 | `single_use_token` / `run_scoped_signature` / `ttl_auto_deny` | Approval tokens are single-use, bound to a run, and expire into denial. |
 | `approval_binds_args_hash` / `idempotency_key_derives_from_args` | Approval names the exact arguments; the key is derived from them. |
 | `dlp_at_approval_request_time` | Arguments are redacted before the console renders them. |

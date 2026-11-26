@@ -19,3 +19,5 @@ type tool
     # Which agent owns this tool. A tool with no agent relation is callable by nobody.
     define agent: [agent]
     define can_call: [user] or invoker from agent
+    # Which agent may approve this tool's T1 call. No tuple means human-only.
+    define can_approve: [agent]

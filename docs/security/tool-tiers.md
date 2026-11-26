@@ -45,7 +45,7 @@ v0.1 allowlist contains exactly two tools:
 | `restart_service` | Docker | Restarts one named container/service | Service returns to previous running state |
 | `open_remediation_pr` | GitHub | Opens a draft PR with proposed change | PR can be closed without merge |
 
-Controls: T0 controls plus — full argument preview with rendered diff, policy rule that triggered the gate, retrieved evidence/citations, single approver, configurable TTL (default 5 minutes, `CITADEL_APPROVAL_TTL_SECONDS`) with **auto-deny**, mandatory reason, durable idempotency key, audit event written before Temporal resume. User cannot approve a run they requested.
+Controls: T0 controls plus — full argument preview with rendered diff, policy rule that triggered the gate, retrieved evidence/citations, single approver, configurable TTL (default 5 minutes, `CITADEL_APPROVAL_TTL_SECONDS`) with **auto-deny**, mandatory reason, durable idempotency key, audit event written before Temporal resume. User cannot approve a run they requested. An agent approver is opt-in per tenant/tool through the `can_approve` relation and may approve only a run another agent proposed (ADR-022).
 
 ## T2 — Destructive / irreversible
 

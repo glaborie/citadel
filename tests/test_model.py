@@ -76,6 +76,9 @@ class _Checker:
     def can_call(self, *, user: str, obj: str) -> bool:
         return self.allowed
 
+    def can_approve(self, *, agent: str, obj: str) -> bool:
+        return self.allowed
+
 
 class _Runs:
     def exists(self, *, tenant_id: str, run_id: str) -> bool:
@@ -169,7 +172,7 @@ def test_a_completion_parses_tool_calls_and_cost() -> None:
                             "id": "call-1",
                             "function": {
                                 "name": "inspect_containers",
-                                "arguments": "{\"all\": true}",
+                                "arguments": '{"all": true}',
                             },
                         }
                     ],

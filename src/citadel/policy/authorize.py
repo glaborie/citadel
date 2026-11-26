@@ -43,6 +43,18 @@ class AuthorizationRequest:
 
 
 @dataclass(frozen=True)
+class ApprovalAuthorization:
+    tenant_id: str
+    approving_agent: str
+    origin_agent: str
+    tool: str
+
+
+def agent_object(tenant_id: str, agent_id: str) -> str:
+    return f"agent:{tenant_id}/{agent_id}"
+
+
+@dataclass(frozen=True)
 class Decision:
     outcome: Outcome
     rule_id: str
@@ -54,6 +66,7 @@ class RelationChecker(Protocol):
     """Seam over OpenFGA so tests never need a live policy server."""
 
     def can_call(self, *, user: str, obj: str) -> bool: ...
+    def can_approve(self, *, agent: str, obj: str) -> bool: ...
 
 
 class RunStore(Protocol):
@@ -128,3 +141,67 @@ def authorize(
         )
 
     return Decision(outcome="allow", rule_id="policy.allowed", reason="allowed", tier=spec.tier)
+
+
+def authorize_approval(
+    request: ApprovalAuthorization,
+    checker: RelationChecker,
+    catalog: dict[str, ToolSpec] | None = None,
+) -> Decision:
+    """Decide whether an agent may approve a T1 call. Same fail-closed order.
+
+    1. missing tenant or agent                  -> deny
+    2. tool absent from the catalog             -> deny
+    3. tool is not T1                           -> deny (T0 needs no approval, T2 is human-only)
+    4. approving agent == run's agent           -> deny (four eyes)
+    5. policy service unreachable or erroring   -> deny
+    6. OpenFGA says no                          -> deny
+    7. otherwise                                -> allow
+    """
+    tools = catalog if catalog is not None else load_catalog()
+
+    if not request.tenant_id.strip():
+        return _deny("identity.missing_tenant", "no tenant on the approval request")
+    if not request.approving_agent.strip():
+        return _deny("identity.missing_agent", "no approving agent on the approval request")
+    if not request.origin_agent.strip():
+        return _deny("identity.missing_agent", "no originating agent on the approval request")
+
+    spec = tools.get(request.tool)
+    if spec is None:
+        return _deny("tool.unknown", f"tool {request.tool!r} is not in the catalog")
+    if spec.tier != "T1":
+        return _deny(
+            "approval.tier_denied",
+            f"{request.tool} is {spec.tier}; agents approve T1 calls only",
+            spec.tier,
+        )
+
+    if request.approving_agent == request.origin_agent:
+        return _deny(
+            "approval.self_approval_denied",
+            "an agent cannot approve a run it proposed",
+            spec.tier,
+        )
+
+    try:
+        allowed = checker.can_approve(
+            agent=agent_object(request.tenant_id, request.approving_agent),
+            obj=tool_object(request.tenant_id, request.tool),
+        )
+    except Exception as exc:  # noqa: BLE001 - any policy failure must deny
+        return _deny("policy.unavailable", f"policy check failed: {exc}", spec.tier)
+
+    if not allowed:
+        return _deny(
+            "approval.relation_denied",
+            "no can_approve relationship for this agent and tool",
+            spec.tier,
+        )
+
+    return Decision(
+        outcome="allow",
+        rule_id="approval.agent_allowed",
+        reason="the agent holds can_approve for this tool",
+        tier=spec.tier,
+    )
