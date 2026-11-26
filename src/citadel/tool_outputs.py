@@ -22,7 +22,7 @@ import gzip
 import hashlib
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Final
 
 MAX_STORED_BYTES = int(os.environ.get("CITADEL_OUTPUT_STORE_MAX_BYTES", 1_048_576))
 
@@ -30,14 +30,12 @@ MAX_STORED_BYTES = int(os.environ.get("CITADEL_OUTPUT_STORE_MAX_BYTES", 1_048_57
 # of it. 90 days is long enough to investigate a quarter's incidents and short
 # enough that an unlucky DLP miss does not become a permanent archive of tool
 # output. Override per deployment, not per call.
-TTL_DAYS = int(os.environ.get("CITADEL_OUTPUT_STORE_TTL_DAYS", 90))
+TTL_DAYS: Final = int(os.environ.get("CITADEL_OUTPUT_STORE_TTL_DAYS", 90))
 
 # RETURNING, not a row count: the caller gets the number of bodies actually
 # deleted, which is what a retention job should report.
-PURGE_SQL = (
-    "DELETE FROM tool_outputs"
-    " WHERE created_at < now() - (%s * interval '1 day')"
-    " RETURNING digest"
+PURGE_SQL: Final = (
+    "DELETE FROM tool_outputs WHERE created_at < now() - (%s * interval '1 day') RETURNING digest"
 )
 
 
@@ -80,9 +78,7 @@ def store(
 
 def fetch(conn: Any, *, digest: str) -> str | None:  # noqa: ANN401 - as above
     """Read a stored stream back. RLS restricts this to the caller's tenant."""
-    row = conn.execute(
-        "SELECT body FROM tool_outputs WHERE digest = %s", (digest,)
-    ).fetchone()
+    row = conn.execute("SELECT body FROM tool_outputs WHERE digest = %s", (digest,)).fetchone()
     if row is None:
         return None
     return str(gzip.decompress(bytes(row[0])).decode("utf-8"))

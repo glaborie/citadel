@@ -28,7 +28,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib import resources
-from typing import Any, Protocol
+from typing import Any, Final, Protocol
 
 from citadel.hashing import arguments_hash
 from citadel.policy.catalog import ToolSpec, load_catalog
@@ -38,10 +38,10 @@ from citadel.policy.catalog import ToolSpec, load_catalog
 # The protocol's own field names: a real `tools/list` entry offers `inputSchema`.
 # The schema is carried for the digest and never rendered: the manifest the model
 # sees is built from the catalog's parameters, not from a server's opinion of them.
-ENTRY_FIELDS = frozenset({"name", "description", "inputSchema"})
-REGISTERED = "tool.registration"
-REFUSED = "tool.registration_refused"
-REVIEWED = "the description is the reviewed one"
+ENTRY_FIELDS: Final = frozenset({"name", "description", "inputSchema"})
+REGISTERED: Final = "tool.registration"
+REFUSED: Final = "tool.registration_refused"
+REVIEWED: Final = "the description is the reviewed one"
 
 
 class Ledger(Protocol):
@@ -130,9 +130,7 @@ def evaluate(
         reason = _denial(entry, tools, reviewed)
     else:
         name, digest, reason = "", description_digest({}), "the entry is not an object"
-    return Registration(
-        name=name, digest=digest, accepted=not reason, reason=reason or REVIEWED
-    )
+    return Registration(name=name, digest=digest, accepted=not reason, reason=reason or REVIEWED)
 
 
 def register(

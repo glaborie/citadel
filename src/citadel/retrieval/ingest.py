@@ -37,7 +37,7 @@ from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 from urllib.parse import quote
 from urllib.request import Request
 
@@ -45,17 +45,18 @@ from qdrant_client import QdrantClient, models
 
 from citadel import env, net
 
-DEFAULT_QDRANT_URL = os.environ.get("CITADEL_QDRANT_URL", "http://qdrant:6333")
-GITHUB_API = "https://api.github.com"
-SPARSE = "text"
+DEFAULT_QDRANT_URL: Final = os.environ.get("CITADEL_QDRANT_URL", "http://qdrant:6333")
+GITHUB_API: Final = "https://api.github.com"
+SPARSE: Final = "text"
 # A runbook is text. Larger files are a binary the model should not be fed, and
 # a whole-repo tree can contain a lockfile larger than the whole value of the repo.
-MAX_FILE_BYTES = 1_000_000
-MAX_CHUNK_CHARS = 2_000
+MAX_FILE_BYTES: Final = 1_000_000
+MAX_CHUNK_CHARS: Final = 2_000
 # One upsert per batch keeps a whole repository out of a single request.
-BATCH = 256
-TENANT = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
-WORD = re.compile(r"[a-z0-9]+")
+BATCH: Final = 256
+HTTP_TIMEOUT: Final = 30
+TENANT: Final = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
+WORD: Final = re.compile(r"[a-z0-9]+")
 
 
 class IngestRefused(RuntimeError):
@@ -92,20 +93,25 @@ def point_id(tenant: str, source_uri: str, rev: str, index: int) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, name))
 
 
+def _wrap(block: str, limit: int) -> Iterator[str]:
+    """One block, cut at whitespace so no piece is longer than the limit."""
+    while len(block) > limit:
+        cut = block.rfind(" ", 0, limit)
+        cut = cut if cut > 0 else limit
+        yield block[:cut].strip()
+        block = block[cut:].strip()
+    if block:
+        yield block
+
+
 def chunks(text: str, limit: int = MAX_CHUNK_CHARS) -> list[str]:
     """Paragraphs, then hard-wrapped at whitespace so no chunk is unbounded."""
-    pieces: list[str] = []
-    for block in (block.strip() for block in re.split(r"\n\s*\n", text)):
-        if not block:
-            continue
-        while len(block) > limit:
-            cut = block.rfind(" ", 0, limit)
-            cut = cut if cut > 0 else limit
-            pieces.append(block[:cut].strip())
-            block = block[cut:].strip()
-        if block:
-            pieces.append(block)
-    return pieces
+    return [
+        piece
+        for block in (candidate.strip() for candidate in re.split(r"\n\s*\n", text))
+        if block
+        for piece in _wrap(block, limit)
+    ]
 
 
 def sparse(text: str) -> models.SparseVector:
@@ -139,7 +145,7 @@ def filesystem(root: Path) -> Iterator[Document]:
 
 
 def _github_json(request: Request, opener: Callable[..., Any] | None) -> Any:
-    with net.open_url(request, timeout=30, opener=opener) as response:
+    with net.open_url(request, timeout=HTTP_TIMEOUT, opener=opener) as response:
         try:
             return json.loads(response.read())
         except ValueError as exc:

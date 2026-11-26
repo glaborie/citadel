@@ -1,3 +1,5 @@
+# smellcheck: disable-file SC505 -- the catalog is the one source of truth for
+# tools (ADR-004), so many readers is the design, not shotgun surgery.
 """Tool catalog loading. A tool absent from the catalog can never be authorised."""
 
 from __future__ import annotations

@@ -75,8 +75,8 @@ def _check_operator_path(tokens: Sequence[str], index: int) -> int:
     past two.
     """
     flag = tokens[index]
-    value = tokens[index + 1] if index + 1 < len(tokens) else ""
-    if not _OPERATOR_PATH.match(value) or ".." in value:
+    flag_value = tokens[index + 1] if index + 1 < len(tokens) else ""
+    if not _OPERATOR_PATH.match(flag_value) or ".." in flag_value:
         raise CommandDenied(f"the value of {flag} must be the operator's own file")
     return 2
 
