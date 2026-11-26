@@ -38,6 +38,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 
 from citadel import __version__
 from citadel.db import tenant_connection
+from citadel.env import secret
 from citadel.identity import IdentityError, KeycloakVerifier, Principal
 from citadel.net import open_url
 from citadel.workflows.types import APPROVAL_TTL
@@ -113,9 +114,7 @@ def _order(columns: dict[str, str], sort: str, direction: str, default: str) -> 
     return f"{column} {'DESC' if direction == 'desc' else 'ASC'}"
 
 
-def _sort_header(
-    label: str, key: str, sort: str, direction: str, filters: dict[str, str]
-) -> str:
+def _sort_header(label: str, key: str, sort: str, direction: str, filters: dict[str, str]) -> str:
     marker = ""
     if key == sort:
         marker = " ▲" if direction == "asc" else " ▼"
@@ -203,18 +202,18 @@ def create_app(
         return RedirectResponse("/login", status_code=303)
 
     def _dsn() -> str:
-        return dsn if dsn is not None else os.environ["CITADEL_DB_DSN"]
+        return dsn if dsn is not None else secret("CITADEL_DB_DSN")
 
     def _key() -> str:
-        value = (
-            session_key
-            if session_key is not None
-            else os.environ.get("CITADEL_CONSOLE_SESSION_KEY")
-        )
-        if not value:
+        if session_key is not None:
+            return session_key
+        try:
+            return secret("CITADEL_CONSOLE_SESSION_KEY")
+        except KeyError as exc:
             # Unconfigured sessions are a denial, never an unsigned cookie.
-            raise HTTPException(status_code=503, detail="CITADEL_CONSOLE_SESSION_KEY is not set")
-        return value
+            raise HTTPException(
+                status_code=503, detail="CITADEL_CONSOLE_SESSION_KEY is not set"
+            ) from exc
 
     def _verifier() -> KeycloakVerifier:
         if verifier is not None:

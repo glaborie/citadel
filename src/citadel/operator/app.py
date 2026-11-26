@@ -22,6 +22,7 @@ from citadel import __version__, dlp
 from citadel.approvals import resolve_approval
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
+from citadel.env import secret
 from citadel.identity import IdentityError
 from citadel.tools import CommandDenied, build_argv
 from citadel.tools import runner as executor
@@ -40,6 +41,10 @@ class ExecuteRequest(BaseModel):
     tool: str
     arguments: dict[str, Any] = {}
     approval_ref: str
+
+
+def _dsn() -> str:
+    return secret("CITADEL_DB_DSN")
 
 
 def _already_used(dsn: str, tenant_id: str, ref: str) -> bool:
@@ -71,7 +76,7 @@ def _guard(
         return dlp.gate(text, surface=surface, analyzer_url=DLP_URL)
     except dlp.DlpBlocked as exc:
         # A refused check is still an event an auditor must be able to see.
-        AuditLedger(os.environ["CITADEL_DB_DSN"]).append(
+        AuditLedger(_dsn()).append(
             tenant_id=tenant_id,
             event_type="dlp.event",
             actor_type="user",
@@ -87,7 +92,7 @@ def _guard(
 def execute(request: ExecuteRequest) -> dict[str, Any]:
     try:
         claims = resolve_approval(
-            dsn=os.environ["CITADEL_DB_DSN"],
+            dsn=_dsn(),
             tenant_id=request.tenant_id,
             ref=request.approval_ref,
             run_id=request.run_id,
@@ -97,7 +102,7 @@ def execute(request: ExecuteRequest) -> dict[str, Any]:
     except IdentityError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
-    if _already_used(os.environ["CITADEL_DB_DSN"], request.tenant_id, claims.ref):
+    if _already_used(_dsn(), request.tenant_id, claims.ref):
         raise HTTPException(status_code=409, detail="approval already used")
 
     # The approver authorised the service name; build_argv derives the container

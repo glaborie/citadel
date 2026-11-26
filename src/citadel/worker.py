@@ -21,6 +21,7 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from citadel import telemetry
+from citadel.env import secret
 from citadel.policy import RelationChecker, RunStore
 from citadel.policy.openfga import build_checker
 from citadel.runs import PostgresRunStore
@@ -43,7 +44,7 @@ async def serve(role: str) -> None:
 
     client = await Client.connect(temporal_address(), namespace=namespace())
 
-    dsn = os.environ["CITADEL_DB_DSN"]
+    dsn = secret("CITADEL_DB_DSN")
     checker: RelationChecker | None = None
     run_store: RunStore | None = None
     if role != "orchestrator":

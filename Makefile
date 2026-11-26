@@ -10,7 +10,8 @@ help:  ## List the targets and what they do
 .PHONY: up
 
 up:  ## Start the stack, unwrapping secrets through sops
-	sops exec-env secrets/citadel.env 'docker compose up -d'
+	chmod +x scripts/provision-secrets.sh
+	sops exec-env secrets/citadel.env 'scripts/provision-secrets.sh && docker compose up -d'
 
 # OpenFGA CLI pinned by digest; only needed to regenerate the model JSON.
 POLICY_CLI = openfga/cli:latest@sha256:7a7f9fb0a27a788a0fa7907eb5fc751c3134ca0776245578308e011606b61091

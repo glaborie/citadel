@@ -18,3 +18,10 @@ strix_runs/
 
 # local report
 docs/evals/red-team-report.md
+
+# Materialised Docker secrets (scripts/provision-secrets.sh). Never commit.
+secrets/db_dsn
+secrets/run_token_private_key
+secrets/console_session_key
+secrets/gh_write_token
+secrets/gh_read_token
