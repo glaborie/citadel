@@ -43,6 +43,39 @@
           "audit_id": "audit-model-001"
         },
         {
+          "type": "retrieval.query",
+          "run_id": "run-devops-001",
+          "tenant_id": "lab-a",
+          "filter_set_hash": "sha256:filter-001",
+          "top_k": 5,
+          "collection": "runbooks",
+          "audit_id": "audit-retrieval-001"
+        },
+        {
+          "type": "retrieval.result",
+          "run_id": "run-devops-001",
+          "chunk_ids": [
+            "chunk-001a",
+            "chunk-001b",
+            "chunk-001c"
+          ],
+          "source_uris": [
+            "runbooks/checkout-api.md",
+            "runbooks/postgres-reachability.md",
+            "logs/checkout-api"
+          ],
+          "revisions": [
+            2,
+            1,
+            1
+          ],
+          "scores": [
+            0.92,
+            0.81,
+            0.74
+          ]
+        },
+        {
           "type": "policy.decision",
           "run_id": "run-devops-001",
           "subject": "user-alice",
@@ -416,7 +449,11 @@
           "idempotency_key": "run-devops-008:read_logs:sha256:args-008",
           "status": "executed",
           "duration": 75,
-          "audit_id": "audit-tool-008b"
+          "audit_id": "audit-tool-008b",
+          "output": {
+            "stdout": "checkout-api listening on :8080\nGET /healthz 200",
+            "exit_code": 0
+          }
         },
         {
           "type": "run.end",
@@ -457,6 +494,31 @@
           "prompt_pack_version": "github-1.0.0",
           "model_alias": "auto/best-reasoning",
           "risk_tier": "T1"
+        },
+        {
+          "type": "retrieval.query",
+          "run_id": "run-devops-010",
+          "tenant_id": "lab-a",
+          "filter_set_hash": "sha256:filter-010",
+          "top_k": 5,
+          "collection": "runbooks",
+          "audit_id": "audit-retrieval-010"
+        },
+        {
+          "type": "retrieval.result",
+          "run_id": "run-devops-010",
+          "chunk_ids": [
+            "chunk-010a"
+          ],
+          "source_uris": [
+            "docs/runbooks/remediation.md"
+          ],
+          "revisions": [
+            4
+          ],
+          "scores": [
+            0.88
+          ]
         },
         {
           "type": "policy.decision",
@@ -584,7 +646,27 @@
           "idempotency_key": "run-devops-011:search_docs:sha256:args-011",
           "status": "executed",
           "duration": 120,
-          "audit_id": "audit-tool-011"
+          "audit_id": "audit-tool-011",
+          "output": {
+            "chunks": [
+              {
+                "uri": "runbooks/a.md",
+                "score": 0.71,
+                "text": "readinessProbe: periodSeconds: 30, timeoutSeconds: 5, failureThreshold: 3"
+              },
+              {
+                "uri": "runbooks/b.md",
+                "score": 0.58,
+                "text": "the liveness probe is deliberately slower so a dependency blip does not kill a healthy container"
+              },
+              {
+                "uri": "runbooks/c.md",
+                "score": 0.42,
+                "text": "probe settings restated: periodSeconds 30, timeoutSeconds 5"
+              }
+            ],
+            "top_k": 3
+          }
         },
         {
           "type": "run.end",
@@ -657,7 +739,11 @@
           "idempotency_key": "run-devops-012:read_logs:sha256:args-012",
           "status": "executed",
           "duration": 55,
-          "audit_id": "audit-tool-012"
+          "audit_id": "audit-tool-012",
+          "output": {
+            "stdout": "consumer reconnecting in 90000 ms\nconsumer reconnecting in 90000 ms\nqueue drained, failed_jobs=0",
+            "exit_code": 0
+          }
         },
         {
           "type": "run.end",
@@ -920,6 +1006,39 @@
           "audit_id": "audit-model-001"
         },
         {
+          "type": "retrieval.query",
+          "run_id": "run-devops-001",
+          "tenant_id": "lab-a",
+          "filter_set_hash": "sha256:filter-001",
+          "top_k": 5,
+          "collection": "runbooks",
+          "audit_id": "audit-retrieval-001"
+        },
+        {
+          "type": "retrieval.result",
+          "run_id": "run-devops-001",
+          "chunk_ids": [
+            "chunk-001a",
+            "chunk-001b",
+            "chunk-001c"
+          ],
+          "source_uris": [
+            "runbooks/checkout-api.md",
+            "runbooks/postgres-reachability.md",
+            "logs/checkout-api"
+          ],
+          "revisions": [
+            2,
+            1,
+            1
+          ],
+          "scores": [
+            0.92,
+            0.81,
+            0.74
+          ]
+        },
+        {
           "type": "policy.decision",
           "run_id": "run-devops-001",
           "subject": "user-alice",
@@ -1055,7 +1174,27 @@
           "idempotency_key": "run-devops-011:search_docs:sha256:args-011",
           "status": "executed",
           "duration": 120,
-          "audit_id": "audit-tool-011"
+          "audit_id": "audit-tool-011",
+          "output": {
+            "chunks": [
+              {
+                "uri": "runbooks/a.md",
+                "score": 0.71,
+                "text": "readinessProbe: periodSeconds: 30, timeoutSeconds: 5, failureThreshold: 3"
+              },
+              {
+                "uri": "runbooks/b.md",
+                "score": 0.58,
+                "text": "the liveness probe is deliberately slower so a dependency blip does not kill a healthy container"
+              },
+              {
+                "uri": "runbooks/c.md",
+                "score": 0.42,
+                "text": "probe settings restated: periodSeconds 30, timeoutSeconds 5"
+              }
+            ],
+            "top_k": 3
+          }
         },
         {
           "type": "run.end",
@@ -1098,6 +1237,31 @@
           "prompt_pack_version": "github-1.0.0",
           "model_alias": "auto/best-reasoning",
           "risk_tier": "T1"
+        },
+        {
+          "type": "retrieval.query",
+          "run_id": "run-devops-010",
+          "tenant_id": "lab-a",
+          "filter_set_hash": "sha256:filter-010",
+          "top_k": 5,
+          "collection": "runbooks",
+          "audit_id": "audit-retrieval-010"
+        },
+        {
+          "type": "retrieval.result",
+          "run_id": "run-devops-010",
+          "chunk_ids": [
+            "chunk-010a"
+          ],
+          "source_uris": [
+            "docs/runbooks/remediation.md"
+          ],
+          "revisions": [
+            4
+          ],
+          "scores": [
+            0.88
+          ]
         },
         {
           "type": "policy.decision",
@@ -1208,7 +1372,11 @@
           "idempotency_key": "run-devops-008:read_logs:sha256:args-008",
           "status": "executed",
           "duration": 75,
-          "audit_id": "audit-tool-008b"
+          "audit_id": "audit-tool-008b",
+          "output": {
+            "stdout": "checkout-api listening on :8080\nGET /healthz 200",
+            "exit_code": 0
+          }
         },
         {
           "type": "run.end",
@@ -1364,7 +1532,11 @@
           "idempotency_key": "run-devops-012:read_logs:sha256:args-012",
           "status": "executed",
           "duration": 55,
-          "audit_id": "audit-tool-012"
+          "audit_id": "audit-tool-012",
+          "output": {
+            "stdout": "consumer reconnecting in 90000 ms\nconsumer reconnecting in 90000 ms\nqueue drained, failed_jobs=0",
+            "exit_code": 0
+          }
         },
         {
           "type": "run.end",
@@ -1829,6 +2001,39 @@
           "audit_id": "audit-cal-run-devops-001-restart"
         },
         {
+          "type": "retrieval.query",
+          "run_id": "run-devops-001",
+          "tenant_id": "lab-a",
+          "filter_set_hash": "sha256:filter-001",
+          "top_k": 5,
+          "collection": "runbooks",
+          "audit_id": "audit-retrieval-001"
+        },
+        {
+          "type": "retrieval.result",
+          "run_id": "run-devops-001",
+          "chunk_ids": [
+            "chunk-001a",
+            "chunk-001b",
+            "chunk-001c"
+          ],
+          "source_uris": [
+            "runbooks/checkout-api.md",
+            "runbooks/postgres-reachability.md",
+            "logs/checkout-api"
+          ],
+          "revisions": [
+            2,
+            1,
+            1
+          ],
+          "scores": [
+            0.92,
+            0.81,
+            0.74
+          ]
+        },
+        {
           "type": "policy.decision",
           "run_id": "run-devops-001",
           "subject": "user-alice",
@@ -1986,7 +2191,11 @@
           "idempotency_key": "run-devops-008:read_logs:sha256:args-008",
           "status": "executed",
           "duration": 75,
-          "audit_id": "audit-tool-008b"
+          "audit_id": "audit-tool-008b",
+          "output": {
+            "stdout": "checkout-api listening on :8080\nGET /healthz 200",
+            "exit_code": 0
+          }
         },
         {
           "type": "run.end",
@@ -2092,7 +2301,11 @@
           "idempotency_key": "run-devops-012:read_logs:sha256:args-012",
           "status": "executed",
           "duration": 55,
-          "audit_id": "audit-tool-012"
+          "audit_id": "audit-tool-012",
+          "output": {
+            "stdout": "consumer reconnecting in 90000 ms\nconsumer reconnecting in 90000 ms\nqueue drained, failed_jobs=0",
+            "exit_code": 0
+          }
         },
         {
           "type": "run.end",
@@ -2222,7 +2435,27 @@
           "idempotency_key": "run-devops-011:search_docs:sha256:args-011",
           "status": "executed",
           "duration": 120,
-          "audit_id": "audit-tool-011"
+          "audit_id": "audit-tool-011",
+          "output": {
+            "chunks": [
+              {
+                "uri": "runbooks/a.md",
+                "score": 0.71,
+                "text": "readinessProbe: periodSeconds: 30, timeoutSeconds: 5, failureThreshold: 3"
+              },
+              {
+                "uri": "runbooks/b.md",
+                "score": 0.58,
+                "text": "the liveness probe is deliberately slower so a dependency blip does not kill a healthy container"
+              },
+              {
+                "uri": "runbooks/c.md",
+                "score": 0.42,
+                "text": "probe settings restated: periodSeconds 30, timeoutSeconds 5"
+              }
+            ],
+            "top_k": 3
+          }
         },
         {
           "type": "run.end",
@@ -2349,6 +2582,31 @@
           "prompt_pack_version": "github-1.0.0",
           "model_alias": "auto/best-reasoning",
           "risk_tier": "T1"
+        },
+        {
+          "type": "retrieval.query",
+          "run_id": "run-devops-010",
+          "tenant_id": "lab-a",
+          "filter_set_hash": "sha256:filter-010",
+          "top_k": 5,
+          "collection": "runbooks",
+          "audit_id": "audit-retrieval-010"
+        },
+        {
+          "type": "retrieval.result",
+          "run_id": "run-devops-010",
+          "chunk_ids": [
+            "chunk-010a"
+          ],
+          "source_uris": [
+            "docs/runbooks/remediation.md"
+          ],
+          "revisions": [
+            4
+          ],
+          "scores": [
+            0.88
+          ]
         },
         {
           "type": "policy.decision",

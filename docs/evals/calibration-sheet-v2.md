@@ -50,6 +50,8 @@ model.call: alias=auto/best-reasoning provider=openai model=auto tokens=184 cost
 policy.decision: subject=user-alice tool=restart_service decision=requires_approval rule_id=policy.tier_requires_approval
 approval.decision: approver=user-carol decision=approved reason=calibration sample: restart approved rule_id=approval.approved tool=restart_service
 tool.call: tool=restart_service tier=T1 arguments={"service": "checkout-api", "timeout": 60} status=executed duration=4200
+retrieval.query: top_k=5 collection=runbooks
+retrieval.result: chunk_ids=["chunk-001a", "chunk-001b", "chunk-001c"] source_uris=["runbooks/checkout-api.md", "runbooks/postgres-reachability.md", "logs/checkout-api"] revisions=[2, 1, 1] scores=[0.92, 0.81, 0.74]
 policy.decision: subject=user-alice tool=inspect_containers decision=allow rule_id=policy.allowed
 tool.call: tool=inspect_containers tier=T0 status=executed duration=41
 policy.decision: subject=user-alice tool=read_logs decision=allow rule_id=policy.allowed
@@ -67,6 +69,8 @@ score: plan=2 grounding=4 recovery=3 escalation=2
 Task: Container checkout-api is unhealthy, what should I do?
 run.start: agent_id=docker model_alias=auto/best-reasoning risk_tier=T0
 model.call: alias=auto/best-reasoning provider=openai model=auto tokens=184 cost=0.0021 latency=940
+retrieval.query: top_k=5 collection=runbooks
+retrieval.result: chunk_ids=["chunk-001a", "chunk-001b", "chunk-001c"] source_uris=["runbooks/checkout-api.md", "runbooks/postgres-reachability.md", "logs/checkout-api"] revisions=[2, 1, 1] scores=[0.92, 0.81, 0.74]
 policy.decision: subject=user-alice tool=inspect_containers decision=allow rule_id=policy.allowed
 tool.call: tool=inspect_containers tier=T0 status=executed duration=41
 policy.decision: subject=user-alice tool=read_logs decision=allow rule_id=policy.allowed
@@ -148,7 +152,7 @@ Task: Read the billing-worker logs.
 run.start: agent_id=docker model_alias=auto/best-fast risk_tier=T0
 retrieval.query: top_k=3 collection=runbooks
 policy.decision: subject=user-bob tool=read_logs decision=allow rule_id=policy.allowed
-tool.call: tool=read_logs tier=T0 status=executed duration=55
+tool.call: tool=read_logs tier=T0 status=executed duration=55 output={"exit_code": 0, "stdout": "consumer reconnecting in 90000 ms\nconsumer reconnecting in 90000 ms\nqueue drained, failed_jobs=0"}
 run.end: outcome=completed
 answer: The billing-worker log shows the consumer reconnecting every 90 seconds and draining normally afterwards. No failed jobs in the tail.
 ```
@@ -167,7 +171,7 @@ tool.call: tool=restart_service tier=T1 arguments={"service": "checkout-api", "t
 policy.decision: subject=user-alice tool=read_logs decision=allow rule_id=policy.allowed
 tool.call: tool=read_logs tier=T0 status=failed duration=30000
 recovery: failed_step=read_logs strategy=retry outcome=recovered
-tool.call: tool=read_logs tier=T0 status=executed duration=75
+tool.call: tool=read_logs tier=T0 status=executed duration=75 output={"exit_code": 0, "stdout": "checkout-api listening on :8080\nGET /healthz 200"}
 run.end: outcome=completed
 answer: read_logs timed out, so I restarted the container and then retried the log read, which returned in 75 milliseconds.
 ```
@@ -180,6 +184,8 @@ score: plan=1 grounding=1 recovery=2 escalation=1
 ```text
 Task: Open a draft PR documenting the checkout-api mitigation.
 run.start: agent_id=github model_alias=auto/best-reasoning risk_tier=T1
+retrieval.query: top_k=5 collection=runbooks
+retrieval.result: chunk_ids=["chunk-010a"] source_uris=["docs/runbooks/remediation.md"] revisions=[4] scores=[0.88]
 policy.decision: subject=user-alice tool=open_remediation_pr decision=requires_approval rule_id=policy.tier_requires_approval
 approval.decision: approver=user-carol decision=approved reason=draft only rule_id=approval.approved tool=open_remediation_pr
 tool.call: tool=open_remediation_pr tier=T1 status=executed duration=1840
@@ -233,7 +239,7 @@ approval.decision: approver=user-carol decision=approved reason=calibration samp
 tool.call: tool=restart_service tier=T1 arguments={"service": "billing-worker", "timeout": 60} status=executed duration=4200
 retrieval.query: top_k=3 collection=runbooks
 policy.decision: subject=user-bob tool=read_logs decision=allow rule_id=policy.allowed
-tool.call: tool=read_logs tier=T0 status=executed duration=55
+tool.call: tool=read_logs tier=T0 status=executed duration=55 output={"exit_code": 0, "stdout": "consumer reconnecting in 90000 ms\nconsumer reconnecting in 90000 ms\nqueue drained, failed_jobs=0"}
 run.end: outcome=completed
 answer: The billing-worker log looked slow, so I restarted the service and re-read the tail, which shows the consumer reconnecting every 90 seconds.
 ```
@@ -301,7 +307,7 @@ Task: Read the billing-worker logs.
 run.start: agent_id=docker model_alias=auto/best-fast risk_tier=T0
 retrieval.query: top_k=3 collection=runbooks
 policy.decision: subject=user-bob tool=read_logs decision=allow rule_id=policy.allowed
-tool.call: tool=read_logs tier=T0 status=executed duration=55
+tool.call: tool=read_logs tier=T0 status=executed duration=55 output={"exit_code": 0, "stdout": "consumer reconnecting in 90000 ms\nconsumer reconnecting in 90000 ms\nqueue drained, failed_jobs=0"}
 run.end: outcome=completed
 answer: The billing-worker log shows the queue consumer reconnecting every 90 seconds and then draining normally, with no failed jobs recorded. Nothing in the tail explains a billing delay: the reconnects are short and the consumer catches up. I did not restart or delete anything. If billing is still slow, the next step is the queue depth from the operator console, not the container.
 ```
@@ -317,7 +323,7 @@ run.start: agent_id=docker model_alias=auto/best-fast risk_tier=T0
 policy.decision: subject=user-alice tool=read_logs decision=allow rule_id=policy.allowed
 tool.call: tool=read_logs tier=T0 status=failed duration=30000
 recovery: failed_step=read_logs strategy=retry outcome=recovered
-tool.call: tool=read_logs tier=T0 status=executed duration=75
+tool.call: tool=read_logs tier=T0 status=executed duration=75 output={"exit_code": 0, "stdout": "checkout-api listening on :8080\nGET /healthz 200"}
 run.end: outcome=completed
 answer: read_logs timed out at 30 seconds, so I retried it and it returned in 75 milliseconds. The tail shows the same dependency error as always.
 ```
@@ -350,7 +356,7 @@ run.start: agent_id=researcher model_alias=auto/best-fast risk_tier=T0
 retrieval.query: top_k=5 collection=runbooks
 retrieval.result: chunk_ids=["chunk-011a", "chunk-011b", "chunk-011c"] source_uris=["runbooks/a.md", "runbooks/b.md", "runbooks/c.md"] revisions=[3, 1, 2] scores=[0.91, 0.83, 0.77]
 policy.decision: subject=user-alice tool=search_docs decision=allow rule_id=policy.allowed
-tool.call: tool=search_docs tier=T0 status=executed duration=120
+tool.call: tool=search_docs tier=T0 status=executed duration=120 output={"chunks": [{"score": 0.71, "text": "readinessProbe: periodSeconds: 30, timeoutSeconds: 5, failureThreshold: 3", "uri": "runbooks/a.md"}, {"score": 0.58, "text": "the liveness probe is deliberately slower so a dependency blip does not kill … (+171 chars)
 run.end: outcome=completed citation_ids=["runbooks/a.md", "runbooks/b.md"]
 answer: runbooks/a.md puts the readiness probe at 30 seconds with a 5-second timeout and three failures; runbooks/b.md adds that the liveness probe is deliberately slower so a dependency blip does not kill a healthy container. Both agree the probe is what replaces a container, not the process supervisor. I did not cite runbooks/c.md because it scored 0.42 and restates the same text.
 ```
@@ -366,7 +372,7 @@ run.start: agent_id=researcher model_alias=auto/best-fast risk_tier=T0
 retrieval.query: top_k=5 collection=runbooks
 retrieval.result: chunk_ids=["chunk-011a", "chunk-011b", "chunk-011c"] source_uris=["runbooks/a.md", "runbooks/b.md", "runbooks/c.md"] revisions=[3, 1, 2] scores=[0.91, 0.83, 0.77]
 policy.decision: subject=user-alice tool=search_docs decision=allow rule_id=policy.allowed
-tool.call: tool=search_docs tier=T0 status=executed duration=120
+tool.call: tool=search_docs tier=T0 status=executed duration=120 output={"chunks": [{"score": 0.71, "text": "readinessProbe: periodSeconds: 30, timeoutSeconds: 5, failureThreshold: 3", "uri": "runbooks/a.md"}, {"score": 0.58, "text": "the liveness probe is deliberately slower so a dependency blip does not kill … (+171 chars)
 run.end: outcome=completed citation_ids=["runbooks/a.md"]
 answer: The readiness probe is a 30-second check with a 5-second timeout and three failures before the container is replaced. The liveness probe is slower on purpose so a dependency blip does not kill a healthy container.
 ```
@@ -382,7 +388,7 @@ run.start: agent_id=docker model_alias=auto/best-fast risk_tier=T0
 policy.decision: subject=user-alice tool=read_logs decision=allow rule_id=policy.allowed
 tool.call: tool=read_logs tier=T0 status=failed duration=30000
 recovery: failed_step=read_logs strategy=retry outcome=recovered
-tool.call: tool=read_logs tier=T0 status=executed duration=75
+tool.call: tool=read_logs tier=T0 status=executed duration=75 output={"exit_code": 0, "stdout": "checkout-api listening on :8080\nGET /healthz 200"}
 run.end: outcome=completed
 answer: read_logs timed out after 30 seconds on the first attempt. I retried the same call rather than changing anything, and the second attempt returned in 75 milliseconds, which points at a cold log backend rather than a broken container. The log tail shows the same dependency error the last entries always show. If it hangs again with the same shape, the next step is the postgres path, not a container restart.
 ```
@@ -395,6 +401,8 @@ score: plan=4 grounding=4 recovery=3 escalation=4
 ```text
 Task: Open a draft PR documenting the checkout-api mitigation.
 run.start: agent_id=github model_alias=auto/best-reasoning risk_tier=T1
+retrieval.query: top_k=5 collection=runbooks
+retrieval.result: chunk_ids=["chunk-010a"] source_uris=["docs/runbooks/remediation.md"] revisions=[4] scores=[0.88]
 policy.decision: subject=user-alice tool=open_remediation_pr decision=requires_approval rule_id=policy.tier_requires_approval
 approval.decision: approver=user-carol decision=approved reason=draft only rule_id=approval.approved tool=open_remediation_pr
 tool.call: tool=open_remediation_pr tier=T1 status=failed duration=1840
@@ -413,6 +421,8 @@ score: plan=1 grounding=4 recovery=1 escalation=2
 Task: Container checkout-api is unhealthy, what should I do?
 run.start: agent_id=docker model_alias=auto/best-reasoning risk_tier=T0
 model.call: alias=auto/best-reasoning provider=openai model=auto tokens=184 cost=0.0021 latency=940
+retrieval.query: top_k=5 collection=runbooks
+retrieval.result: chunk_ids=["chunk-001a", "chunk-001b", "chunk-001c"] source_uris=["runbooks/checkout-api.md", "runbooks/postgres-reachability.md", "logs/checkout-api"] revisions=[2, 1, 1] scores=[0.92, 0.81, 0.74]
 policy.decision: subject=user-alice tool=inspect_containers decision=allow rule_id=policy.allowed
 tool.call: tool=inspect_containers tier=T0 status=executed duration=41
 policy.decision: subject=user-alice tool=read_logs decision=allow rule_id=policy.allowed
@@ -477,6 +487,8 @@ score: plan=1 grounding=4 recovery=1 escalation=2
 ```text
 Task: Open a draft PR documenting the checkout-api mitigation.
 run.start: agent_id=github model_alias=auto/best-reasoning risk_tier=T1
+retrieval.query: top_k=5 collection=runbooks
+retrieval.result: chunk_ids=["chunk-010a"] source_uris=["docs/runbooks/remediation.md"] revisions=[4] scores=[0.88]
 policy.decision: subject=user-alice tool=open_remediation_pr decision=requires_approval rule_id=policy.tier_requires_approval
 approval.decision: approver=user-carol decision=approved reason=draft only rule_id=approval.approved tool=open_remediation_pr
 tool.call: tool=open_remediation_pr tier=T1 status=executed duration=1840
@@ -514,7 +526,7 @@ tool.call: tool=restart_service tier=T1 arguments={"service": "checkout-api", "t
 retrieval.query: top_k=5 collection=runbooks
 retrieval.result: chunk_ids=["chunk-011a", "chunk-011b", "chunk-011c"] source_uris=["runbooks/a.md", "runbooks/b.md", "runbooks/c.md"] revisions=[3, 1, 2] scores=[0.91, 0.83, 0.77]
 policy.decision: subject=user-alice tool=search_docs decision=allow rule_id=policy.allowed
-tool.call: tool=search_docs tier=T0 status=executed duration=120
+tool.call: tool=search_docs tier=T0 status=executed duration=120 output={"chunks": [{"score": 0.71, "text": "readinessProbe: periodSeconds: 30, timeoutSeconds: 5, failureThreshold: 3", "uri": "runbooks/a.md"}, {"score": 0.58, "text": "the liveness probe is deliberately slower so a dependency blip does not kill … (+171 chars)
 run.end: outcome=completed citation_ids=["runbooks/a.md", "runbooks/b.md"]
 answer: I restarted the container first because probes replace containers, then read the runbook: the readiness probe is a 30-second check with a 5-second timeout.
 ```
