@@ -123,3 +123,10 @@ audit-verify:  ## Verify a tenant's audit chain and report unaudited tool calls
 
 outputs-purge:  ## Delete stored tool output past its retention period (DAYS=90)
 	uv run python scripts/tool-outputs-purge.py $(DAYS)
+
+# Ingestion is a one-shot container: it needs the knowledge mount and the
+# GitHub read token, and neither belongs to a long-running service.
+.PHONY: ingest
+
+ingest:  ## Ingest knowledge/ and CITADEL_INGEST_REPOS into a tenant's collection (TENANT=lab-a)
+	docker compose --profile tools run --rm ingest --tenant $(or $(TENANT),lab-a) $(ARGS)

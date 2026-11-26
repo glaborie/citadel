@@ -1,0 +1,294 @@
+"""Ingest knowledge sources into per-tenant Qdrant collections.
+
+One collection per tenant, named ``citadel_<tenant>``; a point never exists in a
+collection for another tenant, so a cross-tenant read is not a filter that can be
+forgotten - it is a collection that does not hold the data.
+
+Every chunk carries the digest of the whole file it came from. Re-ingesting an
+unchanged file writes the same point ids, so it stores nothing new; a changed
+file adds one revision and leaves the old one retrievable. Old revisions are not
+pruned here (shortcut: re-index is idempotent, not a retention policy; add a
+prune when storage matters).
+
+Vectors are deliberately partial: the sparse BM25 slot is created now because
+its term frequencies are computed locally and its IDF server-side, while the
+dense name arrives in #130 once the embedding endpoint is decided (#136) -
+Qdrant can add a named vector to a live collection. Points omit the dense vector
+until then.
+
+    python -m citadel.retrieval.ingest --tenant lab-a --root /knowledge \
+        --repo owner/runbooks
+
+The container this runs in matters: the filesystem root is what it can see, and
+GitHub reads need the existing ``GH_TOKEN`` plus the egress proxy.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import hashlib
+import json
+import os
+import re
+import sys
+import uuid
+from collections import Counter
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+from urllib.parse import quote
+from urllib.request import Request
+
+from qdrant_client import QdrantClient, models
+
+from citadel import env, net
+
+DEFAULT_QDRANT_URL = os.environ.get("CITADEL_QDRANT_URL", "http://qdrant:6333")
+GITHUB_API = "https://api.github.com"
+SPARSE = "text"
+# A runbook is text. Larger files are a binary the model should not be fed, and
+# a whole-repo tree can contain a lockfile larger than the whole value of the repo.
+MAX_FILE_BYTES = 1_000_000
+MAX_CHUNK_CHARS = 2_000
+# One upsert per batch keeps a whole repository out of a single request.
+BATCH = 256
+TENANT = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
+WORD = re.compile(r"[a-z0-9]+")
+
+
+class IngestRefused(RuntimeError):
+    """The source is outside what the configuration allows. Nothing is written."""
+
+
+@dataclass(frozen=True)
+class Document:
+    source_uri: str
+    content: str
+
+
+@dataclass(frozen=True)
+class Report:
+    collection: str
+    documents: int
+    chunks: int
+
+
+def collection_name(tenant: str) -> str:
+    """The one place a tenant becomes a collection name; refuse what is not one."""
+    if not TENANT.fullmatch(tenant):
+        raise IngestRefused(f"tenant {tenant!r} cannot name a collection")
+    return f"citadel_{tenant}"
+
+
+def revision(content: str) -> str:
+    return hashlib.sha256(content.encode()).hexdigest()
+
+
+def point_id(tenant: str, source_uri: str, rev: str, index: int) -> str:
+    """Deterministic, so re-ingesting an unchanged file updates in place."""
+    name = f"citadel:{tenant}:{source_uri}:{rev}:{index}"
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, name))
+
+
+def chunks(text: str, limit: int = MAX_CHUNK_CHARS) -> list[str]:
+    """Paragraphs, then hard-wrapped at whitespace so no chunk is unbounded."""
+    pieces: list[str] = []
+    for block in (block.strip() for block in re.split(r"\n\s*\n", text)):
+        if not block:
+            continue
+        while len(block) > limit:
+            cut = block.rfind(" ", 0, limit)
+            cut = cut if cut > 0 else limit
+            pieces.append(block[:cut].strip())
+            block = block[cut:].strip()
+        if block:
+            pieces.append(block)
+    return pieces
+
+
+def sparse(text: str) -> models.SparseVector:
+    """Term frequencies; the collection's IDF modifier does the rest.
+
+    Hashed indices mean no vocabulary is shipped and no token maps back to text.
+    A collision adds to the same index, which is the same thing BM25 does with a
+    shared term.
+    """
+    counts: Counter[int] = Counter()
+    for term in WORD.findall(text.lower()):
+        counts[int.from_bytes(hashlib.blake2b(term.encode(), digest_size=4).digest(), "big")] += 1
+    indices = sorted(counts)
+    return models.SparseVector(indices=indices, values=[float(counts[i]) for i in indices])
+
+
+def filesystem(root: Path) -> Iterator[Document]:
+    """Every text file under the configured root, and nothing that resolves out of it."""
+    base = root.resolve()
+    for path in sorted(base.rglob("*")):
+        resolved = path.resolve()
+        if not resolved.is_relative_to(base):
+            raise IngestRefused(f"{path.name} resolves outside the ingest root")
+        if not path.is_file() or resolved.stat().st_size > MAX_FILE_BYTES:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue  # a binary is not a document; it is not an error either
+        yield Document(source_uri=f"fs:{resolved.relative_to(base)}", content=text)
+
+
+def _github_json(request: Request, opener: Callable[..., Any] | None) -> Any:
+    with net.open_url(request, timeout=30, opener=opener) as response:
+        try:
+            return json.loads(response.read())
+        except ValueError as exc:
+            raise IngestRefused(f"{request.full_url}: GitHub answered with no JSON") from exc
+
+
+def github(
+    repo: str,
+    ref: str,
+    *,
+    token: str,
+    opener: Callable[..., Any] | None = None,
+) -> Iterator[Document]:
+    """Selected repository, read through the token that already exists."""
+    if not token:
+        raise IngestRefused("GitHub ingestion needs GH_TOKEN or GH_TOKEN_FILE")
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    tree = _github_json(
+        Request(
+            f"{GITHUB_API}/repos/{repo}/git/trees/{quote(ref, safe='/')}?recursive=1",
+            headers=headers,
+        ),
+        opener,
+    )
+    if not isinstance(tree, dict) or not isinstance(tree.get("tree"), list):
+        raise IngestRefused(f"{repo}@{ref}: GitHub returned no tree")
+    if tree.get("truncated"):
+        raise IngestRefused(f"{repo}@{ref}: the tree is truncated; narrow the repository")
+    for entry in tree["tree"]:
+        if not isinstance(entry, dict) or entry.get("type") != "blob":
+            continue
+        if int(entry.get("size", 0)) > MAX_FILE_BYTES:
+            continue
+        blob = _github_json(
+            Request(f"{GITHUB_API}/repos/{repo}/git/blobs/{entry['sha']}", headers=headers), opener
+        )
+        if not isinstance(blob, dict) or blob.get("encoding") != "base64":
+            raise IngestRefused(f"{repo}: blob {entry.get('path')!r} is not base64")
+        try:
+            text = base64.b64decode(blob["content"]).decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            continue  # a binary is not a document
+        yield Document(source_uri=f"gh:{repo}@{ref}:{entry['path']}", content=text)
+
+
+def allowed_root(configured: str, requested: str) -> Path:
+    """The requested root must sit under the configured one, or nothing is read."""
+    if not configured:
+        raise IngestRefused("CITADEL_INGEST_ROOT is not set, so no root is allowed")
+    base, want = Path(configured).resolve(), Path(requested).resolve()
+    if not want.is_relative_to(base):
+        raise IngestRefused(f"{requested} is outside the configured ingest root")
+    return want
+
+
+def allowed_repos(configured: str, requested: list[str]) -> tuple[str, ...]:
+    """The CLI selects from the configured set; it cannot extend it."""
+    known = {item.strip() for item in configured.split(",") if item.strip()}
+    outside = sorted(set(requested) - known)
+    if outside:
+        raise IngestRefused(f"repositories not in CITADEL_INGEST_REPOS: {outside}")
+    return tuple(requested)
+
+
+def ingest(
+    client: QdrantClient,
+    *,
+    tenant: str,
+    documents: Iterable[Document],
+) -> Report:
+    """Upsert every chunk into the tenant's collection. Idempotent by point id."""
+    name = collection_name(tenant)
+    if not client.collection_exists(name):
+        client.create_collection(
+            name,
+            vectors_config={},
+            sparse_vectors_config={SPARSE: models.SparseVectorParams(modifier=models.Modifier.IDF)},
+        )
+
+    points: list[models.PointStruct] = []
+    files = 0
+    for document in documents:
+        files += 1
+        rev = revision(document.content)
+        for index, text in enumerate(chunks(document.content)):
+            points.append(
+                models.PointStruct(
+                    id=point_id(tenant, document.source_uri, rev, index),
+                    vector={SPARSE: sparse(text)},
+                    payload={
+                        "tenant_id": tenant,
+                        "source_uri": document.source_uri,
+                        "revision": rev,
+                        "chunk_index": index,
+                        "text": text,
+                        "acl": [f"tenant:{tenant}", f"doc:{document.source_uri}"],
+                    },
+                )
+            )
+    for start in range(0, len(points), BATCH):
+        client.upsert(name, points=points[start : start + BATCH], wait=True)
+    return Report(collection=name, documents=files, chunks=len(points))
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Ingest documents into a tenant's collection")
+    parser.add_argument("--tenant", required=True)
+    parser.add_argument("--root", help="filesystem root (default: CITADEL_INGEST_ROOT)")
+    parser.add_argument("--repo", action="append", default=[], help="owner/name (repeatable)")
+    parser.add_argument("--ref", default="HEAD")
+    parser.add_argument("--qdrant-url", default=DEFAULT_QDRANT_URL)
+    args = parser.parse_args(argv)
+
+    try:
+        root = args.root or os.environ.get("CITADEL_INGEST_ROOT", "")
+        repos = allowed_repos(
+            os.environ.get("CITADEL_INGEST_REPOS", ""),
+            [repo.strip() for repo in args.repo if repo.strip()],
+        )
+        sources: list[Iterable[Document]] = []
+        if root:
+            sources.append(
+                filesystem(allowed_root(os.environ.get("CITADEL_INGEST_ROOT", ""), root))
+            )
+        if repos:
+            token = env.optional_secret("GH_TOKEN")
+            sources.extend(github(repo, args.ref, token=token) for repo in repos)
+        if not sources:
+            raise IngestRefused("no source given: pass --root, --repo, or both")
+    except IngestRefused as exc:
+        print(f"ingest refused: {exc}", file=sys.stderr)
+        return 2
+
+    client = QdrantClient(url=args.qdrant_url)
+    try:
+        for source in sources:
+            report = ingest(client, tenant=args.tenant, documents=source)
+            print(f"{report.collection}: {report.documents} documents, {report.chunks} chunks")
+    except (IngestRefused, OSError) as exc:
+        # A source read fails closed: what was already upserted is idempotent, so
+        # re-running after the fix completes rather than duplicates.
+        print(f"ingest refused: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

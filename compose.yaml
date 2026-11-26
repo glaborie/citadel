@@ -290,6 +290,24 @@ services:
     networks:
       - internal
 
+  qdrant:
+    # Per-tenant collections (ADR-005): the collection name is the tenant
+    # boundary, so a cross-tenant read is a collection that does not exist.
+    # Internal only; no port, no credentials to leak or rotate.
+    image: qdrant/qdrant:v1.20.0@sha256:9bfc89f9914fc14876a88c05270685921a55b8877b254a98bcc1cc2f0a424cd2
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      # The image carries no curl; a TCP probe from bash needs nothing else.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    logging: *logging
+    networks:
+      - internal
+
   api:
     <<: *app
     command:
@@ -613,11 +631,43 @@ services:
       - internal
       - sandbox
 
+  # One-shot knowledge ingestion: `make ingest TENANT=lab-a`. Not started by
+  # `up`; it is the only service with the knowledge mount and the read token,
+  # and it talks to GitHub only through the same domain-allowlisted proxy.
+  ingest:
+    <<: *app
+    profiles: ["tools"]
+    restart: "no"
+    # Entrypoint, not command: `docker compose run ingest --tenant …` must append
+    # the arguments to the module, not replace the whole command line.
+    entrypoint: ["python", "-m", "citadel.retrieval.ingest"]
+    environment:
+      CITADEL_QDRANT_URL: http://qdrant:6333
+      CITADEL_INGEST_ROOT: /knowledge
+      CITADEL_INGEST_REPOS: ${CITADEL_INGEST_REPOS:-}
+      GH_TOKEN_FILE: /run/secrets/gh_read_token
+      HTTPS_PROXY: http://github-egress:3128
+      HTTP_PROXY: http://github-egress:3128
+      # Qdrant is in-stack and must never traverse the egress proxy.
+      NO_PROXY: localhost,127.0.0.1,qdrant
+    secrets:
+      - gh_read_token
+    volumes:
+      - ./knowledge:/knowledge:ro
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    logging: *logging
+    networks:
+      - internal
+      - sandbox
+
 
 volumes:
   postgres-data:
   omniroute-data:
   mlflow-data:
+  qdrant-data:
 
 # Injected from the host environment (i.e. .env) and mounted as files, so they
 # never appear in a container's Config.Env, which the Docker API exposes.

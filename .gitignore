@@ -19,6 +19,11 @@ strix_runs/
 # local report
 docs/evals/red-team-report.md
 
+# Operator knowledge mounted into the ingest service. Only the placeholder is
+# tracked; the documents are host data, not repository content.
+knowledge/*
+!knowledge/.gitkeep
+
 # Materialised Docker secrets (scripts/provision-secrets.sh). Never commit.
 # The SOPS-encrypted source is the one tracked file in this directory.
 secrets/*
