@@ -128,7 +128,8 @@ finished result.
 
 **D3 — MLflow human-path auth.** The OTLP write path is internal and unaffected;
 the UI is unpublished, so no browser path exists to protect. Deferred until it is
-published (ADR-017).
+published (ADR-017). The premise is now enforced: `tests/test_mlflow_exposure.py`
+fails if `mlflow` publishes a port or joins `edge`.
 
 **D4 — skill packs.** Content, hashes, loader and ingress validation delivered;
 `load_pack(agent).prompt()` has no caller yet (same root cause as D2).
