@@ -113,10 +113,10 @@ calibration-kappa:  ## Pair labels with scores and measure kappa per dimension
 
 .PHONY: mlflow-bootstrap
 
-# One-time per fresh MLflow volume: create the traces experiment the OTLP
-# exporter names via MLFLOW_EXPERIMENT_ID.
-mlflow-bootstrap:  ## Create the MLflow traces experiment on a fresh volume
-	docker compose exec -T api python -m citadel.mlflow_bootstrap
+# `make up` runs this as a one-shot before any worker starts; the target stays for an
+# existing stack whose experiment was removed by hand. Idempotent either way.
+mlflow-bootstrap:  ## Create the MLflow traces experiment if it is absent
+	docker compose run --rm --no-deps mlflow-bootstrap
 
 # Red-team pack: manifest lint always, case execution once fixtures exist.
 # Uses the project venv explicitly so it does not depend on an activated shell.
