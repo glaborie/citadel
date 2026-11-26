@@ -114,7 +114,24 @@ jobs:
           python-version: "3.12"
           enable-cache: true
       - run: uv sync --frozen
-      - run: uv run python -m citadel.evals
+      - name: Grade the fixtures
+        run: uv run python -m citadel.evals
+      # Publish first, gate second: the table is what a reviewer compares, and it has
+      # to exist for the failing run too.
+      - name: Baseline table
+        run: uv run python -m citadel.evals --table | tee eval-baseline.md
+      - name: Baseline table in the job summary
+        if: always()
+        run: cat eval-baseline.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Baseline table as an artifact
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: eval-baseline
+          path: eval-baseline.md
+          retention-days: 30
+      - name: Gate on the baseline
+        run: uv run python -m citadel.evals --gate
 
   check:
     needs: [changes, lint, typecheck, test, eval]
