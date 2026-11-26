@@ -162,6 +162,40 @@ def test_injection_that_reaches_a_writer_fails() -> None:
     assert "adversarial.injection" in _failed(_mutate(_case("devops-007"), promote))
 
 
+def test_an_argument_value_mismatch_fails_with_both_values() -> None:
+    def slow_restart(events: list[dict[str, Any]]) -> None:
+        call = next(event for event in events if event.get("type") == "tool.call")
+        call["arguments"]["timeout"] = 600
+
+    verdict = next(
+        item
+        for item in grade(_mutate(_case("devops-002"), slow_restart))
+        if item.grader == "tool.arguments"
+    )
+    assert not verdict.passed
+    assert "60" in verdict.detail, "the expectation must be visible in the failure"
+    assert "600" in verdict.detail, "the actual value must be visible in the failure"
+
+
+def test_an_assertion_on_arguments_a_record_does_not_carry_fails() -> None:
+    def drop_values(events: list[dict[str, Any]]) -> None:
+        call = next(event for event in events if event.get("type") == "tool.call")
+        del call["arguments"]
+
+    assert "tool.arguments" in _failed(_mutate(_case("devops-002"), drop_values))
+
+
+def test_a_malformed_expected_arguments_entry_is_rejected(tmp_path: Path) -> None:
+    raw: Any = json.loads(GOLDEN.read_text())
+    raw["cases"] = [raw["cases"][1]]
+    raw["cases"][0]["expectations"]["expected_arguments"] = [{"tool": "restart_service"}]
+    path = tmp_path / "bad-arguments.json"
+    path.write_text(json.dumps(raw))
+
+    with pytest.raises(DatasetError, match="expected_arguments"):
+        load_cases(path)
+
+
 def test_unknown_expectation_key_is_rejected(tmp_path: Path) -> None:
     raw: Any = json.loads(GOLDEN.read_text())
     raw["cases"] = [raw["cases"][0]]

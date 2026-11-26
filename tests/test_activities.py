@@ -442,6 +442,91 @@ def test_tool_call_is_audited(monkeypatch: pytest.MonkeyPatch) -> None:
     assert payload["idempotency_key"] == idempotency_key(call("read_logs"))
 
 
+def test_the_record_carries_the_argument_values_a_grader_asserts_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A digest proves two argument sets are equal, not which values they held."""
+    ledger = FakeAudit()
+    impl = build(monkeypatch, FakeDB(), recorder([]), ledger)
+    _detector(monkeypatch)
+    item = call("restart_service")
+
+    impl.execute_tool(item)
+
+    payload = ledger.events[0]["payload"]
+    assert payload["arguments"] == {"service": "checkout-api"}
+    assert payload["args_hash"] == arguments_hash(item.arguments)
+
+
+def test_pii_in_the_arguments_is_redacted_before_the_record_keeps_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The ledger never expires, so it takes the same gate as an output body."""
+    ledger = FakeAudit()
+    impl = build(monkeypatch, FakeDB(), recorder([]), ledger)
+    item = call("read_logs")
+    item.arguments = {"owner": "Alice Smith"}
+    text = json.dumps(item.arguments, ensure_ascii=False)
+    start = text.index("Alice")
+    span = {
+        "entity_type": "PERSON",
+        "start": start,
+        "end": start + len("Alice Smith"),
+        "score": 0.9,
+    }
+    _detector(monkeypatch, json.dumps([span]).encode())
+
+    impl.execute_tool(item)
+
+    payload = ledger.events[0]["payload"]
+    assert payload["arguments"] == {"owner": "<PERSON>"}
+    gated = [event for event in ledger.events if event["event_type"] == "dlp.event"]
+    assert [(event["payload"]["surface"], event["payload"]["action"]) for event in gated] == [
+        ("record", "redact")
+    ]
+
+
+def test_a_secret_in_the_arguments_keeps_the_digest_and_no_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An append-only ledger cannot take a token back, so the value never enters."""
+    ledger = FakeAudit()
+    impl = build(monkeypatch, FakeDB(), recorder([]), ledger)
+    _detector(monkeypatch)
+    item = call("restart_service")
+    item.arguments = {"service": "ghp_" + "a" * 36}
+
+    impl.execute_tool(item)
+
+    payload = ledger.events[0]["payload"]
+    assert "arguments" not in payload
+    assert payload["args_hash"] == arguments_hash(item.arguments)
+    gated = [event for event in ledger.events if event["event_type"] == "dlp.event"]
+    assert [(event["payload"]["surface"], event["payload"]["action"]) for event in gated] == [
+        ("record", "block")
+    ]
+
+
+def test_a_dead_detector_withholds_the_values_and_keeps_the_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The effect already happened; an unchecked argument is what must not persist."""
+    ledger = FakeAudit()
+    impl = build(monkeypatch, FakeDB(), recorder([]), ledger)
+
+    def down(_request: Any, timeout: Any = None) -> Any:
+        raise OSError("detector down")
+
+    monkeypatch.setattr(dlp, "urlopen", down)
+
+    impl.execute_tool(call("read_logs"))
+
+    payload = ledger.events[0]["payload"]
+    assert "arguments" not in payload
+    assert payload["status"] == "executed"
+    assert ledger.events[1]["payload"]["action"] == "block"
+
+
 def test_a_replayed_call_is_audited(monkeypatch: pytest.MonkeyPatch) -> None:
     item = call("read_logs")
     db = FakeDB({idempotency_key(item): {"status": "executed", "result": {"stdout": "hi"}}})
@@ -573,12 +658,12 @@ def test_the_capped_bytes_are_kept_where_the_digest_points(
     digest = hashlib.sha256(body.encode()).hexdigest()
     assert result.output_ref == digest
     assert result.output_stored is True
-    assert (("lab-a", digest) in db.outputs), "the body was not kept"
+    assert ("lab-a", digest) in db.outputs, "the body was not kept"
     stored = gzip.decompress(db.outputs[("lab-a", digest)]).decode()
     assert stored == body, "the store must hold the text the runner returned, not the cap"
 
 
-OUTPUT_FIELDS = ('output_sha256', 'output_bytes', 'output_truncated', 'output_ref', 'output_stored')
+OUTPUT_FIELDS = ("output_sha256", "output_bytes", "output_truncated", "output_ref", "output_stored")
 
 BIG = "HEAD\n" + ("c" * 60_000) + "\nEND\n"
 
@@ -597,6 +682,7 @@ def _through_the_real_invoker(
 ) -> ToolActivities:
     """`execute_tool` with the sandbox path intact, so the cap actually runs."""
     impl = build(monkeypatch, db, recorder([]), ledger)
+    _detector(monkeypatch)
     monkeypatch.setattr(impl, "_invoke", impl._invoke_sandbox)
     monkeypatch.setattr(net, "urlopen", _serving(body))
     return impl
@@ -696,6 +782,7 @@ def test_the_audit_record_states_that_a_cap_was_applied(monkeypatch: pytest.Monk
     """A silence is not evidence: the event carries the digest of what it hid."""
     ledger = FakeAudit()
     impl = build(monkeypatch, FakeDB(), recorder([]), ledger)
+    _detector(monkeypatch)
     result = ToolResult(
         status="executed",
         tool="read_logs",
