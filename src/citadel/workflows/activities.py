@@ -163,6 +163,20 @@ def idempotency_key(call: ToolCall) -> str:
     return f"{call.run_id}:{call.tool}:{digest}"
 
 
+def _gated_values(
+    text: str, report: dict[str, Any]
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """The redacted JSON a gate returned, or no values and an event saying why."""
+    try:
+        values = json.loads(text)
+    except ValueError:
+        # A redaction broke the JSON: keep no values rather than a fragment.
+        return None, {**report, "action": "block"}
+    if not isinstance(values, dict):
+        return None, {**report, "action": "block"}
+    return values, (report if report.get("action") != "pass" else None)
+
+
 class ToolActivities:
     def __init__(
         self,
@@ -381,16 +395,7 @@ class ToolActivities:
             )
         except dlp.DlpBlocked as exc:
             return None, exc.report
-
-        try:
-            values = json.loads(text)
-        except ValueError:
-            # A redaction broke the JSON: keep no values rather than a fragment.
-            return None, {**report, "action": "block"}
-        if not isinstance(values, dict):
-            return None, {**report, "action": "block"}
-        noted = report if report.get("action") != "pass" else None
-        return values, noted
+        return _gated_values(text, report)
 
     def _settled(
         self, call: ToolCall, key: str, status: str, result: Any, tier: str

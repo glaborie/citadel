@@ -65,6 +65,22 @@ def _tool_selection(case: Case) -> Grade:
     return _grade(case, "tool.selection", problems)
 
 
+def _carries(values: object, wanted: dict[str, Any]) -> bool:
+    return isinstance(values, dict) and all(
+        values.get(key) == value for key, value in wanted.items()
+    )
+
+
+def _argument_problem(calls: list[dict[str, Any]], assertion: Any) -> str | None:
+    tool, wanted = assertion.get("tool"), assertion.get("arguments")
+    if not isinstance(tool, str) or not isinstance(wanted, dict):
+        return None  # the dataset loader rejects this shape before grading
+    actual = [call.get("arguments") for call in calls if call.get("tool") == tool]
+    if any(_carries(values, wanted) for values in actual):
+        return None
+    return f"{tool}: expected arguments {wanted!r}, record carries {actual!r}"
+
+
 def _tool_arguments(case: Case) -> Grade:
     """The named argument values, when the record carries them.
 
@@ -76,22 +92,10 @@ def _tool_arguments(case: Case) -> Grade:
     expected = case.expectations.get("expected_arguments")
     if not isinstance(expected, list):
         return _grade(case, "tool.arguments", [])
-
     calls = _events(case, "tool.call")
-    problems: list[str] = []
-    for assertion in expected:
-        tool = assertion.get("tool")
-        wanted = assertion.get("arguments")
-        if not isinstance(tool, str) or not isinstance(wanted, dict):
-            continue  # the dataset loader rejects this shape before grading
-        actual = [call.get("arguments") for call in calls if call.get("tool") == tool]
-        matched = any(
-            isinstance(values, dict)
-            and all(values.get(key) == value for key, value in wanted.items())
-            for values in actual
-        )
-        if not matched:
-            problems.append(f"{tool}: expected arguments {wanted!r}, record carries {actual!r}")
+    problems = [
+        problem for problem in (_argument_problem(calls, item) for item in expected) if problem
+    ]
     return _grade(case, "tool.arguments", problems)
 
 
