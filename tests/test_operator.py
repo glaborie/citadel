@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 import urllib.error
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -87,6 +88,9 @@ def client(
 
     def fake_run(argv: list[str]) -> Done:
         captured["argv"] = argv
+        # Read the body the way `gh` would, while the file still exists.
+        if "--body-file" in argv:
+            captured["body"] = Path(argv[argv.index("--body-file") + 1]).read_text()
         return Done()
 
     monkeypatch.setattr(operator_module, "AuditLedger", lambda _dsn: SimpleNamespace(append=append))
@@ -113,7 +117,8 @@ def test_approved_pr_opens_as_a_draft_from_the_named_branch(client: TestClient) 
     response = client.post("/execute", json=body("open_remediation_pr", PR_ARGS))
     assert response.status_code == 200
     assert response.json()["allowlist_id"] == "gh.pr.create"
-    assert client.captured["argv"] == [
+    argv = client.captured["argv"]
+    assert argv[:13] == [
         "gh",
         "pr",
         "create",
@@ -126,9 +131,39 @@ def test_approved_pr_opens_as_a_draft_from_the_named_branch(client: TestClient) 
         "fix/oom-restart",
         "--title",
         PR_ARGS["title"],
-        "--body",
-        PR_ARGS["body"],
+        "--body-file",
     ]
+    # The body travelled as a file, and `gh` read the approved text from it.
+    assert client.captured["body"] == PR_ARGS["body"]
+    assert PR_ARGS["body"] not in " ".join(argv)
+
+
+def test_the_body_file_is_gone_once_the_command_has_run(client: TestClient) -> None:
+    """It is a hand-off, not a cache: the operator deletes what it wrote."""
+    client.post("/execute", json=body("open_remediation_pr", PR_ARGS))
+    path = Path(client.captured["argv"][client.captured["argv"].index("--body-file") + 1])
+
+    assert not path.exists()
+
+
+def test_a_multiline_body_opens_the_pr(client: TestClient) -> None:
+    """The limitation lifted: newlines and a version range survive the hand-off."""
+    text = "Fixes 0.1..0.2\n\n- restart on OOM\n- keep the logs\n"
+    client.post("/execute", json=body("open_remediation_pr", {**PR_ARGS, "body": text}))
+
+    assert client.captured["body"] == text
+    assert "0.1..0.2" not in " ".join(client.captured["argv"])
+
+
+def test_a_body_over_the_limit_is_refused_before_a_file_is_written(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/execute", json=body("open_remediation_pr", {**PR_ARGS, "body": "x" * 4001})
+    )
+
+    assert response.status_code == 403
+    assert "exceeds 4000 characters" in response.json()["detail"]
 
 
 def test_restart_argv_carries_the_derived_container_name(client: TestClient) -> None:

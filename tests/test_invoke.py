@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from citadel.policy import load_catalog
@@ -43,6 +45,7 @@ def test_open_remediation_pr_builds_a_draft_pr_from_a_branch() -> None:
             "title": "Restart checkout-api on OOM",
             "body": "Adds a restart policy so the container recovers on its own",
         },
+        body_path=BODY,
     )
     assert argv == [
         "gh",
@@ -57,8 +60,8 @@ def test_open_remediation_pr_builds_a_draft_pr_from_a_branch() -> None:
         "fix/oom-restart",
         "--title",
         "Restart checkout-api on OOM",
-        "--body",
-        "Adds a restart policy so the container recovers on its own",
+        "--body-file",
+        str(BODY),
     ]
     assert command.tier == "T1"
 
@@ -221,6 +224,9 @@ def test_allowlist_marks_output_risk_for_documented_commands() -> None:
     assert risk["docker.ps"] is None
 
 
+BODY = Path("/tmp/citadel-pr-text/0123456789abcdef.txt")
+
+
 def _pr(title: str) -> dict[str, str]:
     return {
         "repo": "acme/infra",
@@ -241,7 +247,7 @@ def test_a_refused_token_is_not_quoted_back() -> None:
     """
     secret = "ghp_" + "A1b2" * 8
     with pytest.raises(CommandDenied) as caught:
-        build_argv("open_remediation_pr", _pr(f"rotate {secret}; now"))
+        build_argv("open_remediation_pr", _pr(f"rotate {secret}; now"), body_path=BODY)
 
     message = str(caught.value)
     assert secret not in message
@@ -251,12 +257,45 @@ def test_a_refused_token_is_not_quoted_back() -> None:
 def test_a_refused_path_names_the_position() -> None:
     """Position plus class is actionable; the value is not."""
     with pytest.raises(CommandDenied, match=r"path traversal or absolute path in argument \d+"):
-        build_argv("open_remediation_pr", _pr("update ../../etc/passwd"))
+        build_argv("open_remediation_pr", _pr("update ../../etc/passwd"), body_path=BODY)
 
 
 def test_the_position_is_the_argv_index() -> None:
     """So a reader can map it back to the argument without seeing the value."""
     with pytest.raises(CommandDenied) as caught:
-        build_argv("open_remediation_pr", _pr("a|b"))
+        build_argv("open_remediation_pr", _pr("a|b"), body_path=BODY)
     index = int(str(caught.value).rsplit(" ", 1)[-1])
     assert index >= 2
+
+
+def test_a_body_is_refused_until_the_operator_writes_it() -> None:
+    """No file, no argv: a body is never rendered straight onto the command line."""
+    with pytest.raises(CommandDenied, match="written to a file first"):
+        build_argv("open_remediation_pr", _pr("Restart checkout-api on OOM"))
+
+
+def test_a_caller_cannot_name_the_body_file() -> None:
+    """The path is the operator's; a caller that offers one is refused as unknown."""
+    for injected in ({"--body-file": "/etc/passwd"}, {"body_file": "/etc/passwd"}):
+        with pytest.raises(CommandDenied, match="unexpected arguments"):
+            build_argv(
+                "open_remediation_pr",
+                {**_pr("Restart checkout-api on OOM"), **injected},
+                body_path=BODY,
+            )
+
+
+def test_a_body_never_reaches_argv_so_its_text_is_not_restricted() -> None:
+    """Newlines, an ellipsis and a version range are what a body is made of."""
+    body = "Fixes 0.1..0.2\n\n- one\n- two\n\n```\ngh pr diff\n```"
+    argv, _ = build_argv(
+        "open_remediation_pr",
+        {**_pr("Restart checkout-api on OOM"), "body": body},
+        body_path=BODY,
+    )
+
+    joined = " ".join(argv)
+    assert "--body-file" in argv
+    assert str(BODY) in argv
+    for fragment in ("0.1..0.2", "```"):
+        assert fragment not in joined

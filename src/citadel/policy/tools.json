@@ -98,10 +98,10 @@
         },
         {
           "name": "body",
-          "in": "text",
-          "flag": "--body",
-          "max_length": 1000,
-          "required": true
+          "in": "body_file",
+          "max_length": 4000,
+          "required": true,
+          "note": "Written to a file the operator names and passes as --body-file: a body needs newlines and may quote a version range, and neither survives argv."
         }
       ]
     },

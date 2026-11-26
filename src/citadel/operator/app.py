@@ -13,6 +13,9 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -24,7 +27,7 @@ from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
 from citadel.env import secret
 from citadel.identity import IdentityError
-from citadel.tools import CommandDenied, build_argv
+from citadel.tools import CommandDenied, build_argv, needs_body_file, pr_text
 from citadel.tools import runner as executor
 
 WRITABLE_TIERS = {"T1"}
@@ -88,6 +91,27 @@ def _guard(
         ) from exc
 
 
+@contextmanager
+def _body_file(tool: str, run_id: str, arguments: dict[str, Any]) -> Iterator[Path | None]:
+    """The approved body, on disk for exactly as long as the command that reads it.
+
+    The text is written by this process, under a name this process derives, and
+    removed once `gh` has finished - so a body can carry a newline or a version
+    range without any of it touching the argv a caller could influence.
+    """
+    if not needs_body_file(tool):
+        yield None
+        return
+    body = arguments.get("body")
+    if not isinstance(body, str):
+        raise CommandDenied("body must be a string")
+    path = pr_text.write(tool=tool, run_id=run_id, body=body)
+    try:
+        yield path
+    finally:
+        pr_text.discard(path)
+
+
 @app.post("/execute")
 def execute(request: ExecuteRequest) -> dict[str, Any]:
     try:
@@ -123,16 +147,18 @@ def execute(request: ExecuteRequest) -> dict[str, Any]:
     reports.append(report)
 
     # The approver authorised the service name; build_argv derives the container
-    # name and validates the derived argv — never a validated argv rewritten.
+    # name and validates the derived argv — never a validated argv rewritten. A
+    # body travels as a file, written here and removed when the command returns.
     try:
-        argv, command = build_argv(request.tool, request.arguments)
+        with _body_file(request.tool, claims.run_id, request.arguments) as body_path:
+            argv, command = build_argv(request.tool, request.arguments, body_path=body_path)
+            if command.tier not in WRITABLE_TIERS:
+                raise HTTPException(
+                    status_code=403, detail=f"{command.id} is not a T1 command"
+                )
+            completed = executor.run(argv)
     except CommandDenied as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
-    if command.tier not in WRITABLE_TIERS:
-        raise HTTPException(status_code=403, detail=f"{command.id} is not a T1 command")
-
-    try:
-        completed = executor.run(argv)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail=f"{argv[0]} is not available") from exc
     except subprocess.TimeoutExpired as exc:

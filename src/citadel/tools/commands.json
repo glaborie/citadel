@@ -277,11 +277,11 @@
         "--base",
         "--head",
         "--title",
-        "--body"
+        "--body-file"
       ],
       "max_positional": 0,
       "content_risk": null,
-      "content_note": "Draft PR from a branch that already exists. The title and body are caller text, so they are part of the approved arguments and are hashed into the approval token; the operator can only post the text a human approved. Executed only by the operator service (ADR-023 item 3), never by the sandbox."
+      "content_note": "Draft PR from a branch that already exists. The title is caller text and stays on the command line, so it is one printable line; the body travels as a file the operator writes and names (`--body-file`), so it keeps its newlines and may quote a version range. Both are part of the approved arguments and are hashed into the approval token, so the operator can only post the text a human approved. Executed only by the operator service (ADR-023 item 3), never by the sandbox."
     }
   ]
 }
