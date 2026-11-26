@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from citadel import __version__
 from tests.redteam import harness
 
 pytestmark = pytest.mark.redteam
@@ -25,8 +26,13 @@ def _ids(case: harness.Case) -> str:
 @pytest.mark.parametrize("case", CASES, ids=_ids)
 def test_case(case: harness.Case) -> None:
     if case.id not in harness.EXECUTORS:
-        harness.COLLECTED[case.id] = ("pending", "no executor: needs the live stack")
-        pytest.skip(f"{case.id} has no executor yet: {case.evidence}")
+        if case.live is not None:
+            # Covered elsewhere: say where, so "pending" cannot hide a case that
+            # nobody runs at all.
+            harness.COLLECTED[case.id] = ("pending", f"live-only: {case.live}")
+            pytest.skip(f"{case.id} runs in the live suite: {case.live}")
+        harness.COLLECTED[case.id] = ("pending", f"not implemented; owner {case.owner}")
+        pytest.skip(f"{case.id} has no executor yet (owner {case.owner}): {case.evidence}")
     outcome = harness.run(case)
     if not outcome.passed and case.known_gap is not None:
         harness.COLLECTED[case.id] = ("gap", outcome.detail)
@@ -42,10 +48,21 @@ def test_every_executor_maps_to_a_case() -> None:
     assert not orphans, f"executors without a case in cases.json: {orphans}"
 
 
-def test_pending_cases_are_declared_by_milestone() -> None:
-    """Anything without an executor must be beyond today's milestone."""
-    pending = {case.id for case in CASES if case.id not in harness.EXECUTORS}
-    implemented = {case.id for case in CASES if case.id in harness.EXECUTORS}
-    assert not (pending & implemented)
-    for case_id in pending:
-        assert BY_ID[case_id].milestone in {"v0.1", "v0.2", "v0.3", "v0.4"}
+CURRENT = harness.current_milestone(__version__)
+
+
+def test_every_case_is_executed_or_declared() -> None:
+    """No case may be quietly unimplemented: executed, live-covered, or owned.
+
+    The accepted-milestone set used to include the one being shipped, so a case
+    pending today passed the check that was supposed to catch it. `declaration_gaps`
+    fails closed instead, and `tests/test_pack_guard.py` proves it rejects each way a
+    case can go missing.
+    """
+    gaps = harness.declaration_gaps(CASES, current=CURRENT)
+    assert not gaps, "the pack declares cases nobody executes:\n" + "\n".join(gaps)
+
+
+def test_the_shipped_milestone_is_read_from_the_package() -> None:
+    assert f"v{'.'.join(__version__.split('.')[:2])}" == CURRENT
+    assert any(case.milestone == CURRENT for case in CASES), "the pack ships no case for today"

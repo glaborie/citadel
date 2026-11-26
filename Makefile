@@ -100,3 +100,11 @@ redteam-report-live:
 
 worktree-prune:  ## Remove worktrees whose branch is already merged
 	scripts/worktree-prune.sh $(ARGS)
+
+# The ledger checks the red-team pack depends on, run against a live database:
+# the hash chain, and the tool calls that left no event behind. TENANT=lab-b to
+# check another one. Non-zero exit on a broken chain or a gap.
+.PHONY: audit-verify
+
+audit-verify:  ## Verify a tenant's audit chain and report unaudited tool calls
+	uv run python scripts/audit-verify.py $(or $(TENANT),lab-a)
