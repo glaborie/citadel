@@ -9,6 +9,7 @@ import urllib.error
 import uuid
 from email.message import Message
 from typing import Any
+from urllib.parse import urlsplit
 
 import pytest
 from opentelemetry.sdk.trace import TracerProvider
@@ -18,6 +19,22 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from citadel import net, telemetry
 
 RUN = "11111111-1111-1111-1111-111111111111"
+
+
+def _path(request: Any) -> str:
+    """A URL is parsed, never substring-matched: `"host" in url` is CWE-20.
+
+    CodeQL flags the pattern (py/incomplete-url-substring-sanitization) because the
+    allowed value can appear anywhere in the string - here it is a test double
+    asserting which endpoint was called, so the check is on the path, which is what the
+    assertion means anyway.
+    """
+    return str(urlsplit(str(request.full_url)).path)
+
+
+def _mentions(message: str, value: str) -> bool:
+    """Whether the message names `value` as a whole token, not as a substring."""
+    return any(token == value for token in message.replace("(", " ").replace(")", " ").split())
 
 
 def test_unconfigured_telemetry_is_a_no_op(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -53,6 +70,7 @@ def test_non_uuid_run_ids_still_produce_a_valid_trace_id() -> None:
     assert first == second
     assert first != 0
     assert first < 1 << 128
+
 
 class _Reply:
     def __init__(self, payload: dict[str, Any]) -> None:
@@ -103,7 +121,8 @@ def test_the_configured_id_is_used_when_the_server_confirms_it(
             return True
 
     def urlopen(request: Any, timeout: Any = None) -> _Reply:
-        assert "experiments/get?" in request.full_url
+        assert _path(request) == "/api/2.0/mlflow/experiments/get"
+        assert urlsplit(request.full_url).query == "experiment_id=1"
         return _Reply({"experiment": {"experiment_id": "1"}})
 
     monkeypatch.setenv("MLFLOW_EXPERIMENT_ID", "1")
@@ -135,9 +154,9 @@ def test_an_id_the_server_does_not_have_falls_back_to_the_name(
             return True
 
     def urlopen(request: Any, timeout: Any = None) -> _Reply:
-        if "experiments/get?" in request.full_url:
+        if _path(request) == "/api/2.0/mlflow/experiments/get":
             raise _not_found(request)
-        assert "get-by-name" in request.full_url
+        assert _path(request) == "/api/2.0/mlflow/experiments/get-by-name"
         return _Reply({"experiment": {"experiment_id": "7"}})
 
     monkeypatch.setenv("MLFLOW_EXPERIMENT_ID", "1")
@@ -164,10 +183,12 @@ def test_a_tracking_uri_with_no_experiment_disables_export_with_one_warning(
         telemetry.configure("api")
 
     assert telemetry._tracer is None
+    # get by name, then create: no id was configured, so the id lookup never ran.
+    assert len(calls) == 2
     warnings = [record for record in caplog.records if record.levelno == logging.WARNING]
     assert len(warnings) == 1
     message = warnings[0].getMessage()
-    assert "http://mlflow.test" in message
+    assert _mentions(message, "http://mlflow.test"), message
     assert "will not be recorded" in message
 
 
