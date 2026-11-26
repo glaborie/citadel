@@ -141,9 +141,7 @@ def _milestone_key(milestone: str) -> tuple[int, int]:
         raise ValueError(f"unreadable milestone {milestone!r}") from None
 
 
-def declaration_gaps(
-    cases: list[Case], *, current: str, root: Path | None = None
-) -> list[str]:
+def declaration_gaps(cases: list[Case], *, current: str, root: Path | None = None) -> list[str]:
     """Every case must be executed somewhere, or declared with an owner beyond today.
 
     A case is covered when an offline executor exists, or when it names the live
@@ -199,6 +197,12 @@ class FakeChecker:
     calls: int = 0
 
     def can_call(self, *, user: str, obj: str) -> bool:
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return self.allowed
+
+    def can_approve(self, *, agent: str, obj: str) -> bool:
         self.calls += 1
         if self.error is not None:
             raise self.error
@@ -566,7 +570,7 @@ def exec_self_approval(case_: Case, _: Path) -> Outcome:
     )
     token = user_token(key, roles=["operator", "approver"], sub="user-alice")
     db = support.FakeDB()
-    db.run_owner = ("user-alice",)
+    db.run_owner = ("user-alice", "docker")
     payload = {
         "run_id": "run-1",
         "tool": "restart_service",
@@ -582,6 +586,57 @@ def exec_self_approval(case_: Case, _: Path) -> Outcome:
     body = response.json()
     ok = response.status_code == 403 and "own run" in str(body.get("detail", ""))
     return Outcome(ok, f"{response.status_code} {str(body.get('detail'))[:40]}")
+
+
+def exec_agent_self_approval(case_: Case, _: Path) -> Outcome:
+    """RT-HITL-07: an agent may not approve the run it proposed.
+
+    The agent presents its own run token, so the identity that reaches the policy
+    check is the verified claim, not a field in the body.
+    """
+    from unittest import mock
+
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from fastapi.testclient import TestClient
+
+    from citadel.api.app import create_app
+    from citadel.identity import KeycloakVerifier, Principal, mint_run_token
+    from tests.conftest import AUDIENCE, ISSUER, StaticKeys
+    from tests.redteam import support
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    run_key = Ed25519PrivateKey.generate()
+    app = create_app(
+        verifier=KeycloakVerifier(ISSUER, AUDIENCE, StaticKeys(key.public_key())),
+        dsn="postgres://fake",
+        private_key=run_key,
+        checker=FakeChecker(),
+    )
+    token, _context = mint_run_token(
+        Principal(user_id="user-alice", tenant_id="lab-a", roles=frozenset()),
+        agent_id="docker",
+        scopes=frozenset(),
+        risk_tier="T1",
+        private_key=run_key,
+    )
+    db = support.FakeDB()
+    db.run_owner = ("user-alice", "docker")
+    payload = {
+        "run_id": "run-1",
+        "tool": "restart_service",
+        "agent_id": "docker",
+        "arguments": {"service": "checkout-api"},
+        "approved": True,
+        "reason": "looks fine",
+    }
+    with mock.patch.object(api_module, "tenant_connection", db.connect):
+        response = TestClient(app).post(
+            "/approvals", json=payload, headers={"Authorization": f"Bearer {token}"}
+        )
+    body = response.json()
+    rule = str(body.get("detail", {}).get("rule_id", ""))
+    ok = response.status_code == 403 and rule == "approval.self_approval_denied"
+    return Outcome(ok, f"{response.status_code} {rule or str(body.get('detail'))[:40]}")
 
 
 def exec_approval_replay(case_: Case, _: Path) -> Outcome:
@@ -921,7 +976,7 @@ def exec_approval_reason(case_: Case, _: Path) -> Outcome:
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     db = support.FakeDB()
-    db.run_owner = ("user-alice",)
+    db.run_owner = ("user-alice", "docker")
     token = user_token(key, roles=["approver"], sub="carol")
     written: list[dict[str, Any]] = []
 
@@ -980,9 +1035,7 @@ def exec_approval_reason(case_: Case, _: Path) -> Outcome:
     }
     failed = [name for name, ok in checks.items() if not ok]
     detail = (
-        "reason redacted before persist, credential refused"
-        if not failed
-        else "; ".join(failed)
+        "reason redacted before persist, credential refused" if not failed else "; ".join(failed)
     )
     return Outcome(not failed, detail)
 
@@ -1046,7 +1099,7 @@ def exec_approval_preview(case_: Case, _: Path) -> Outcome:
     )
     token = user_token(key, roles=["approver"], sub="carol")
     db = support.FakeDB()
-    db.run_owner = ("user-alice",)
+    db.run_owner = ("user-alice", "docker")
     secret = fixture_text("dlp/api_key.txt").split()[3]
     payload = {
         "run_id": "run-1",
@@ -1406,6 +1459,7 @@ EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-DUR-01": exec_duplicate_side_effect,
     "RT-HITL-01": exec_self_approval,
     "RT-HITL-02": exec_approval_replay,
+    "RT-HITL-07": exec_agent_self_approval,
 }
 
 

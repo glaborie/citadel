@@ -10,7 +10,14 @@ from dataclasses import dataclass
 
 import pytest
 
-from citadel.policy import AuthorizationRequest, Decision, authorize, load_catalog
+from citadel.policy import (
+    ApprovalAuthorization,
+    AuthorizationRequest,
+    Decision,
+    authorize,
+    authorize_approval,
+    load_catalog,
+)
 
 
 @dataclass
@@ -34,6 +41,12 @@ class FakeChecker:
     calls: int = 0
 
     def can_call(self, *, user: str, obj: str) -> bool:
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return self.allowed
+
+    def can_approve(self, *, agent: str, obj: str) -> bool:
         self.calls += 1
         if self.error is not None:
             raise self.error
@@ -152,3 +165,46 @@ def test_run_lookup_is_skipped_for_t2() -> None:
     store = FakeRunStore(error=RuntimeError("must not be called"))
     decision = authorize(request(tool="delete_volume"), FakeChecker(), store)
     assert decision.rule_id == "tool.tier_denied"
+
+
+def approval(**overrides: str) -> ApprovalAuthorization:
+    base = {
+        "tenant_id": "lab-a",
+        "approving_agent": "researcher",
+        "origin_agent": "docker",
+        "tool": "restart_service",
+    }
+    base.update(overrides)
+    return ApprovalAuthorization(**base)
+
+
+def test_an_agent_with_can_approve_may_approve_another_agents_t1_call() -> None:
+    checker = FakeChecker()
+    decision = authorize_approval(approval(), checker)
+    assert decision.outcome == "allow"
+    assert decision.rule_id == "approval.agent_allowed"
+    assert checker.calls == 1
+
+
+def test_an_agent_cannot_approve_its_own_run() -> None:
+    checker = FakeChecker()
+    decision = authorize_approval(approval(approving_agent="docker"), checker)
+    assert decision.outcome == "deny"
+    assert decision.rule_id == "approval.self_approval_denied"
+    assert checker.calls == 0, "self-approval is refused before any policy lookup"
+
+
+def test_agent_approval_needs_the_relation() -> None:
+    decision = authorize_approval(approval(), FakeChecker(allowed=False))
+    assert decision.rule_id == "approval.relation_denied"
+
+
+def test_agent_approval_fails_closed_when_policy_is_unavailable() -> None:
+    decision = authorize_approval(approval(), FakeChecker(error=RuntimeError("down")))
+    assert decision.rule_id == "policy.unavailable"
+
+
+@pytest.mark.parametrize("tool", ["read_logs", "delete_volume"])
+def test_agents_approve_t1_only(tool: str) -> None:
+    decision = authorize_approval(approval(tool=tool), FakeChecker())
+    assert decision.rule_id == "approval.tier_denied"

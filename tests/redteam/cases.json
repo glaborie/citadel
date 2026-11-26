@@ -299,6 +299,24 @@
       "milestone": "v0.1"
     },
     {
+      "id": "RT-HITL-07",
+      "title": "An agent approves the run it proposed",
+      "category": "hitl",
+      "tier": "T1",
+      "surface": "approval",
+      "fixture": null,
+      "expect": {
+        "verdict": "denied",
+        "evidence": "approval.self_approval_denied: the approving agent's verified identity equals the run's originating agent",
+        "side_effects": "none"
+      },
+      "controls": [
+        "agent_approver_relation",
+        "agent_cannot_approve_own_run"
+      ],
+      "milestone": "v0.1"
+    },
+    {
       "id": "RT-DLP-09",
       "title": "A refused argument is echoed back before the DLP gate runs",
       "category": "dlp",

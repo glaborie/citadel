@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from citadel import approval_requests, dlp
 from citadel.api import app as api_module
 from citadel.api.app import create_app
-from citadel.identity import KeycloakVerifier
+from citadel.identity import KeycloakVerifier, Principal, mint_run_token
 from tests.conftest import AUDIENCE, ISSUER, AnalyzerResponse, StaticKeys, user_token
 from tests.redteam.support import FakeDB
 
@@ -267,4 +267,103 @@ def test_policy_authorize_cannot_carry_free_text(
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 422
+    assert events == []
+
+
+class _ApprovalChecker:
+    """OpenFGA stand-in: records the relation check, answers with one flag."""
+
+    def __init__(self, allowed: bool = True) -> None:
+        self.allowed = allowed
+        self.agents: list[tuple[str, str]] = []
+
+    def can_call(self, *, user: str, obj: str) -> bool:
+        return True
+
+    def can_approve(self, *, agent: str, obj: str) -> bool:
+        self.agents.append((agent, obj))
+        return self.allowed
+
+
+@pytest.fixture
+def agent_env(
+    monkeypatch: pytest.MonkeyPatch,
+    rsa_key: rsa.RSAPrivateKey,
+    run_private_key: Ed25519PrivateKey,
+    analyzer: dict[str, list[dict[str, Any]]],
+) -> tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any]:
+    db = FakeDB()
+    db.run_owner = ("user-alice", "docker")
+    events: list[dict[str, Any]] = []
+
+    def append(**kwargs: Any) -> SimpleNamespace:
+        events.append(kwargs)
+        return SimpleNamespace(audit_id=f"audit-{len(events)}")
+
+    monkeypatch.setattr(api_module, "tenant_connection", db.connect)
+    monkeypatch.setattr(approval_requests, "tenant_connection", db.connect)
+    monkeypatch.setattr(api_module, "AuditLedger", lambda _dsn: SimpleNamespace(append=append))
+    checker = _ApprovalChecker()
+    client = TestClient(
+        create_app(
+            verifier=KeycloakVerifier(ISSUER, AUDIENCE, StaticKeys(rsa_key.public_key())),
+            dsn="postgres://fake",
+            private_key=run_private_key,
+            checker=checker,
+        )
+    )
+
+    def token_for(agent: str) -> str:
+        token, _context = mint_run_token(
+            Principal(user_id="user-alice", tenant_id="lab-a", roles=frozenset()),
+            agent_id=agent,
+            scopes=frozenset(),
+            risk_tier="T1",
+            private_key=run_private_key,
+        )
+        return token
+
+    return client, events, checker, token_for
+
+
+def test_an_agent_approval_is_audited_as_agent(
+    agent_env: tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any],
+) -> None:
+    client, events, checker, token_for = agent_env
+    with mock.patch("citadel.api.app.asyncio.run", lambda coro: coro.close()):
+        response = _post(client, token_for("researcher"), {"service": "checkout-api"})
+
+    assert response.status_code == 200
+    assert [event["event_type"] for event in events] == ["approval.decision"]
+    decided = events[0]
+    assert decided["actor_type"] == "agent"
+    assert decided["actor_id"] == "agent:lab-a/researcher"
+    assert decided["payload"]["actor_type"] == "agent"
+    assert decided["payload"]["approver"] == "agent:lab-a/researcher"
+    assert decided["payload"]["on_behalf_of"] == "user-alice"
+    assert decided["payload"]["relation"] == "can_approve"
+    assert checker.agents == [("agent:lab-a/researcher", "tool:lab-a/restart_service")]
+
+
+def test_an_agent_cannot_approve_the_run_it_proposed(
+    agent_env: tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any],
+) -> None:
+    client, events, checker, token_for = agent_env
+    response = _post(client, token_for("docker"), {"service": "checkout-api"})
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["rule_id"] == "approval.self_approval_denied"
+    assert events == []
+    assert checker.agents == []
+
+
+def test_an_agent_without_the_relation_cannot_approve(
+    agent_env: tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any],
+) -> None:
+    client, events, checker, token_for = agent_env
+    checker.allowed = False
+    response = _post(client, token_for("researcher"), {"service": "checkout-api"})
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["rule_id"] == "approval.relation_denied"
     assert events == []

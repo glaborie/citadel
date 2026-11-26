@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import uuid
+from dataclasses import dataclass
 from typing import Annotated, Any
 
 import jwt
@@ -25,9 +26,21 @@ from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
 from citadel.env import secret
 from citadel.hashing import arguments_hash
-from citadel.identity import IdentityError, KeycloakVerifier, Principal, mint_run_token
+from citadel.identity import (
+    IdentityError,
+    KeycloakVerifier,
+    Principal,
+    mint_run_token,
+    verify_run_token,
+)
 from citadel.identity.run_token import private_key_from_env
-from citadel.policy import AuthorizationRequest, RelationChecker, authorize
+from citadel.policy import (
+    ApprovalAuthorization,
+    AuthorizationRequest,
+    RelationChecker,
+    authorize,
+    authorize_approval,
+)
 from citadel.policy.openfga import build_checker
 from citadel.runs import PostgresRunStore
 from citadel.skills import SkillPack, SkillPackError, SkillPackMissing, load_pack
@@ -55,6 +68,21 @@ class ApprovalRequest(BaseModel):
     arguments: dict[str, Any] = {}
     approved: bool
     reason: str
+
+
+@dataclass(frozen=True)
+class Approver:
+    """A verified decision-maker: a Keycloak user or a run-token agent.
+
+    The two identities are never merged: an agent acts in its own name, with the
+    user it runs for recorded as `on_behalf_of`, so the ledger can tell them apart.
+    """
+
+    tenant_id: str
+    actor_type: str  # user | agent
+    actor_id: str
+    on_behalf_of: str | None = None
+    roles: frozenset[str] = frozenset()
 
 
 class RunRequest(BaseModel):
@@ -133,6 +161,43 @@ def create_app(
         except IdentityError as exc:
             # Never fall back to a default tenant or an anonymous principal.
             raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+    def current_approver(
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> Approver:
+        """Authenticate a human approver or an agent approver.
+
+        A Keycloak token is tried first; a run token is the only other accepted
+        credential, and its agent identity comes from the verified claims. There is
+        no anonymous path, and the tenant is never taken from the body.
+        """
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="missing bearer token")
+        token = authorization.removeprefix("Bearer ").strip()
+        active = verifier if verifier is not None else _verifier_from_env()
+        try:
+            principal = active.verify(token)
+        except IdentityError as user_error:
+            try:
+                key = _key()
+            except (KeyError, IdentityError, ValueError) as exc:
+                raise HTTPException(status_code=503, detail="api cannot verify run tokens") from exc
+            try:
+                context = verify_run_token(token, key.public_key())
+            except IdentityError as exc:
+                raise HTTPException(status_code=401, detail=str(user_error)) from exc
+            return Approver(
+                tenant_id=context.tenant_id,
+                actor_type="agent",
+                actor_id=context.agent_id,
+                on_behalf_of=context.user_id,
+            )
+        return Approver(
+            tenant_id=principal.tenant_id,
+            actor_type="user",
+            actor_id=principal.user_id,
+            roles=principal.roles,
+        )
 
     def _checker() -> RelationChecker:
         if checker is not None:
@@ -323,18 +388,41 @@ def create_app(
     @app.post("/approvals")
     def approve(
         body: ApprovalRequest,
-        principal: Annotated[Principal, Depends(current_principal)],
+        approver: Annotated[Approver, Depends(current_approver)],
     ) -> dict[str, Any]:
-        if "approver" not in principal.roles:
-            raise HTTPException(status_code=403, detail="approver role required")
-
-        with tenant_connection(_dsn(), principal.tenant_id) as conn:
-            run = conn.execute("SELECT user_id FROM runs WHERE id = %s", (body.run_id,)).fetchone()
+        with tenant_connection(_dsn(), approver.tenant_id) as conn:
+            run = conn.execute(
+                "SELECT user_id, agent_id FROM runs WHERE id = %s", (body.run_id,)
+            ).fetchone()
         if run is None:
             raise HTTPException(status_code=404, detail="run not found in this tenant")
-        if str(run[0]) == principal.user_id:
-            # Separation of duties: nobody approves their own request.
-            raise HTTPException(status_code=403, detail="cannot approve your own run")
+        run_user, run_agent = str(run[0]), str(run[1])
+
+        if approver.actor_type == "user":
+            if "approver" not in approver.roles:
+                raise HTTPException(status_code=403, detail="approver role required")
+            if run_user == approver.actor_id:
+                # Separation of duties: nobody approves their own request.
+                raise HTTPException(status_code=403, detail="cannot approve your own run")
+            relation = "approver_role"
+            decided_by = approver.actor_id
+        else:
+            verdict = authorize_approval(
+                ApprovalAuthorization(
+                    tenant_id=approver.tenant_id,
+                    approving_agent=approver.actor_id,
+                    origin_agent=run_agent,
+                    tool=body.tool,
+                ),
+                _checker(),
+            )
+            if verdict.outcome != "allow":
+                raise HTTPException(
+                    status_code=403,
+                    detail={"reason": verdict.reason, "rule_id": verdict.rule_id},
+                )
+            relation = "can_approve"
+            decided_by = f"agent:{approver.tenant_id}/{approver.actor_id}"
 
         # The approval preview is a rendering surface, so the arguments are
         # checked before they can be signed, audited or shown to a human. The
@@ -360,10 +448,10 @@ def create_app(
             # A refused approval is an event the ledger must show, even though
             # nothing was signed and the decision never happened.
             blocked = AuditLedger(_dsn()).append(
-                tenant_id=principal.tenant_id,
+                tenant_id=approver.tenant_id,
                 event_type="dlp.event",
-                actor_type="user",
-                actor_id=principal.user_id,
+                actor_type=approver.actor_type,
+                actor_id=decided_by,
                 payload={"run_id": body.run_id, "tool": body.tool, **exc.report},
             )
             telemetry.record_span(
@@ -386,10 +474,10 @@ def create_app(
             # A redaction is a detector decision, so it belongs in the ledger
             # beside the blocks rather than only implicit in a clean reason.
             redacted = AuditLedger(_dsn()).append(
-                tenant_id=principal.tenant_id,
+                tenant_id=approver.tenant_id,
                 event_type="dlp.event",
-                actor_type="user",
-                actor_id=principal.user_id,
+                actor_type=approver.actor_type,
+                actor_id=decided_by,
                 payload={"run_id": body.run_id, "tool": body.tool, **reason_report},
             )
             telemetry.record_span(
@@ -402,26 +490,34 @@ def create_app(
                 detector_version=str(reason_report.get("detector_version", "")),
             )
 
+        payload: dict[str, Any] = {
+            "run_id": body.run_id,
+            "tool": body.tool,
+            "agent_id": run_agent,
+            "approver": decided_by,
+            # Self-describing in the ledger and in a trajectory export: the
+            # audit column carries this too, but the event must not need a join.
+            "actor_type": approver.actor_type,
+            "relation": relation,
+            "decision": "approved" if body.approved else "denied",
+            "reason": reason,
+            "reason_sha256": hashlib.sha256(body.reason.encode()).hexdigest(),
+            "reason_chars": len(body.reason),
+            "dlp_redactions": redactions,
+            "dlp_categories": reason_report["categories"],
+            "ttl": APPROVAL_TTL,
+            "args_hash": arguments_hash(body.arguments),
+            "rule_id": "approval.approved" if body.approved else "approval.denied",
+        }
+        if approver.on_behalf_of is not None:
+            payload["on_behalf_of"] = approver.on_behalf_of
+
         ref = AuditLedger(_dsn()).append(
-            tenant_id=principal.tenant_id,
+            tenant_id=approver.tenant_id,
             event_type="approval.decision",
-            actor_type="user",
-            actor_id=principal.user_id,
-            payload={
-                "run_id": body.run_id,
-                "tool": body.tool,
-                "agent_id": body.agent_id,
-                "approver": principal.user_id,
-                "decision": "approved" if body.approved else "denied",
-                "reason": reason,
-                "reason_sha256": hashlib.sha256(body.reason.encode()).hexdigest(),
-                "reason_chars": len(body.reason),
-                "dlp_redactions": redactions,
-                "dlp_categories": reason_report["categories"],
-                "ttl": APPROVAL_TTL,
-                "args_hash": arguments_hash(body.arguments),
-                "rule_id": "approval.approved" if body.approved else "approval.denied",
-            },
+            actor_type=approver.actor_type,
+            actor_id=decided_by,
+            payload=payload,
         )
         telemetry.record_span(
             "approval.decision",
@@ -429,24 +525,25 @@ def create_app(
             audit_id=ref.audit_id,
             tool=body.tool,
             decision="approved" if body.approved else "denied",
-            approver=principal.user_id,
+            approver=decided_by,
+            actor_type=approver.actor_type,
             ttl=APPROVAL_TTL,
             redactions=redactions,
         )
 
         close_request(
             dsn=_dsn(),
-            tenant_id=principal.tenant_id,
+            tenant_id=approver.tenant_id,
             run_id=body.run_id,
             tool=body.tool,
             approved=body.approved,
-            approver=principal.user_id,
+            approver=decided_by,
             reason=reason,
         )
 
         decision = ApprovalDecision(
             approved=body.approved,
-            approver=principal.user_id,
+            approver=decided_by,
             reason=reason,
             approval_ref=ref.audit_id if body.approved else None,
         )

@@ -15,9 +15,15 @@ class OpenFgaChecker:
         self._client = client
 
     def can_call(self, *, user: str, obj: str) -> bool:
+        return self._check(user=user, relation="can_call", obj=obj)
+
+    def can_approve(self, *, agent: str, obj: str) -> bool:
+        return self._check(user=agent, relation="can_approve", obj=obj)
+
+    def _check(self, *, user: str, relation: str, obj: str) -> bool:
         try:
             response: Any = self._client.check(
-                ClientCheckRequest(user=user, relation="can_call", object=obj)
+                ClientCheckRequest(user=user, relation=relation, object=obj)
             )
         except Exception as exc:  # noqa: BLE001 - transport errors must not allow
             raise PolicyError(f"openfga check failed: {exc}") from exc
