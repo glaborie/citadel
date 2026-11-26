@@ -74,6 +74,19 @@ eval-gate:  ## Fail when a grader is below its recorded baseline
 eval-record:  ## Record this run as a baseline row (fails rather than rewriting one)
 	uv run python -m citadel.evals --record
 
+.PHONY: calibration-sample
+calibration-sample:  ## Rebuild the judge-calibration sample from the goldens
+	uv run python scripts/build-calibration-sample.py
+
+.PHONY: calibration-sheet
+calibration-sheet:  ## Write the blind labelling sheet for the human rater
+	uv run python scripts/label-sheet.py
+
+.PHONY: calibration-check
+calibration-check:  ## Sample, sheet and key agree with what is committed
+	uv run python scripts/build-calibration-sample.py --check
+	uv run python scripts/label-sheet.py --check
+
 .PHONY: mlflow-bootstrap
 
 # One-time per fresh MLflow volume: create the traces experiment the OTLP
