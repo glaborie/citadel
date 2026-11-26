@@ -17,6 +17,26 @@ Citadel grades **agent trajectories**, not just final text. The unit of evaluati
 | `recovery` | run_id, failed_step, strategy, outcome | Retry, fallback, escalate, abort |
 | `run.end` | run_id, outcome, citation_ids, safety_flags | Final span |
 
+## Producers
+
+Which events a recorded run can actually contain today. A fixture-only row is the
+schema ahead of the system: a grader may assert it, but no live run emits it, so
+a trajectory that claims it came from a run is wrong.
+
+| Event | Producer | Status |
+|---|---|---|
+| `run.start` | the API's run-submit route | live |
+| `model.call` | `ModelActivities._record`, refusals included | live |
+| `retrieval.query` | none - #130 | fixture-only |
+| `retrieval.result` | none - #130 | fixture-only |
+| `policy.decision` | `ToolActivities.authorize_tool`; the API's `/policy/authorize` | live |
+| `dlp.event` | tool runner (input/output), `ToolActivities._audit_dlp` (record), `ModelActivities._gate`, operator and API approvals | live |
+| `approval.decision` | the API's approval route | live |
+| `tool.call` | `ToolActivities.execute_tool` | live |
+| `recovery` | none | fixture-only |
+| `run.end` | `RunActivities.finish_run` | live |
+
+
 ## Golden dataset record
 
 ```json
@@ -74,7 +94,9 @@ Expectation keys beyond the example above:
 
 `approval.decision.decision` is `approved` or `denied`; a `tool` field ties the decision to the call it authorises. `actor_type` is `user` or `agent`, `relation` names what authorised it (`approver_role` or `can_approve`), and an agent decision carries `on_behalf_of` naming the user whose run the approving agent was started for (ADR-022).
 
-Still missing: judge-scored rubrics and MLflow dataset/scorer logging. `model.call` and `retrieval.*` have no producer until those paths exist; this harness is deterministic only.
+Still missing: MLflow dataset/scorer logging, the retrieval producers (#130) and a
+`recovery` producer. Judged rubrics run only when `--judge` is supplied; the
+default harness is deterministic.
 
 ## Graders
 

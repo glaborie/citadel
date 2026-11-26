@@ -78,6 +78,68 @@ def _case(events: list[dict[str, Any]]) -> Case:
     )
 
 
+def _model_payload(**overrides: Any) -> dict[str, Any]:
+    """The shape `ModelActivities._record` writes, success and refusal alike."""
+    payload: dict[str, Any] = {
+        "run_id": RUN_ID,
+        "alias": "auto/best-fast",
+        "provider": "omniroute",
+        "model": "auto",
+        "input_hash": "sha256:in",
+        "output_hash": "sha256:out",
+        "tokens": 120,
+        "cost": None,
+        "latency": 640,
+        "cost_source": "unreported",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _with_model(payload: dict[str, Any]) -> list[tuple[Any, ...]]:
+    rows = _rows()
+    return [*rows[:1], ("audit-model", "model.call", payload), *rows[1:]]
+
+
+def test_a_model_call_row_becomes_a_schema_valid_event() -> None:
+    """The producer exists; the witness is that the recorder keeps its fields."""
+    events = rows_to_events(_with_model(_model_payload()))
+
+    call = next(event for event in events if event["type"] == "model.call")
+    assert call["audit_id"] == "audit-model"
+    assert (call["model"], call["tokens"], call["latency"]) == ("auto", 120, 640)
+    # An unreported cost stays absent, never a zero the grader would trust.
+    assert call["cost"] is None
+    assert not check_events(events, tenant="lab-a")
+
+
+def test_a_refused_model_call_exports_with_what_was_attempted() -> None:
+    refusal = _model_payload(
+        tokens=0,
+        latency=0,
+        output_hash="",
+        status="refused",
+        rule_id="pack.unavailable",
+        detail="prompt pack could not be loaded",
+    )
+
+    events = rows_to_events(_with_model(refusal))
+
+    call = next(event for event in events if event["type"] == "model.call")
+    assert (call["status"], call["rule_id"]) == ("refused", "pack.unavailable")
+    assert call["tokens"] == 0
+    assert not check_events(events, tenant="lab-a")
+
+
+def test_a_model_call_row_missing_a_field_is_refused_not_graded() -> None:
+    incomplete = _model_payload()
+    del incomplete["alias"]
+
+    problems = check_events(rows_to_events(_with_model(incomplete)), tenant="lab-a")
+
+    assert any("model.call: missing alias" in problem for problem in problems)
+
+
 def test_audit_rows_become_a_gradable_trajectory() -> None:
     events = rows_to_events(_rows())
 
