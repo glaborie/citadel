@@ -26,6 +26,9 @@ class ToolCall:
     tool: str
     arguments: dict[str, Any] = field(default_factory=dict)
     approval_ref: str | None = None
+    # The API-minted run token the sandbox verifies. Identity comes from it, so
+    # the body's agent string is a claim the runner checks, never trusts.
+    run_token: str = ""
 
 
 @dataclass
@@ -80,6 +83,9 @@ class RunInput:
     model_alias: str = ""
     prompt_pack_version: str = ""
     max_steps: int = 3
+    # Minted by the API at POST /runs. Every sandbox call re-presents it, so a
+    # workload on the internal network cannot act as an agent it has no token for.
+    run_token: str = ""
 
 
 @dataclass

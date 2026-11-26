@@ -75,6 +75,7 @@ class SpecialistWorkflow:
                 tool=call.tool,
                 arguments=call.arguments,
                 approval_ref=self._approval.approval_ref,
+                run_token=call.run_token,
             )
 
         # Retries exhausted: report a structured failure rather than letting the

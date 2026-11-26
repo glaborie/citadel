@@ -10,6 +10,8 @@ Registered in v0.1: `inspect_containers`, `inspect_container`, `read_logs`, `get
 
 Controls: tenant-scoped token, OpenFGA allow, DLP on input and output, source citation for retrieval, cache permitted with full partition key, audit event still emitted, sandbox still applies.
 
+The sandbox itself requires the caller's signed run token on every call and takes the agent identity from the verified claims. The body's `agent` string must match those claims, so a workload on the `internal` or `sandbox` network cannot run a T0 command as an agent whose token it does not hold, and the audit's `agent_id` is the token's, not a self-declaration.
+
 ### Pinned arguments
 
 A tool may point at a command that discloses secrets by design — `docker inspect`

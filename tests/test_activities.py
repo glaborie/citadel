@@ -301,6 +301,40 @@ def test_an_unavailable_detector_is_reported_as_such(monkeypatch: pytest.MonkeyP
     assert len(ledger.events) == 1
 
 
+def test_the_sandbox_call_presents_the_run_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    impl = build(monkeypatch, FakeDB(), recorder([]))
+    seen: dict[str, Any] = {}
+
+    def urlopen(request: Any, timeout: Any = None) -> Reply:
+        seen["authorization"] = request.get_header("Authorization")
+        return Reply({"allowlist_id": "docker.ps", "dlp": []})
+
+    monkeypatch.setattr(net, "urlopen", urlopen)
+    item = call("read_logs")
+    item.run_token = "run-token"
+    result = impl._invoke_sandbox(item)
+
+    assert result.status == "executed"
+    assert seen["authorization"] == "Bearer run-token"
+
+
+def test_an_unauthenticated_sandbox_refusal_is_a_refusal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No token in the call is refused by the runner; report it as a refusal."""
+    impl = build(monkeypatch, FakeDB(), recorder([]))
+
+    def urlopen(request: Any, timeout: Any = None) -> Reply:
+        raise urllib.error.HTTPError(
+            request.full_url, 401, "Unauthorized", Message(), io.BytesIO(b"")
+        )
+
+    monkeypatch.setattr(net, "urlopen", urlopen)
+    result = impl._invoke_sandbox(call("read_logs"))
+
+    assert (result.status, result.rule_id) == ("failed", "tool.refused")
+
+
 def test_policy_decision_is_audited(monkeypatch: pytest.MonkeyPatch) -> None:
     ledger = FakeAudit()
     impl = build(monkeypatch, FakeDB(), recorder([]), ledger)

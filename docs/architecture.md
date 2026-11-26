@@ -167,6 +167,7 @@ MLflow stores versioned eval datasets and `mlflow.genai.evaluate()` results. Sco
 | Stolen user token | Short-lived delegated token, tenant-bound scope, run ID, audit |
 | Cross-tenant read | Mandatory tenant claim, RLS, per-tenant Qdrant collections, cache partition + red-team test |
 | Tool authority escalation | OpenFGA chokepoint; skills cannot grant tools; deny by default |
+| Unauthenticated sandbox call | `tool-runner` requires a signed run token and authorises on its claims, so a network peer cannot execute a T0 command as an agent |
 | Prompt injection via retrieved/web content | Untrusted labelling, guardrail checks, Researcher cannot call infra tools |
 | Secret exfiltration to hosted model | Local fail-closed DLP, credential masking, no secrets in sandboxes |
 | Secret in a refusal message | The raw arguments are inspected before `build_argv`, so a rejected argument still meets the detector; refusals name the position and the class, never the value |

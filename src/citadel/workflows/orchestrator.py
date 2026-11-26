@@ -96,6 +96,7 @@ class RunWorkflow:
             agent_id=item.agent_id,
             tool=item.tool,
             arguments=item.arguments,
+            run_token=item.run_token,
         )
         return await workflow.execute_child_workflow(
             SpecialistWorkflow.run,
@@ -176,6 +177,7 @@ class RunWorkflow:
                 agent_id=item.agent_id,
                 tool=step.tool,
                 arguments=step.arguments,
+                run_token=item.run_token,
             )
             tool_result = await workflow.execute_child_workflow(
                 SpecialistWorkflow.run,

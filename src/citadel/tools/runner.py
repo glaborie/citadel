@@ -12,13 +12,15 @@ import json
 import os
 import subprocess
 import tempfile
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from citadel import __version__, dlp
 from citadel.env import secret
+from citadel.identity import IdentityError
+from citadel.identity.run_token import RunContext, public_key_from_env, verify_run_token
 from citadel.tools import CommandDenied, build_argv
 from citadel.tools.bounds import DEFAULT_OUTPUT_LIMIT, bound
 
@@ -102,8 +104,30 @@ def _guard(text: str, *, surface: str) -> tuple[str, dict[str, Any]]:
         ) from exc
 
 
+def _run_context(authorization: Annotated[str | None, Header()] = None) -> RunContext:
+    """The caller's identity, taken from a signed run token and nowhere else."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="run token required")
+    try:
+        key = public_key_from_env(os.environ["CITADEL_RUN_TOKEN_PUBLIC_KEY"])
+    except (KeyError, IdentityError, ValueError) as exc:
+        # A runner with no usable verification key is a broken deployment, not a
+        # bad caller: refuse rather than execute unauthenticated.
+        raise HTTPException(status_code=503, detail="runner cannot verify run tokens") from exc
+    try:
+        return verify_run_token(authorization.removeprefix("Bearer ").strip(), key)
+    except IdentityError as exc:
+        raise HTTPException(status_code=403, detail="invalid run token") from exc
+
+
 @app.post("/execute")
-def execute(request: ExecuteRequest) -> ExecuteResponse:
+def execute(
+    request: ExecuteRequest, ctx: Annotated[RunContext, Depends(_run_context)]
+) -> ExecuteResponse:
+    # Identity comes from the verified token; the body only has to agree with it.
+    if ctx.agent_id != request.agent:
+        raise HTTPException(status_code=403, detail="agent does not match run token")
+
     # The raw arguments are inspected before they are parsed. Validation rejects a
     # malformed argument with a 403, and a gate that only ran after validation would
     # leave that path - the one an agent hits by accident - as the only route into a
@@ -118,7 +142,7 @@ def execute(request: ExecuteRequest) -> ExecuteResponse:
     except CommandDenied as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
-    if command.agent != request.agent:
+    if command.agent != ctx.agent_id:
         raise HTTPException(status_code=403, detail="agent may not run this command")
     if command.tier != "T0":
         # Writes belong to the operator service, never to the sandbox.
