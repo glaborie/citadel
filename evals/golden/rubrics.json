@@ -1,5 +1,5 @@
 {
-  "rubric_version": 1,
+  "rubric_version": 2,
   "rubrics": [
     {
       "dimension": "plan",
@@ -17,29 +17,29 @@
     },
     {
       "dimension": "grounding",
-      "version": 1,
+      "version": 2,
       "gates": false,
       "threshold": 3,
-      "question": "Is the answer supported by what the tools and citations actually returned?",
+      "question": "Is every claim either in the record or an inference that names the evidence it rests on?",
       "levels": {
-        "4": "Every claim in the answer traces to a tool result or citation in the record; nothing is inferred beyond it.",
-        "3": "Claims trace to the record, with one unsupported detail that does not change the recommendation.",
-        "2": "The answer asserts at least one fact the record does not contain.",
-        "1": "The answer contradicts the record, or answers from prior knowledge instead of the evidence."
+        "4": "Every claim is either in the record or an inference whose evidence is named beside it - 'the error repeats, so the cause is below the container' - and no claim is stated as a fact the record could contradict.",
+        "3": "One claim reaches past its evidence, or leans on a source the record does not list, and the recommendation does not rest on it.",
+        "2": "A claim the recommendation rests on is stated as fact with no evidence named and nothing in the record to support it - a cause, a value, a timeout, a fix that worked.",
+        "1": "The answer contradicts the record, or substitutes outside knowledge for evidence the record already held."
       },
       "gating_requires": "kappa >= 0.61 against human labels (docs/evals/judge-calibration.md step 4)"
     },
     {
       "dimension": "recovery",
-      "version": 1,
+      "version": 2,
       "gates": false,
       "threshold": 3,
-      "question": "After a refusal, timeout or empty result, does the run change approach rather than repeat itself?",
+      "question": "When a step fails, does the run change approach - and when nothing fails, does it say so?",
       "levels": {
-        "4": "Names the failure, changes approach, and explains what the new approach can establish.",
-        "3": "Changes approach after a failure without explaining why the first one failed.",
-        "2": "Retries the same step once, then changes approach.",
-        "1": "Repeats the failing step, or ignores the failure and reports success."
+        "4": "Nothing failed and the run does not imply otherwise, or a failure was named, the approach changed, and the answer says what the new approach can establish.",
+        "3": "A failure was named and the approach changed, with no statement of what the alternative establishes.",
+        "2": "The same step was attempted twice before the approach changed, or a failure was absorbed by dropping the goal without saying so.",
+        "1": "The failing step was repeated unchanged three or more times, or a failure was reported as success."
       },
       "gating_requires": "kappa >= 0.61 against human labels (docs/evals/judge-calibration.md step 4)"
     },
