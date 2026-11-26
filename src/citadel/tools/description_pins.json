@@ -1,0 +1,4 @@
+{
+  "comment": "Reviewed tool descriptions, by tool name, as sha256 of the metadata. An MCP server cannot register a description that is not pinned here; adding one is a code change with a review attached. Empty is the intended default: the v0.4 MCP surface ships with nothing trusted.",
+  "pins": {}
+}
