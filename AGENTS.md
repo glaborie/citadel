@@ -47,8 +47,8 @@ You are implementing Citadel from an approved design. Read the whole document se
 
 ## Verification items
 
-All were resolved during v0.1 except the last; each has a recorded measurement in
-`docs/implementation-notes/v0.1-verification.md`.
+All are resolved; each has a recorded measurement in
+`docs/implementation-notes/v0.1-verification.md` or an ADR.
 
 1. Canonical OmniRoute repository and image commit — pinned by digest; see §1.
 2. MLflow image (3.18.0, digest-pinned) — resolved; the human path needs a
@@ -59,8 +59,9 @@ All were resolved during v0.1 except the last; each has a recorded measurement i
 4. Keycloak delegated-token mechanism — resolved in §5: standard exchange V2
    preserves identity but cannot carry the run claims, so the API mints its own
    Ed25519 run token.
-5. Whether the chosen hosted reranker/embedding endpoints are acceptable for the
-   redacted data leaving the box — still open, and a v0.2 question.
+5. Hosted embedding of redacted data — resolved: DLP runs before the embedding
+   call and a credential blocks, so the endpoint sees redacted text; the
+   reranker is in-stack TEI. See ADR-025 and #136.
 
 The v0.1 exit review is `docs/exit-review-v0.1.md`. Open work, including the one
 scope delta it records, is the issue tracker.

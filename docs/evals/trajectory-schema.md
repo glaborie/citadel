@@ -27,8 +27,8 @@ a trajectory that claims it came from a run is wrong.
 |---|---|---|
 | `run.start` | the API's run-submit route | live |
 | `model.call` | `ModelActivities._record`, refusals included | live |
-| `retrieval.query` | none - #130 | fixture-only |
-| `retrieval.result` | none - #130 | fixture-only |
+| `retrieval.query` | `RetrievalActivities.retrieve` | live |
+| `retrieval.result` | `RetrievalActivities.retrieve` | live |
 | `policy.decision` | `ToolActivities.authorize_tool`; the API's `/policy/authorize` | live |
 | `dlp.event` | tool runner (input/output), `ToolActivities._audit_dlp` (record), `ModelActivities._gate`, operator and API approvals | live |
 | `approval.decision` | the API's approval route | live |
@@ -94,9 +94,8 @@ Expectation keys beyond the example above:
 
 `approval.decision.decision` is `approved` or `denied`; a `tool` field ties the decision to the call it authorises. `actor_type` is `user` or `agent`, `relation` names what authorised it (`approver_role` or `can_approve`), and an agent decision carries `on_behalf_of` naming the user whose run the approving agent was started for (ADR-022).
 
-Still missing: MLflow dataset/scorer logging, the retrieval producers (#130) and a
-`recovery` producer. Judged rubrics run only when `--judge` is supplied; the
-default harness is deterministic.
+Still missing: MLflow dataset/scorer logging and a `recovery` producer. Judged
+rubrics run only when `--judge` is supplied; the default harness is deterministic.
 
 ## Graders
 

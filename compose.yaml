@@ -308,6 +308,27 @@ services:
     networks:
       - internal
 
+  reranker:
+    # Cross-encoder over the fused candidates (ADR-016). In-stack, so no
+    # document text leaves the host for reranking. The embedding endpoint is
+    # hosted and sees only DLP-redacted text (ADR-025).
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8.1@sha256:c112c540b399592e42cd6383d5d80ec9c9d0a9aabfbbf5a7496ee6a15b8d0b32
+    command: ["--model-id", "cross-encoder/ms-marco-MiniLM-L-6-v2"]
+    environment:
+      HF_HOME: /data
+    volumes:
+      - reranker-data:/data
+    healthcheck:
+      # The image has no curl; a bash TCP probe needs nothing else.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/80"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+    logging: *logging
+    networks:
+      - internal
+
   api:
     <<: *app
     command:
@@ -406,6 +427,11 @@ services:
       CITADEL_MODEL: ${CITADEL_MODEL:-auto/best-fast}
       OMNIROUTE_URL: ${OMNIROUTE_URL:-http://omniroute:20128/v1}
       OMNIROUTE_API_KEY_FILE: /run/secrets/omniroute_api_key
+      # Retrieval runs in this worker; an empty embedding alias refuses the
+      # query rather than searching without its dense half.
+      CITADEL_QDRANT_URL: http://qdrant:6333
+      CITADEL_EMBEDDING_MODEL: ${CITADEL_EMBEDDING_MODEL:-}
+      CITADEL_RERANKER_URL: http://reranker:80
     secrets:
       - db_dsn
       - omniroute_api_key
@@ -645,17 +671,24 @@ services:
       CITADEL_QDRANT_URL: http://qdrant:6333
       CITADEL_INGEST_ROOT: /knowledge
       CITADEL_INGEST_REPOS: ${CITADEL_INGEST_REPOS:-}
+      CITADEL_EMBEDDING_MODEL: ${CITADEL_EMBEDDING_MODEL:-}
+      CITADEL_DLP_URL: http://presidio:3000
+      OMNIROUTE_URL: ${OMNIROUTE_URL:-http://omniroute:20128/v1}
+      OMNIROUTE_API_KEY_FILE: /run/secrets/omniroute_api_key
       GH_TOKEN_FILE: /run/secrets/gh_read_token
       HTTPS_PROXY: http://github-egress:3128
       HTTP_PROXY: http://github-egress:3128
-      # Qdrant is in-stack and must never traverse the egress proxy.
-      NO_PROXY: localhost,127.0.0.1,qdrant
+      # Qdrant and OmniRoute are in-stack and must never traverse the egress proxy.
+      NO_PROXY: localhost,127.0.0.1,qdrant,omniroute
     secrets:
       - gh_read_token
+      - omniroute_api_key
     volumes:
       - ./knowledge:/knowledge:ro
     depends_on:
       qdrant:
+        condition: service_healthy
+      presidio:
         condition: service_healthy
     logging: *logging
     networks:
@@ -668,6 +701,7 @@ volumes:
   omniroute-data:
   mlflow-data:
   qdrant-data:
+  reranker-data:
 
 # Injected from the host environment (i.e. .env) and mounted as files, so they
 # never appear in a container's Config.Env, which the Docker API exposes.
