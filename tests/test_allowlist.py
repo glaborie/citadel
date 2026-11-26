@@ -68,8 +68,8 @@ def test_pr_create_is_pinned_to_a_draft_from_a_named_branch() -> None:
         "fix/oom",
         "--title",
         "Restart checkout-api on OOM",
-        "--body",
-        "Adds a restart policy so the container recovers on its own",
+        "--body-file",
+        "/tmp/citadel-pr-text/0123456789abcdef.txt",
     ]
     command = match(tokens, agent="github")
     assert command.id == "gh.pr.create"
@@ -190,3 +190,28 @@ def test_a_command_may_raise_its_own_output_cap() -> None:
 def test_a_command_without_a_cap_uses_the_default() -> None:
     logs = next(c for c in load_allowlist() if c.id == "docker.logs")
     assert logs.output_limit is None
+
+
+def test_a_body_file_must_look_like_the_operators_own_file() -> None:
+    """The one absolute path the argv may carry, and only in the shape written."""
+    prefix = ["gh", "pr", "create", "--draft", "--repo", "acme/infra", "--base", "main"]
+    accepted = [*prefix, "--body-file", "/tmp/citadel-pr-text/0123456789abcdef.txt"]
+    assert match(accepted, agent="github").id == "gh.pr.create"
+
+    for value in (
+        "/etc/passwd",
+        "/tmp/citadel-pr-text/../../etc/passwd.txt",
+        "/tmp/citadel-pr-text/abc.txt;id",
+        "citadel-pr-text/abc.txt",
+    ):
+        with pytest.raises(CommandDenied):
+            match([*prefix, "--body-file", value], agent="github")
+
+
+def test_the_inline_body_flag_is_gone() -> None:
+    """Prose on the command line was the limitation; the flag is not offered."""
+    with pytest.raises(CommandDenied, match="not permitted"):
+        match(
+            ["gh", "pr", "create", "--draft", "--body", "text"],
+            agent="github",
+        )
