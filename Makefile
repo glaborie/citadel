@@ -13,6 +13,14 @@ up:  ## Start the stack, unwrapping secrets through sops
 	chmod +x scripts/provision-secrets.sh
 	sops exec-env secrets/citadel.env 'scripts/provision-secrets.sh && docker compose up -d'
 
+.PHONY: rebuild
+
+# `up` never builds, so a checkout that has new code keeps running the old
+# image until something changes the tag. This is the target to use after a pull.
+rebuild:  ## Rebuild images from the checkout, then restart the stack
+	chmod +x scripts/provision-secrets.sh
+	sops exec-env secrets/citadel.env 'scripts/provision-secrets.sh && docker compose up -d --build'
+
 # OpenFGA CLI pinned by digest; only needed to regenerate the model JSON.
 POLICY_CLI = openfga/cli:latest@sha256:7a7f9fb0a27a788a0fa7907eb5fc751c3134ca0776245578308e011606b61091
 
