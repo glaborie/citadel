@@ -62,6 +62,18 @@ test:  ## Run the test suite (live tests skip themselves)
 eval:  ## Grade the committed trajectory fixtures
 	uv run python -m citadel.evals
 
+.PHONY: eval-table
+eval-table:  ## Print the baseline table as markdown
+	uv run python -m citadel.evals --table
+
+.PHONY: eval-gate
+eval-gate:  ## Fail when a grader is below its recorded baseline
+	uv run python -m citadel.evals --gate
+
+.PHONY: eval-record
+eval-record:  ## Record this run as a baseline row (fails rather than rewriting one)
+	uv run python -m citadel.evals --record
+
 .PHONY: mlflow-bootstrap
 
 # One-time per fresh MLflow volume: create the traces experiment the OTLP
