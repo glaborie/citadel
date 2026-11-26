@@ -1,8 +1,8 @@
 # Red-team report
 
-Generated 2026-11-25 20:37 UTC from `pytest -m redteam`. Do not edit by hand.
+Generated 2026-11-26 08:03 UTC from `pytest -m redteam`. Do not edit by hand.
 
-**26 of 32 blocked or denied as specified** · 0 failing · 0 known gaps · 6 pending · 0 not run · 26 executed in this run.
+**27 of 33 blocked or denied as specified** · 0 failing · 0 known gaps · 6 pending · 0 not run · 27 executed in this run.
 
 A pending case has no executor yet, which usually means it needs the
 live stack (Temporal, Postgres, the stub tool server). A gap is a case
@@ -27,6 +27,7 @@ lowered to make it green. Neither pending nor gap counts as passing.
 | RT-HITL-02 | pass | denied | hitl | 200/409 calls=1 |
 | RT-HITL-03 | pass | auto_denied | hitl | rejected: approval expired |
 | RT-HITL-04 | pass | denied | hitl | rejected: approval does not match these arguments |
+| RT-DLP-08 | pass | blocked | dlp | reason redacted before persist, credential refused |
 | RT-HITL-06 | pass | blocked | hitl | 4/4 responses refuse framing (XFO DENY + frame-ancestors) |
 | RT-HITL-05 | pass | blocked | hitl | 403 for secret-bearing arguments |
 | RT-DLP-01 | pass | blocked | dlp | block ['GITHUB_TOKEN'] |

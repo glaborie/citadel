@@ -349,3 +349,29 @@ def test_a_public_address_is_still_redacted() -> None:
         opener=detector([{"entity_type": "IP_ADDRESS", "start": 5, "end": 12, "score": 0.6}]),
     )
     assert verdict.text == "from <IP_ADDRESS>"
+
+
+def test_a_record_surface_redacts_pii_like_an_output() -> None:
+    """A reason is rendered and exported, so PII in it is redacted in place."""
+    text = "card 4111 1111 1111 1111 on file"
+    verdict = dlp.inspect(
+        text,
+        surface="record",
+        analyzer_url=URL,
+        opener=detector([{"entity_type": "CREDIT_CARD", "start": 5, "end": 24, "score": 0.95}]),
+    )
+    assert verdict.action == "redact"
+    assert verdict.text == "card <CREDIT_CARD> on file"
+
+
+def test_a_record_surface_still_blocks_a_credential() -> None:
+    """Redaction is for text that can be scrubbed; a token blocks on every surface."""
+    text = f"rotating {token()} because it leaked"
+    verdict = dlp.inspect(text, surface="record", analyzer_url=URL, opener=detector([]))
+    assert verdict.action == "block"
+    assert [finding.category for finding in verdict.findings] == ["GITHUB_TOKEN"]
+
+
+def test_an_unknown_surface_is_a_programming_error() -> None:
+    with pytest.raises(ValueError, match="unknown DLP surface"):
+        dlp.inspect("x", surface="stdout", analyzer_url=URL, opener=detector([]))

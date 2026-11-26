@@ -344,6 +344,17 @@ def create_app(
                 surface="input",
                 analyzer_url=DLP_URL,
             )
+            # The reason is the one field a human types freely, usually under
+            # pressure and often quoting the very secret that caused the incident.
+            # It is gated too, on the `record` surface: PII is redacted in place, a
+            # credential blocks. Only the redacted form is kept - the raw text is
+            # replaced by its hash and a redaction count, so the ledger can prove
+            # what was decided on without holding it.
+            reason, reason_report = dlp.gate(
+                body.reason,
+                surface="record",
+                analyzer_url=DLP_URL,
+            )
         except dlp.DlpBlocked as exc:
             # A refused approval is an event the ledger must show, even though
             # nothing was signed and the decision never happened.
@@ -367,6 +378,29 @@ def create_app(
                 status_code=exc.status, detail={"reason": exc.reason, "dlp": [exc.report]}
             ) from exc
 
+        redactions = sum(
+            1 for finding in reason_report["findings"] if finding["action"] == "redact"
+        )
+        if redactions:
+            # A redaction is a detector decision, so it belongs in the ledger
+            # beside the blocks rather than only implicit in a clean reason.
+            redacted = AuditLedger(_dsn()).append(
+                tenant_id=principal.tenant_id,
+                event_type="dlp.event",
+                actor_type="user",
+                actor_id=principal.user_id,
+                payload={"run_id": body.run_id, "tool": body.tool, **reason_report},
+            )
+            telemetry.record_span(
+                "dlp.event",
+                run_id=body.run_id,
+                audit_id=redacted.audit_id,
+                tool=body.tool,
+                surface=str(reason_report.get("surface", "")),
+                action=str(reason_report.get("action", "")),
+                detector_version=str(reason_report.get("detector_version", "")),
+            )
+
         ref = AuditLedger(_dsn()).append(
             tenant_id=principal.tenant_id,
             event_type="approval.decision",
@@ -378,7 +412,11 @@ def create_app(
                 "agent_id": body.agent_id,
                 "approver": principal.user_id,
                 "decision": "approved" if body.approved else "denied",
-                "reason": body.reason,
+                "reason": reason,
+                "reason_sha256": hashlib.sha256(body.reason.encode()).hexdigest(),
+                "reason_chars": len(body.reason),
+                "dlp_redactions": redactions,
+                "dlp_categories": reason_report["categories"],
                 "ttl": APPROVAL_TTL,
                 "args_hash": arguments_hash(body.arguments),
                 "rule_id": "approval.approved" if body.approved else "approval.denied",
@@ -392,6 +430,7 @@ def create_app(
             decision="approved" if body.approved else "denied",
             approver=principal.user_id,
             ttl=APPROVAL_TTL,
+            redactions=redactions,
         )
 
         close_request(
@@ -401,13 +440,13 @@ def create_app(
             tool=body.tool,
             approved=body.approved,
             approver=principal.user_id,
-            reason=body.reason,
+            reason=reason,
         )
 
         decision = ApprovalDecision(
             approved=body.approved,
             approver=principal.user_id,
-            reason=body.reason,
+            reason=reason,
             approval_ref=ref.audit_id if body.approved else None,
         )
         # Audit is written before the workflow is resumed.
