@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from citadel import dlp
 from citadel.tools import runner
 from citadel.tools.bounds import bound
+from tests.conftest import AnalyzerResponse
 
 LOGS = {"agent": "docker", "tool": "read_logs", "arguments": {"service": "checkout-api"}}
 
@@ -279,3 +280,40 @@ def test_the_cap_is_configurable_through_the_bounds(
 
     assert len(payload["stdout"].encode("utf-8")) <= limit
     assert json.loads(json.dumps(payload))["truncated"] is True
+
+
+def test_a_secret_in_an_illegal_argument_is_refused_by_the_gate(
+    client: TestClient,
+) -> None:
+    """The ordering is the fix: without it, this argument returns a 403 that quotes it."""
+    secret = "ghp_" + "A1b2" * 8
+    arguments = {"service": f"x;{secret}"}
+    response = client.post(
+        "/execute", json={"agent": "docker", "tool": "read_logs", "arguments": arguments}
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["reason"] == "dlp_blocked"
+    assert secret not in response.text
+
+
+def test_the_gate_runs_even_when_validation_would_refuse(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    """One analyzer call, on the raw arguments, before `build_argv` is reached."""
+    arguments = {"service": "checkout-api; rm -rf /"}
+    seen: list[str] = []
+
+    def counting(request: Any, timeout: Any = None) -> AnalyzerResponse:
+        seen.append(json.loads(request.data)["text"])
+        return AnalyzerResponse([])
+
+    monkeypatch.setattr(dlp, "urlopen", counting)
+    response = client.post(
+        "/execute", json={"agent": "docker", "tool": "read_logs", "arguments": arguments}
+    )
+
+    assert response.status_code == 403
+    assert "service" in response.json()["detail"]
+    assert "rm -rf" not in response.text
+    assert seen == [json.dumps(arguments, ensure_ascii=False)]

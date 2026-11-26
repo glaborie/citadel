@@ -105,18 +105,12 @@ def execute(request: ExecuteRequest) -> dict[str, Any]:
     if _already_used(_dsn(), request.tenant_id, claims.ref):
         raise HTTPException(status_code=409, detail="approval already used")
 
-    # The approver authorised the service name; build_argv derives the container
-    # name and validates the derived argv — never a validated argv rewritten.
-    try:
-        argv, command = build_argv(request.tool, request.arguments)
-    except CommandDenied as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    if command.tier not in WRITABLE_TIERS:
-        raise HTTPException(status_code=403, detail=f"{command.id} is not a T1 command")
-
     # Checked before anything runs: a credential in an argument must never
     # reach a command, and rewriting an argument would run something other than
-    # what the human approved.
+    # what the human approved. The gate also runs before `build_argv`, because
+    # argument validation rejects a malformed value with a 403 whose detail the
+    # caller reads - so a secret inside an illegal argument would otherwise be
+    # echoed back without the detector ever seeing it.
     reports: list[dict[str, Any]] = []
     arguments = json.dumps(request.arguments, ensure_ascii=False)
     context = {
@@ -127,6 +121,15 @@ def execute(request: ExecuteRequest) -> dict[str, Any]:
     }
     _, report = _guard(arguments, surface="input", **context)
     reports.append(report)
+
+    # The approver authorised the service name; build_argv derives the container
+    # name and validates the derived argv — never a validated argv rewritten.
+    try:
+        argv, command = build_argv(request.tool, request.arguments)
+    except CommandDenied as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    if command.tier not in WRITABLE_TIERS:
+        raise HTTPException(status_code=403, detail=f"{command.id} is not a T1 command")
 
     try:
         completed = executor.run(argv)

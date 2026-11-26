@@ -104,6 +104,15 @@ def _guard(text: str, *, surface: str) -> tuple[str, dict[str, Any]]:
 
 @app.post("/execute")
 def execute(request: ExecuteRequest) -> ExecuteResponse:
+    # The raw arguments are inspected before they are parsed. Validation rejects a
+    # malformed argument with a 403, and a gate that only ran after validation would
+    # leave that path - the one an agent hits by accident - as the only route into a
+    # response body that never consulted the detector.
+    reports: list[dict[str, Any]] = []
+    arguments = json.dumps(request.arguments, ensure_ascii=False)
+    _, report = _guard(arguments, surface="input")
+    reports.append(report)
+
     try:
         argv, command = build_argv(request.tool, request.arguments)
     except CommandDenied as exc:
@@ -116,11 +125,6 @@ def execute(request: ExecuteRequest) -> ExecuteResponse:
         raise HTTPException(
             status_code=403, detail=f"{command.id} is {command.tier}; use the operator service"
         )
-
-    reports: list[dict[str, Any]] = []
-    arguments = json.dumps(request.arguments, ensure_ascii=False)
-    _, report = _guard(arguments, surface="input")
-    reports.append(report)
 
     try:
         completed = run(argv)
