@@ -180,7 +180,9 @@ def test_the_cli_refuses_a_missing_source(
 ) -> None:
     monkeypatch.delenv("CITADEL_INGEST_ROOT", raising=False)
 
-    assert ingest.main(["--tenant", "lab-a"]) == 2
+    with pytest.raises(SystemExit) as refused:
+        ingest.main(["--tenant", "lab-a"])
+    assert refused.value.code == 2
     assert "no source given" in capsys.readouterr().err
 
 
@@ -190,7 +192,9 @@ def test_the_cli_refuses_a_root_outside_the_configured_one(
     monkeypatch.setenv("CITADEL_INGEST_ROOT", str(tmp_path / "knowledge"))
     (tmp_path / "knowledge").mkdir()
 
-    assert ingest.main(["--tenant", "lab-a", "--root", str(tmp_path / "elsewhere")]) == 2
+    with pytest.raises(SystemExit) as refused:
+        ingest.main(["--tenant", "lab-a", "--root", str(tmp_path / "elsewhere")])
+    assert refused.value.code == 2
     assert "outside the configured ingest root" in capsys.readouterr().err
 
 
@@ -199,7 +203,9 @@ def test_the_cli_refuses_a_repo_outside_the_configured_set(
 ) -> None:
     monkeypatch.setenv("CITADEL_INGEST_REPOS", "owner/runbooks")
 
-    assert ingest.main(["--tenant", "lab-a", "--repo", "owner/secrets"]) == 2
+    with pytest.raises(SystemExit) as refused:
+        ingest.main(["--tenant", "lab-a", "--repo", "owner/secrets"])
+    assert refused.value.code == 2
     assert "not in CITADEL_INGEST_REPOS" in capsys.readouterr().err
 
 
