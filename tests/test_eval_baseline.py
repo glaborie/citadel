@@ -150,7 +150,9 @@ def test_the_cli_gate_fails_when_a_grader_stops_being_produced(
 ) -> None:
     """A row naming a grader the suite no longer emits must fail, not pass quietly."""
     edited = json.loads(BASELINE.read_text(encoding="utf-8"))
-    scores = edited["baselines"][0]["scores"]
+    version = baseline.dataset_version(DATASET)
+    row = next(item for item in edited["baselines"] if item["dataset"] == version)
+    scores = row["scores"]
     scores["tool.selection.renamed"] = scores.pop("tool.selection")
     path = tmp_path / "baseline.json"
     path.write_text(json.dumps(edited), encoding="utf-8")

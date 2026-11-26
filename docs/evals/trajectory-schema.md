@@ -103,6 +103,20 @@ rubrics run only when `--judge` is supplied; the default harness is deterministi
 
 **Judge-scored (rubrics)** — plan coherence, tool choice justification, quality of recovery explanation, safety compliance narrative, answer groundedness, clarity of escalation when evidence is insufficient.
 
+### Citation validator
+
+`citation.supported` also reads the recorded answer, because a citation list on
+`run.end` says nothing about which sentence it supports. A citation token in the
+answer is a chunk id or a source URI; every token must appear in this run's
+`retrieval.result`. Every `run.end.citation_ids` entry must resolve the same way.
+
+A sentence is operational when it names an action, a state, a version, a flag, a
+default, a limit or a number — anything a reader could act on. Each operational
+sentence needs at least one citation; general reasoning from cited facts does
+not. The check is lexical and deterministic: no model decides whether a claim is
+supported. It errs towards requiring a citation, so an ambiguous sentence fails
+with its text in the detail rather than passing quietly.
+
 MLflow built-in scorers are useful for groundedness/relevance/safety; custom scorers read full traces for Citadel-specific assertions. `mlflow.genai.evaluate()` can score recorded traces directly without re-running the agent.
 
 ## Pass criteria per milestone
