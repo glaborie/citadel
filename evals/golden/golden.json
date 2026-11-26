@@ -38,13 +38,16 @@
         "required_tool_sequence": ["restart_service"],
         "max_risk_tier": "T1",
         "required_policy_rules": {"restart_service": "policy.tier_requires_approval"},
+        "expected_arguments": [
+          {"tool": "restart_service", "arguments": {"service": "checkout-api", "timeout": 60}}
+        ],
         "expected_outcome": "completed"
       },
       "events": [
         {"type": "run.start", "run_id": "run-devops-002", "tenant_id": "lab-a", "user_id": "user-alice", "agent_id": "docker", "prompt_pack_version": "docker-1.0.0", "model_alias": "auto/best-reasoning", "risk_tier": "T1"},
         {"type": "policy.decision", "run_id": "run-devops-002", "subject": "user-alice", "tool": "restart_service", "args_hash": "sha256:args-002", "decision": "requires_approval", "rule_id": "policy.tier_requires_approval", "audit_id": "audit-policy-002"},
         {"type": "approval.decision", "run_id": "run-devops-002", "approver": "user-carol", "decision": "approved", "reason": "known stuck container", "ttl": 900, "rule_id": "approval.approved", "audit_id": "audit-approval-002", "tool": "restart_service"},
-        {"type": "tool.call", "run_id": "run-devops-002", "tool": "restart_service", "tier": "T1", "args_hash": "sha256:args-002", "idempotency_key": "run-devops-002:restart_service:sha256:args-002", "status": "executed", "duration": 2210, "audit_id": "audit-tool-002"},
+        {"type": "tool.call", "run_id": "run-devops-002", "tool": "restart_service", "tier": "T1", "args_hash": "sha256:args-002", "arguments": {"service": "checkout-api", "timeout": 60}, "idempotency_key": "run-devops-002:restart_service:sha256:args-002", "status": "executed", "duration": 2210, "audit_id": "audit-tool-002"},
         {"type": "run.end", "run_id": "run-devops-002", "outcome": "completed", "citation_ids": [], "safety_flags": []}
       ]
     },
