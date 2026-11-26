@@ -121,6 +121,42 @@ Next, in order:
 3. re-run `scripts/judge-sample.py` and `scripts/label-merge.py`, and only then consider a
    `gates: true`.
 
+## Rubric v2: the two boundaries the v1 measurement condemned
+
+The kappa above is about **rubrics v1**. Two of the four boundaries were the reason for it,
+and both were rewritten rather than the threshold lowered. Everything below is v2; the
+numbers stay attached to v1 until a run under v2 replaces them.
+
+### Grounding: an inference is not an assertion of fact
+
+v1 level 4 said "nothing is inferred beyond it", and level 2 said "asserts a fact the record
+does not contain". Every diagnosis is an inference, so a rater reading level 4 saw a
+well-sourced inference and marked it 4, while the judge reading level 2 saw a claim the
+record did not contain and marked it 2 - eleven times out of 27.
+
+v2 states the rule the two levels were fighting over: **a claim is an inference when its
+evidence is named beside it, and an assertion when it is not.** Level 4 now admits an
+inference that points at what it rests on; level 2 now requires that the claim be one the
+recommendation depends on, and that no evidence be named.
+
+### Recovery: nothing failed is a 4, not a missing measurement
+
+v1 level 1 was "repeats the failing step, or ignores the failure and reports success", and
+the scale had no entry for a run in which nothing failed. Twelve of 27 items were human 4 /
+judge 1: the human read a clean single attempt as a 4, the judge read the absence of a
+recovery narrative as a 1.
+
+v2 says it outright: a run with no failure scores 4 when it does not imply one. Scoring it
+low because there was no incident turns the dimension into a measure of incident rate, and
+punishes the trajectories that behaved. Retrying once before changing approach is now a 2,
+and repeating unchanged is a 1 at three attempts - a counted rule rather than a judgement.
+
+### What did not change
+
+`gates` stays false on all four dimensions, `threshold` stays 3, and plan and escalation are
+untouched at v1. The measurement above is the reason for the rewrite, and no dimension earns
+a gate from it.
+
 ## Rubric shape
 
 Four levels per dimension, anchored on observable trajectory evidence, not on

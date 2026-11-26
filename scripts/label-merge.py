@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
 SHEET = ROOT / "docs" / "evals" / "calibration-sheet-v1.md"
-KEY = ROOT / "evals" / "calibration" / "label-key.json"
+KEY = ROOT / "evals" / "calibration" / "label-key-v1.json"
 JUDGE = ROOT / "evals" / "calibration" / "judge-scores-v1.json"
 HUMAN = ROOT / "evals" / "calibration" / "labels-human-v1.json"
 LABELS = ROOT / "evals" / "calibration" / "labels"

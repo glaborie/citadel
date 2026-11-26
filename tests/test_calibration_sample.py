@@ -13,8 +13,8 @@ from citadel.evals.schema import check_events, load_cases
 
 ROOT = Path(__file__).parents[1]
 SAMPLE = ROOT / "evals" / "calibration" / "sample-v1.json"
-SHEET = ROOT / "docs" / "evals" / "calibration-sheet-v1.md"
-KEY = ROOT / "evals" / "calibration" / "label-key.json"
+SHEET = ROOT / "docs" / "evals" / "calibration-sheet-v1.md"  # the labelled artifact
+KEY = ROOT / "evals" / "calibration" / "label-key-v1.json"
 BUILDER = ROOT / "scripts" / "build-calibration-sample.py"
 
 BAND_WORDS = ("near-miss", "partial", "clean", "mutation", "derived_from")

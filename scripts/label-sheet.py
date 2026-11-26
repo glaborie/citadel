@@ -23,10 +23,19 @@ from typing import Any
 
 ROOT = Path(__file__).parents[1]
 SAMPLE = ROOT / "evals" / "calibration" / "sample-v1.json"
-KEY = ROOT / "evals" / "calibration" / "label-key.json"
+KEY = ROOT / "evals" / "calibration" / "label-key-v1.json"  # the labelled artifact
 RUBRICS = ROOT / "evals" / "golden" / "rubrics.json"
-SHEET = ROOT / "docs" / "evals" / "calibration-sheet-v1.md"
+SHEET = ROOT / "docs" / "evals" / "calibration-sheet-v1.md"  # the labelled artifact
 DIMENSIONS = ("plan", "grounding", "recovery", "escalation")
+
+
+def sheet_path(version: int) -> Path:
+    """One sheet per rubric version: the filled one is evidence, not a template."""
+    return ROOT / "docs" / "evals" / f"calibration-sheet-v{version}.md"
+
+
+def key_path(version: int) -> Path:
+    return ROOT / "evals" / "calibration" / f"label-key-v{version}.json"
 
 # The fields that identify an event to a reader; everything else is noise on the sheet.
 EVENT_FIELDS = (
@@ -84,7 +93,7 @@ def render(sample: dict[str, Any], rubrics: dict[str, Any]) -> tuple[str, dict[s
     ids = blind_ids(sample)
     by_blind = {ids[case["id"]]: case for case in sample["cases"]}
 
-    head = f"""# Judge calibration sheet — sample v1
+    head = f"""# Judge calibration sheet — sample v1, rubric v{rubrics["rubric_version"]}
 
 Thirty trajectories. Score each one yourself, on all four dimensions, with a whole number
 from 1 to 4, before you look at anything the judge said. Roughly 25 minutes; there is no
@@ -142,10 +151,18 @@ score: plan= grounding= recovery= escalation=
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Write the blind labelling sheet")
     parser.add_argument("--check", action="store_true", help="compare the committed sheet")
+    parser.add_argument(
+        "--version",
+        type=int,
+        default=None,
+        help="sheet version; defaults to the rubric version in evals/golden/rubrics.json",
+    )
     args = parser.parse_args(argv)
 
     sample = json.loads(SAMPLE.read_text(encoding="utf-8"))
     rubrics = json.loads(RUBRICS.read_text(encoding="utf-8"))
+    version = args.version if args.version is not None else int(rubrics["rubric_version"])
+    target, keyfile = sheet_path(version), key_path(version)
     sheet, key = render(sample, rubrics)
 
     if args.check:
@@ -158,18 +175,18 @@ def main(argv: list[str] | None = None) -> int:
                 "score:" if line.startswith("score:") else line for line in text.splitlines()
             )
 
-        if form(SHEET.read_text(encoding="utf-8")) != form(sheet):
-            problems.append(f"{SHEET.relative_to(ROOT)} is stale: run scripts/label-sheet.py")
-        if json.loads(KEY.read_text(encoding="utf-8")) != key:
-            problems.append(f"{KEY.relative_to(ROOT)} is stale: run scripts/label-sheet.py")
+        if form(target.read_text(encoding="utf-8")) != form(sheet):
+            problems.append(f"{target.relative_to(ROOT)} is stale: run scripts/label-sheet.py")
+        if json.loads(keyfile.read_text(encoding="utf-8")) != key:
+            problems.append(f"{keyfile.relative_to(ROOT)} is stale: run scripts/label-sheet.py")
         for problem in problems:
             print(f"sheet: {problem}", file=sys.stderr)
         return 1 if problems else 0
 
-    SHEET.parent.mkdir(parents=True, exist_ok=True)
-    SHEET.write_text(sheet, encoding="utf-8")
-    KEY.write_text(json.dumps(key, indent=2) + "\n", encoding="utf-8")
-    print(f"sheet: {len(key['items'])} items -> {SHEET.relative_to(ROOT)}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(sheet, encoding="utf-8")
+    keyfile.write_text(json.dumps(key, indent=2) + "\n", encoding="utf-8")
+    print(f"sheet: {len(key['items'])} items -> {target.relative_to(ROOT)}")
     return 0
 
 
