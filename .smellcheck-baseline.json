@@ -2703,6 +2703,13 @@
       "pattern": "SC804",
       "line": 210,
       "name": "High Response for Class"
+    },
+    {
+      "fingerprint": "e38e529e7c35",
+      "file": "src/citadel/mlflow_bootstrap.py",
+      "pattern": "SC102",
+      "line": 21,
+      "name": "Convert Variables to Constants"
     }
   ]
 }

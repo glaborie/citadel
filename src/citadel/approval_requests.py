@@ -19,9 +19,7 @@ if TYPE_CHECKING:
 def record_request(*, dsn: str, call: ToolCall, tier: str, rule_id: str) -> None:
     """A T1 call is waiting; a retry must not add a second row.
 
-    `call.workflow_id` is the child's own runtime id, so a later decision signals
-    the workflow that parked rather than rebuilding a step-scoped id from the
-    run and tool this row happens to carry.
+    The row carries `call.workflow_id`, the parked child's own runtime id.
     """
     with tenant_connection(dsn, call.tenant_id) as conn:
         conn.execute(
