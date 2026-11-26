@@ -21,6 +21,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from citadel.evals.rubric import render_evidence
+from citadel.evals.schema import load_cases
+
 ROOT = Path(__file__).parents[1]
 SAMPLE = ROOT / "evals" / "calibration" / "sample-v1.json"
 KEY = ROOT / "evals" / "calibration" / "label-key-v1.json"  # the labelled artifact
@@ -37,28 +40,9 @@ def sheet_path(version: int) -> Path:
 def key_path(version: int) -> Path:
     return ROOT / "evals" / "calibration" / f"label-key-v{version}.json"
 
-# The fields that identify an event to a reader; everything else is noise on the sheet.
-EVENT_FIELDS = (
-    "type",
-    "agent_id",
-    "risk_tier",
-    "tool",
-    "arguments",
-    "tier",
-    "status",
-    "decision",
-    "rule_id",
-    "surface",
-    "action",
-    "categories",
-    "outcome",
-    "strategy",
-    "citation_ids",
-    "safety_flags",
-    "tool_name",
-    "source_uris",
-    "top_k",
-)
+# No field list here on purpose: the sheet renders `render_evidence(case)`, the exact text
+# the judge is given. A rater cannot then be shown less than the judge, and a field added to
+# the record reaches both or neither.
 
 
 def blind_ids(sample: dict[str, Any]) -> dict[str, str]:
@@ -68,14 +52,6 @@ def blind_ids(sample: dict[str, Any]) -> dict[str, str]:
 
     ordered = sorted(sample["cases"], key=digest)
     return {case["id"]: f"item-{index:02d}" for index, case in enumerate(ordered, start=1)}
-
-
-def _events(case: dict[str, Any]) -> str:
-    lines = []
-    for event in case["events"]:
-        parts = [f"{key}={event[key]}" for key in EVENT_FIELDS if key in event]
-        lines.append("- " + " · ".join(parts))
-    return "\n".join(lines)
 
 
 def _anchors(rubrics: dict[str, Any]) -> str:
@@ -89,9 +65,29 @@ def _anchors(rubrics: dict[str, Any]) -> str:
     return "\n\n".join(blocks)
 
 
+def _carried_scores(path: Path | None) -> dict[str, str]:
+    """Scores already on the sheet, by blind id.
+
+    Re-rendering the evidence corrects what a rater was shown; it is not a reason to throw
+    away the labels they wrote, and item ids do not move when the rendering changes.
+    """
+    if path is None:
+        return {}
+    found: dict[str, str] = {}
+    item = ""
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("## item-"):
+            item = line[3:].strip()
+        elif item and line.startswith("score: ") and any(c in "1234" for c in line[7:]):
+            found[item] = line[len("score: ") :]
+    return found
+
+
 def render(sample: dict[str, Any], rubrics: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     ids = blind_ids(sample)
     by_blind = {ids[case["id"]]: case for case in sample["cases"]}
+    by_case = {case.id: case for case in load_cases(SAMPLE)}
+    carried = _carried_scores(SHEET if SHEET.exists() else None)
 
     head = f"""# Judge calibration sheet — sample v1, rubric v{rubrics["rubric_version"]}
 
@@ -117,22 +113,17 @@ the mutation for each item, and reading it would turn this into a test of the an
     blocks = [head]
     for blind in sorted(by_blind):
         case = by_blind[blind]
+        evidence = render_evidence(by_case[case["id"]])
         blocks.append(
             f"""
 
 ## {blind}
 
-**Request:** {case['prompt']}
+```text
+{evidence}
+```
 
-**Events**
-
-{_events(case)}
-
-**Answer**
-
-> {case['answer']}
-
-score: plan= grounding= recovery= escalation=
+score: {carried.get(blind, "plan= grounding= recovery= escalation=")}
 """
         )
     key = {

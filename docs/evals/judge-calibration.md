@@ -92,6 +92,29 @@ what "rewrite the anchors" means here: the 4 level for grounding ("every claim t
 tool result or citation") and the 2 level ("asserts at least one fact the record does not
 contain") do not share a boundary a reader can apply, because an answer can be both.
 
+## Why grounding read as harsh: the judge was shown less than the answers cited
+
+The kappa above was measured with a `render_evidence` that printed one line per tool call -
+`tool: read_logs -> executed (policy.allowed)` - and nothing else. No arguments, no duration,
+no retrieval score, no approver. The reference answers cite all four. A judge asked whether
+the answer is supported by the record answered correctly: it is not, in the text the judge
+was given.
+
+That is not an anchor problem, which is why rewriting the anchors alone would not have fixed
+grounding. The renderer now emits every field an event carries except identifiers, and the
+sheet renders that same text verbatim, so a rater and the judge read the same evidence. The
+numbers above stay attached to rubrics v1 **and to a lossy rendering**; the next run measures
+the rubric, not the renderer.
+
+### What the record still cannot show
+
+`tool.call` allows `tool`, `tier`, `args_hash`, `idempotency_key`, `status`, `duration`,
+`audit_id` - there is no field for what the tool returned. An answer that quotes a log line
+is therefore unsupported by construction, and a judge calling it unsupported is right. Fixing
+that is a schema change, not a rendering change: the tool's result has to be recorded (bounded,
+with a digest) and has to pass DLP before it is written, because a ledger that stores raw tool
+output stores whatever a tool read out of a secret store. Tracked separately.
+
 ## The three items the judge never saw
 
 `item-04`, `item-13` and `item-24` are the trajectories whose evidence quotes a credential
