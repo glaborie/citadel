@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 from citadel.policy.catalog import ToolSpec, load_catalog
@@ -37,12 +38,26 @@ def _resolve(arguments: Mapping[str, Any]) -> dict[str, Any]:
     return dict(arguments)
 
 
+def needs_body_file(tool: str, *, catalog: dict[str, ToolSpec] | None = None) -> bool:
+    """Whether this tool's prose travels as a file instead of as an argument."""
+    specs = catalog if catalog is not None else load_catalog()
+    spec = specs.get(tool)
+    return spec is not None and any(param.kind == "body_file" for param in spec.params)
+
+
 def build_argv(
     tool: str,
     arguments: Mapping[str, Any],
     *,
+    body_path: Path | None = None,
     catalog: dict[str, ToolSpec] | None = None,
 ) -> tuple[list[str], AllowedCommand]:
+    """Build the argv for a tool call.
+
+    `body_path` is the operator's file for a `body_file` parameter. It is not an
+    argument: a caller that tries to supply it is refused as an unexpected
+    argument, and a call that needs one without it is refused here.
+    """
     specs = catalog if catalog is not None else load_catalog()
     spec = specs.get(tool)
     if spec is None:
@@ -67,6 +82,21 @@ def build_argv(
             if param.required:
                 raise CommandDenied(f"{tool} requires argument {param.name!r}")
             continue
+        if param.kind == "body_file":
+            # The prose is already in the operator's file; argv carries its name.
+            # The value is still checked, because a body that is too long must be
+            # refused before anyone writes it to disk, and skipping the render path
+            # would otherwise skip the checks with it.
+            if not isinstance(value, str):
+                raise CommandDenied(f"argument {param.name!r} must be a string")
+            if len(value) > param.max_length:
+                raise CommandDenied(
+                    f"argument {param.name!r} exceeds {param.max_length} characters"
+                )
+            if body_path is None:
+                raise CommandDenied(f"{tool} needs {param.name!r} written to a file first")
+            tokens.extend([param.flag or "--body-file", str(body_path)])
+            continue
         tokens.extend(_render(param.name, param, value))
 
     # The catalog must not invent flags; re-check the built argv against the list.
@@ -85,10 +115,11 @@ def _render(name: str, param: Any, value: Any) -> Sequence[str]:
     if len(value) > param.max_length:
         raise CommandDenied(f"argument {name!r} exceeds {param.max_length} characters")
     if param.kind == "text":
-        # Prose (a PR title or body). One line, printable; the allowlist
-        # matcher still rejects shell metacharacters on the built argv.
-        # shortcut: the matcher also rejects ".." anywhere, so a body cannot
-        # contain an ellipsis; switch to --fill from a checkout if that matters.
+        # Short prose that stays on the command line (a PR title). One line,
+        # printable; the allowlist matcher still rejects shell metacharacters and
+        # ".." on the built argv, so a title cannot contain an ellipsis. A body
+        # is not text: it travels as a file (`body_file`), because a body is where
+        # the ellipses, version ranges and fenced blocks live.
         if param.flag is None:
             raise CommandDenied(f"argument {name!r} is text without a flag name")
         if not value.strip() or any(ch < " " or ch == "\x7f" for ch in value):

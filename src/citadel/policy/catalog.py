@@ -11,7 +11,7 @@ from typing import Any
 @dataclass(frozen=True)
 class Param:
     name: str
-    kind: str  # positional | flag | text
+    kind: str  # positional | flag | text | body_file
     flag: str | None = None
     required: bool = False
     max_length: int = 64

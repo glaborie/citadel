@@ -918,12 +918,26 @@ def exec_refusal_echo(case_: Case, _: Path) -> Outcome:
         "title": f"rotate {secret}; now",
         "body": "fine",
     }
+    # A body travels as a file, so the prose half is about the title: it is the one
+    # part of a PR that still reaches argv.
     try:
-        build_argv("open_remediation_pr", prose)
+        build_argv(
+            "open_remediation_pr",
+            prose,
+            body_path=Path("/tmp/citadel-pr-text/0123456789abcdef.txt"),
+        )
     except CommandDenied as exc:
         message = str(exc)
     else:  # pragma: no cover - the argument is illegal by construction
         message = ""
+
+    # And the body - where a pasted token is far likelier than in a title - never
+    # reaches argv at all, so there is no message to leak it through.
+    body_argv, body_command = build_argv(
+        "open_remediation_pr",
+        {**prose, "title": "rotate the token", "body": f"rotating {secret}"},
+        body_path=Path("/tmp/citadel-pr-text/0123456789abcdef.txt"),
+    )
 
     checks = {
         "the gate saw the raw arguments": inspected[0] == arguments_json,
@@ -933,6 +947,7 @@ def exec_refusal_echo(case_: Case, _: Path) -> Outcome:
         "that refusal carries no value either": "rm -rf" not in refused.text,
         "prose refusals name the position, not the value": "argument" in message
         and secret not in message,
+        "a body never reaches argv": secret not in " ".join(body_argv),
     }
     failed = [name for name, ok in checks.items() if not ok]
     return Outcome(
