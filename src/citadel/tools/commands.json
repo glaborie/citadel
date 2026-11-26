@@ -179,6 +179,7 @@
         "--repo"
       ],
       "max_positional": 1,
+      "output_limit": 524288,
       "content_risk": "possible",
       "content_note": "Diffs routinely contain credentials and tokens."
     },

@@ -712,3 +712,40 @@ def test_the_audit_record_states_that_a_cap_was_applied(monkeypatch: pytest.Monk
     assert payload["output_truncated"] is True
     assert payload["output_bytes"] == 60_000
     assert payload["output_sha256"] == "ab" * 32
+
+
+def test_what_the_sandbox_threw_away_reaches_the_record() -> None:
+    """A 10 MB log cut to 64 KB in the sandbox must not report 64 KB as the size."""
+    received = "H" + ("a" * 63_999)
+    bounded = activities.bounded_payload(
+        {
+            "stdout": received,
+            "stderr": "",
+            "original_bytes": 10_000_000,
+            "omitted_bytes": 10_000_000 - len(received.encode()),
+            "truncated": True,
+        }
+    )
+
+    assert bounded.payload["discarded_bytes"] == 10_000_000 - len(received.encode())
+    assert bounded.payload["original_bytes"] == 10_000_000
+    assert bounded.payload["truncated"] is True
+
+
+def test_a_stream_the_sandbox_cut_entirely_is_still_a_cap() -> None:
+    bounded = activities.bounded_payload(
+        {"stdout": "short", "stderr": "", "omitted_bytes": 5_000, "truncated": True}
+    )
+
+    assert bounded.payload["discarded_bytes"] == 5_000
+    assert bounded.payload["truncated"] is True
+    assert bounded.payload["original_bytes"] == len("short") + 5_000
+
+
+def test_a_payload_without_the_runner_numbers_is_unchanged() -> None:
+    """Every stub in this suite sends no counts; the fallback must stay silent."""
+    bounded = activities.bounded_payload({"stdout": "hi", "stderr": ""})
+
+    assert bounded.payload["discarded_bytes"] == 0
+    assert bounded.payload["original_bytes"] == len("hi")
+    assert bounded.payload["truncated"] is False

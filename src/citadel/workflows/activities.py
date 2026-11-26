@@ -70,10 +70,15 @@ def bounded_payload(payload: dict[str, Any]) -> Bounded:
         truncated = truncated or bounded.truncated
         if bounded.text != text:
             dropped[stream] = text
+    # What the tool service measured before its own cap is the truth about how much
+    # output existed. Ignoring it made a 10 MB log that the sandbox cut to 64 KB
+    # report 64 KB, so the record said "nothing was lost" about 9.9 MB.
+    discarded = int(payload.get("omitted_bytes", 0) or 0)
     capped["output_sha256"] = digests.get("stdout", "")
     capped["stream_sha256"] = digests
-    capped["original_bytes"] = original_bytes
-    capped["truncated"] = truncated or bool(payload.get("truncated", False))
+    capped["original_bytes"] = original_bytes + discarded
+    capped["discarded_bytes"] = discarded
+    capped["truncated"] = truncated or bool(payload.get("truncated", False)) or discarded > 0
     return Bounded(payload=capped, dropped=dropped)
 
 

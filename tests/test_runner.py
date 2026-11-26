@@ -418,3 +418,70 @@ def test_the_gate_runs_even_when_validation_would_refuse(
     assert "service" in response.json()["detail"]
     assert "rm -rf" not in response.text
     assert seen == [json.dumps(arguments, ensure_ascii=False)]
+
+
+@pytest.fixture
+def github_client(
+    monkeypatch: pytest.MonkeyPatch,
+    analyzer: dict[str, list[dict[str, Any]]],
+    run_public_key: Ed25519PublicKey,
+    tokens: Callable[..., str],
+) -> TestClient:
+    """The same app, with a token scoped to the github agent."""
+    public = run_public_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+    monkeypatch.setenv("CITADEL_RUN_TOKEN_PUBLIC_KEY", base64.b64encode(public).decode())
+    captured: dict[str, Any] = {"stdout": "", "stderr": ""}
+
+    def fake_run(argv: list[str]) -> Done:
+        captured["argv"] = argv
+        return Done(stdout=str(captured["stdout"]), stderr=str(captured["stderr"]))
+
+    monkeypatch.setattr(runner, "run", fake_run)
+    test_client = TestClient(runner.app, headers={"Authorization": f"Bearer {tokens('github')}"})
+    test_client.captured = captured
+    return test_client
+
+
+DIFF = {"agent": "github", "tool": "pr_diff", "arguments": {"repo": "acme/infra", "number": "7"}}
+
+
+def test_a_diff_above_the_default_cap_comes_back_whole(github_client: TestClient) -> None:
+    """`output_ref` can only point at the whole stream if the runner kept it."""
+    body = "diff --git a/x b/x\n" + ("+added line\n" * 12_000)
+    assert len(body.encode()) > runner.MAX_OUTPUT_BYTES
+    github_client.captured["stdout"] = body
+
+    response = github_client.post("/execute", json=DIFF)
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["truncated"] is False
+    assert payload["omitted_bytes"] == 0
+    assert payload["stdout"] == body
+    assert payload["output_sha256"] == hashlib.sha256(body.encode()).hexdigest()
+    assert payload["original_bytes"] == len(body.encode())
+
+
+def test_a_diff_past_its_own_cap_is_cut_and_says_so(github_client: TestClient) -> None:
+    """The raised cap is a budget, not an absence of one."""
+    body = "diff --git a/x b/x\n" + ("+x\n" * 300_000)
+    assert len(body.encode()) > 524_288
+    github_client.captured["stdout"] = body
+
+    payload = github_client.post("/execute", json=DIFF).json()
+
+    assert payload["truncated"] is True
+    assert len(payload["stdout"].encode()) <= 524_288
+    assert payload["original_bytes"] == len(body.encode())
+
+
+def test_a_log_above_the_default_cap_is_still_cut(client: TestClient) -> None:
+    """The per-command cap is an exception for diffs, not a raised default."""
+    body = "HEAD\n" + ("a" * 100_000)
+    client.captured["stdout"] = body
+
+    payload = client.post("/execute", json=LOGS).json()
+
+    assert payload["truncated"] is True
+    assert len(payload["stdout"].encode()) <= runner.MAX_OUTPUT_BYTES
+    assert payload["original_bytes"] == len(body.encode())
