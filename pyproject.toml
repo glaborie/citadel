@@ -52,3 +52,8 @@ markers = [
     "redteam: security cases and manifest checks for the red-team pack",
         "live: requires the compose stack; opt in with CITADEL_LIVE=1",
 ]
+
+[tool.smellcheck]
+fail-on = "warning"
+baseline = ".smellcheck-baseline.json"
+per-file-ignores = {"tests/*" = ["SC201", "SC206", "SC307"]}

@@ -1,6 +1,6 @@
 {
   "version": "0.4.0",
-  "generated": "2026-11-26T08:10:53Z",
+  "generated": "2026-11-26T08:29:05Z",
   "findings": [
     {
       "fingerprint": "f84b324b089a",
@@ -143,10 +143,17 @@
       "name": "Extract Constant"
     },
     {
+      "fingerprint": "bc3a218b339d",
+      "file": "src/citadel/api/app.py",
+      "pattern": "SC210",
+      "line": 323,
+      "name": "Reduce Cyclomatic Complexity"
+    },
+    {
       "fingerprint": "a23bdc34e631",
       "file": "src/citadel/api/app.py",
       "pattern": "SC201",
-      "line": 419,
+      "line": 458,
       "name": "Extract Method"
     },
     {
@@ -223,119 +230,119 @@
       "fingerprint": "9bc3984acbb7",
       "file": "src/citadel/dlp.py",
       "pattern": "SC102",
-      "line": 36,
+      "line": 42,
       "name": "Convert Variables to Constants"
     },
     {
       "fingerprint": "cfa2c20cea02",
       "file": "src/citadel/dlp.py",
       "pattern": "SC102",
-      "line": 37,
+      "line": 43,
       "name": "Convert Variables to Constants"
     },
     {
       "fingerprint": "014cda8551d5",
       "file": "src/citadel/dlp.py",
       "pattern": "SC102",
-      "line": 38,
+      "line": 44,
       "name": "Convert Variables to Constants"
     },
     {
       "fingerprint": "d6e022a469bf",
       "file": "src/citadel/dlp.py",
       "pattern": "SC103",
-      "line": 145,
+      "line": 151,
       "name": "Protect Public Attributes"
     },
     {
       "fingerprint": "09de89617d25",
       "file": "src/citadel/dlp.py",
       "pattern": "SC601",
-      "line": 149,
+      "line": 155,
       "name": "Extract Constant"
     },
     {
       "fingerprint": "09de89617d25",
       "file": "src/citadel/dlp.py",
       "pattern": "SC601",
-      "line": 149,
+      "line": 155,
       "name": "Extract Constant"
     },
     {
       "fingerprint": "66faa0207297",
       "file": "src/citadel/dlp.py",
       "pattern": "SC201",
-      "line": 217,
+      "line": 223,
       "name": "Extract Method"
     },
     {
       "fingerprint": "09de89617d25",
       "file": "src/citadel/dlp.py",
       "pattern": "SC601",
-      "line": 236,
+      "line": 242,
       "name": "Extract Constant"
     },
     {
       "fingerprint": "100db82b2c0e",
       "file": "src/citadel/dlp.py",
       "pattern": "SC201",
-      "line": 270,
+      "line": 276,
       "name": "Extract Method"
     },
     {
       "fingerprint": "8ce57691d5e7",
       "file": "src/citadel/dlp.py",
       "pattern": "SC210",
-      "line": 270,
+      "line": 276,
       "name": "Reduce Cyclomatic Complexity"
     },
     {
       "fingerprint": "a34523f3dc7e",
       "file": "src/citadel/dlp.py",
       "pattern": "SC403",
-      "line": 283,
+      "line": 289,
       "name": "Replace Loop with Pipeline"
     },
     {
       "fingerprint": "72a39bd08e17",
       "file": "src/citadel/dlp.py",
       "pattern": "SC201",
-      "line": 309,
+      "line": 315,
       "name": "Extract Method"
     },
     {
       "fingerprint": "a34523f3dc7e",
       "file": "src/citadel/dlp.py",
       "pattern": "SC403",
-      "line": 323,
+      "line": 329,
       "name": "Replace Loop with Pipeline"
     },
     {
       "fingerprint": "a34523f3dc7e",
       "file": "src/citadel/dlp.py",
       "pattern": "SC403",
-      "line": 324,
+      "line": 330,
       "name": "Replace Loop with Pipeline"
     },
     {
       "fingerprint": "a34523f3dc7e",
       "file": "src/citadel/dlp.py",
       "pattern": "SC403",
-      "line": 325,
+      "line": 331,
       "name": "Replace Loop with Pipeline"
     },
     {
       "fingerprint": "a34523f3dc7e",
       "file": "src/citadel/dlp.py",
       "pattern": "SC403",
-      "line": 381,
+      "line": 387,
       "name": "Replace Loop with Pipeline"
     },
     {
       "fingerprint": "a34523f3dc7e",
       "file": "src/citadel/dlp.py",
       "pattern": "SC403",
-      "line": 397,
+      "line": 403,
       "name": "Replace Loop with Pipeline"
     },
     {
@@ -545,28 +552,28 @@
       "fingerprint": "ebabdcb18b07",
       "file": "src/citadel/evals/runner.py",
       "pattern": "SC102",
-      "line": 17,
+      "line": 16,
       "name": "Convert Variables to Constants"
     },
     {
       "fingerprint": "16a92bedd604",
       "file": "src/citadel/evals/runner.py",
       "pattern": "SC102",
-      "line": 18,
+      "line": 17,
       "name": "Convert Variables to Constants"
     },
     {
       "fingerprint": "7b5363abe3ca",
       "file": "src/citadel/evals/runner.py",
       "pattern": "SC201",
-      "line": 54,
+      "line": 53,
       "name": "Extract Method"
     },
     {
       "fingerprint": "95d81cac1d62",
       "file": "src/citadel/evals/runner.py",
       "pattern": "SC210",
-      "line": 54,
+      "line": 53,
       "name": "Reduce Cyclomatic Complexity"
     },
     {
@@ -2008,70 +2015,70 @@
       "fingerprint": "0f29b5d881bd",
       "file": "src/citadel/workflows/model_step.py",
       "pattern": "SC102",
-      "line": 28,
+      "line": 27,
       "name": "Convert Variables to Constants"
     },
     {
       "fingerprint": "17bc17caa47a",
       "file": "src/citadel/workflows/model_step.py",
       "pattern": "SC102",
-      "line": 29,
+      "line": 28,
       "name": "Convert Variables to Constants"
-    },
-    {
-      "fingerprint": "b86399f0684f",
-      "file": "src/citadel/workflows/model_step.py",
-      "pattern": "SC307",
-      "line": 81,
-      "name": "Remove Temporary Field"
     },
     {
       "fingerprint": "52f06a824a6b",
       "file": "src/citadel/workflows/model_step.py",
       "pattern": "SC307",
-      "line": 81,
-      "name": "Remove Temporary Field"
-    },
-    {
-      "fingerprint": "5e32803b3cae",
-      "file": "src/citadel/workflows/model_step.py",
-      "pattern": "SC307",
-      "line": 81,
+      "line": 80,
       "name": "Remove Temporary Field"
     },
     {
       "fingerprint": "4dd2578ee4b3",
       "file": "src/citadel/workflows/model_step.py",
       "pattern": "SC307",
-      "line": 81,
+      "line": 80,
+      "name": "Remove Temporary Field"
+    },
+    {
+      "fingerprint": "5e32803b3cae",
+      "file": "src/citadel/workflows/model_step.py",
+      "pattern": "SC307",
+      "line": 80,
+      "name": "Remove Temporary Field"
+    },
+    {
+      "fingerprint": "b86399f0684f",
+      "file": "src/citadel/workflows/model_step.py",
+      "pattern": "SC307",
+      "line": 80,
       "name": "Remove Temporary Field"
     },
     {
       "fingerprint": "5e44d06cd9cb",
       "file": "src/citadel/workflows/model_step.py",
       "pattern": "SC601",
-      "line": 128,
+      "line": 129,
       "name": "Extract Constant"
     },
     {
       "fingerprint": "c14092703ce7",
       "file": "src/citadel/workflows/model_step.py",
       "pattern": "SC201",
-      "line": 132,
+      "line": 133,
       "name": "Extract Method"
     },
     {
       "fingerprint": "da6002a6f125",
       "file": "src/citadel/workflows/model_step.py",
       "pattern": "SC210",
-      "line": 132,
+      "line": 133,
       "name": "Reduce Cyclomatic Complexity"
     },
     {
       "fingerprint": "5e44d06cd9cb",
       "file": "src/citadel/workflows/model_step.py",
       "pattern": "SC601",
-      "line": 283,
+      "line": 285,
       "name": "Extract Constant"
     },
     {
@@ -2190,7 +2197,7 @@
       "fingerprint": "224f69451024",
       "file": "src/citadel/workflows/model_step.py",
       "pattern": "SC801",
-      "line": 81,
+      "line": 80,
       "name": "Low Class Cohesion"
     },
     {
