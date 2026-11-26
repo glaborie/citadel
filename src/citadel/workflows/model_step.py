@@ -20,6 +20,7 @@ from temporalio import activity
 
 from citadel import dlp
 from citadel.audit import AuditLedger
+from citadel.env import optional_secret
 from citadel.model import ModelUnavailable, OmniRouteClient
 from citadel.prompts import assemble
 from citadel.telemetry import record_span
@@ -33,7 +34,7 @@ ClientFactory = Callable[[str], Any]
 def _client(alias: str) -> OmniRouteClient:
     return OmniRouteClient(
         base_url=os.environ.get("OMNIROUTE_URL", "http://omniroute:20128/v1"),
-        api_key=os.environ.get("OMNIROUTE_API_KEY", ""),
+        api_key=optional_secret("OMNIROUTE_API_KEY"),
         analyzer_url=DLP_URL,
         alias=alias,
     )
@@ -94,9 +95,7 @@ class ModelActivities:
     def _gate(self, text: str, *, surface: str) -> dict[str, Any] | None:
         """Returns the refusal report, or None when the text may proceed."""
         try:
-            _, report = dlp.gate(
-                text, surface=surface, analyzer_url=DLP_URL, opener=self._analyzer
-            )
+            _, report = dlp.gate(text, surface=surface, analyzer_url=DLP_URL, opener=self._analyzer)
         except dlp.DlpBlocked as exc:
             return dict(exc.report)
         return None
@@ -207,8 +206,7 @@ class ModelActivities:
                     {
                         "content": reply.content,
                         "tools": [
-                            {"name": call.name, "arguments": call.arguments}
-                            for call in reply.tools
+                            {"name": call.name, "arguments": call.arguments} for call in reply.tools
                         ],
                     }
                 ),

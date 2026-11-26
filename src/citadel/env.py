@@ -21,3 +21,11 @@ def secret(name: str) -> str:
     if not value:
         raise KeyError(name)
     return value
+
+
+def optional_secret(name: str) -> str:
+    """Like `secret`, but an unset optional value is the empty string."""
+    try:
+        return secret(name)
+    except KeyError:
+        return ""

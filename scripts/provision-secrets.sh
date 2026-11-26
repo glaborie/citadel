@@ -31,5 +31,21 @@ write run_token_private_key CITADEL_RUN_TOKEN_PRIVATE_KEY
 write console_session_key CITADEL_CONSOLE_SESSION_KEY
 write gh_write_token GH_WRITE_TOKEN
 write gh_read_token GH_READ_TOKEN
+write postgres_password POSTGRES_PASSWORD
+write citadel_db_password CITADEL_DB_PASSWORD
+write keycloak_admin_password KEYCLOAK_ADMIN_PASSWORD
+write omniroute_jwt_secret OMNIROUTE_JWT_SECRET
+write omniroute_api_key_secret OMNIROUTE_API_KEY_SECRET
+write omniroute_storage_encryption_key OMNIROUTE_STORAGE_ENCRYPTION_KEY
+write omniroute_admin_password OMNIROUTE_ADMIN_PASSWORD
+write omniroute_api_key OMNIROUTE_API_KEY
 
-echo "provisioned $dir/{db_dsn,run_token_private_key,console_session_key,gh_write_token,gh_read_token}"
+# pgx (OpenFGA) reads this instead of taking the password in argv or env.
+# Format: host:port:database:user:password (libpq escapes `\` and `:`).
+pgpass_pw=${POSTGRES_PASSWORD//\\/\\\\}
+pgpass_pw=${pgpass_pw//:/\\:}
+printf 'postgres:5432:openfga:%s:%s\n' "$POSTGRES_USER" "$pgpass_pw" \
+    > "$dir/openfga_pgpass"
+chmod 0644 "$dir/openfga_pgpass"
+
+echo "provisioned the Docker secrets in $dir"
