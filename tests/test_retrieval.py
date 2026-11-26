@@ -139,16 +139,18 @@ def test_entitlements_for_another_tenant_are_refused() -> None:
 def test_redaction_happens_before_the_reranker_and_in_the_result() -> None:
     client = QdrantClient(location=":memory:")
     _ingest(client, "lab-a", "contact", "alpha owner is alice@example.com")
-    reranker = FakeReranker()
+    embedder, reranker = FakeEmbedder(), FakeReranker()
 
     results = query.search(
         client,
-        _request("lab-a"),
-        FakeEmbedder(),
+        _request("lab-a", "alpha alice@example.com"),
+        embedder,
         reranker,
         redact=lambda text: text.replace("alice@example.com", "<EMAIL_ADDRESS>"),
     )
 
+    assert embedder.seen == [["alpha <EMAIL_ADDRESS>"]]
+    assert reranker.queries == ["alpha <EMAIL_ADDRESS>"]
     assert reranker.seen == [["alpha owner is <EMAIL_ADDRESS>"]]
     assert results.chunks[0].text == "alpha owner is <EMAIL_ADDRESS>"
     assert "alice@example.com" not in results.chunks[0].text

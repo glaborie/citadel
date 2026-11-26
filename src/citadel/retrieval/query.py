@@ -158,21 +158,23 @@ def _candidates(points: Sequence[models.ScoredPoint], tenant_id: str) -> list[_C
 
 
 def _fused(
-    client: QdrantClient, request: SearchRequest, embedder: Embedder, acl: models.Filter
+    client: QdrantClient,
+    request: SearchRequest,
+    text: str,
+    embedder: Embedder,
+    acl: models.Filter,
 ) -> list[_Candidate]:
     """One request: both prefetches carry the ACL filter, then RRF fuses them."""
     response = client.query_points(
         collection_name(request.tenant_id),
         prefetch=[
             models.Prefetch(
-                query=_dense(embedder, request.query),
+                query=_dense(embedder, text),
                 using=DENSE,
                 filter=acl,
                 limit=request.candidates,
             ),
-            models.Prefetch(
-                query=sparse(request.query), using=SPARSE, filter=acl, limit=request.candidates
-            ),
+            models.Prefetch(query=sparse(text), using=SPARSE, filter=acl, limit=request.candidates),
         ],
         query=models.FusionQuery(fusion=models.Fusion.RRF),
         limit=request.candidates,
@@ -184,12 +186,13 @@ def _fused(
 
 def _ranked(
     request: SearchRequest,
+    text: str,
     candidates: Sequence[_Candidate],
     reranker: Reranker,
     redact: Callable[[str], str] | None,
 ) -> tuple[RetrievedChunk, ...]:
     texts = [redact(item.text) if redact is not None else item.text for item in candidates]
-    ranked = reranker.rerank(request.query, texts, top_n=request.top_k)
+    ranked = reranker.rerank(text, texts, top_n=request.top_k)
     return tuple(
         RetrievedChunk(
             citation=Citation(
@@ -215,11 +218,14 @@ def search(
     if request.top_k <= 0 or request.candidates < request.top_k:
         raise QueryRefused("candidates must be at least top_k, and both must be positive")
     name, entitlements, acl = _entitled(request)
-    candidates = _fused(client, request, embedder, acl)
+    # The hosted embedder and the reranker see the same DLP-cleaned query; the
+    # digest still describes the text the caller asked with.
+    text = redact(request.query) if redact is not None else request.query
+    candidates = _fused(client, request, text, embedder, acl)
     return Results(
         query_digest=query_digest(request.query),
         collection=name,
         filter_set_hash=entitlements.filter_set_hash,
         top_k=request.top_k,
-        chunks=_ranked(request, candidates, reranker, redact) if candidates else (),
+        chunks=_ranked(request, text, candidates, reranker, redact) if candidates else (),
     )

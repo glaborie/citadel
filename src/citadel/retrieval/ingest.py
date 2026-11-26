@@ -44,6 +44,7 @@ from qdrant_client import QdrantClient, models
 
 from citadel import dlp, env, net
 from citadel.retrieval.embed import Embedder, OmniRouteEmbedder
+from citadel.retrieval.errors import RetrievalUnavailable
 
 DEFAULT_QDRANT_URL: Final = os.environ.get("CITADEL_QDRANT_URL", "http://qdrant:6333")
 DEFAULT_OMNIROUTE_URL: Final = os.environ.get("OMNIROUTE_URL", "http://omniroute:20128/v1")
@@ -405,7 +406,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         _run(_sources(args), args)
-    except (IngestRefused, dlp.DlpBlocked, OSError) as exc:
+    except (IngestRefused, RetrievalUnavailable, dlp.DlpBlocked, OSError) as exc:
         # A source read fails closed: what was already upserted is idempotent, so
         # re-running after the fix completes rather than duplicates.
         print(f"ingest refused: {exc}", file=sys.stderr)
