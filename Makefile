@@ -57,6 +57,17 @@ migrate:  ## Re-apply migrations/*.sql to an existing database
 test:  ## Run the test suite (live tests skip themselves)
 	uv run pytest
 
+.PHONY: check
+
+# What CI runs, in the same order, plus the smell gate at info severity. The
+# smell-check job only fails on warnings, so a warning-only local run lets new
+# info-level findings merge; this target is the stricter local gate.
+check:  ## Run the CI gates locally before a push
+	uv run ruff check .
+	uv run mypy
+	uv run pytest
+	uvx smellcheck src/ --min-severity info --baseline .smellcheck-baseline.json --fail-on info
+
 .PHONY: eval
 
 # Deterministic grading of the committed trajectory fixtures.
@@ -102,10 +113,10 @@ calibration-kappa:  ## Pair labels with scores and measure kappa per dimension
 
 .PHONY: mlflow-bootstrap
 
-# One-time per fresh MLflow volume: create the traces experiment the OTLP
-# exporter names via MLFLOW_EXPERIMENT_ID.
-mlflow-bootstrap:  ## Create the MLflow traces experiment on a fresh volume
-	docker compose exec -T api python -m citadel.mlflow_bootstrap
+# `make up` runs this as a one-shot before any worker starts; the target stays for an
+# existing stack whose experiment was removed by hand. Idempotent either way.
+mlflow-bootstrap:  ## Create the MLflow traces experiment if it is absent
+	docker compose run --rm --no-deps mlflow-bootstrap
 
 # Red-team pack: manifest lint always, case execution once fixtures exist.
 # Uses the project venv explicitly so it does not depend on an activated shell.
