@@ -173,6 +173,7 @@ MLflow stores versioned eval datasets and `mlflow.genai.evaluate()` results. Sco
 | Sandbox escape | No socket, no egress, dropped caps, gVisor upgrade; no host credentials in runner |
 | Approval forgery | Keycloak RBAC, server-side authorisation, CSRF, TTL, signed reason, audit before resume, and `X-Frame-Options: DENY` plus CSP `frame-ancestors 'none'` on every console response - a framed decision form is a decoy click on a real approval |
 | Cache leak | Tenant + entitlement partition before similarity search, TTL, no T1/T2 caching |
+| Sensitive data in the approval ledger | The `reason` is the one field a human types freely and the ledger is append-only, so it is gated on the `record` surface: PII is redacted in place, the redaction is counted and audited as `dlp.event`, a credential refuses the decision |
 | Trace/prompt leakage to MLflow | Keycloak proxy, internal-only network, redaction before export |
 
 ## 10. Deployment topology (Compose, as built)

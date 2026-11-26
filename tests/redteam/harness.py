@@ -729,6 +729,107 @@ def _last_index(items: list[str], value: str) -> int:
     return 0
 
 
+def exec_approval_reason(case_: Case, _: Path) -> Outcome:
+    """RT-DLP-08: a reason is persisted, rendered and exported, so it is inspected.
+
+    The approval route gated `arguments` and stored `reason` verbatim, so the one
+    field a human types freely - usually quoting the very secret that caused the
+    incident - went into an append-only ledger unread. The detector is stubbed;
+    the card span is the part the stub cannot decide for us.
+    """
+    from types import SimpleNamespace
+    from unittest import mock
+
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from fastapi.testclient import TestClient
+
+    from citadel import approval_requests
+    from citadel.api.app import create_app
+    from citadel.identity import KeycloakVerifier
+    from tests.conftest import AUDIENCE, ISSUER, AnalyzerResponse, StaticKeys, user_token
+    from tests.redteam import support
+
+    card = "4111 1111 1111 1111"
+    reason = f"the card {card} is on the customer record"
+    span = {
+        "entity_type": "CREDIT_CARD",
+        "start": reason.index(card),
+        "end": reason.index(card) + len(card),
+        "score": 0.95,
+    }
+
+    def analyzer(request: Any, timeout: Any = None) -> AnalyzerResponse:
+        asked = json.loads(request.data)["text"]
+        return AnalyzerResponse([span] if asked == reason else [])
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    db = support.FakeDB()
+    db.run_owner = ("user-alice",)
+    token = user_token(key, roles=["approver"], sub="carol")
+    written: list[dict[str, Any]] = []
+
+    class _Ledger:
+        def __init__(self, _dsn: str) -> None:
+            pass
+
+        def append(self, **kwargs: Any) -> object:
+            written.append(kwargs)
+            return SimpleNamespace(audit_id=f"audit-{len(written)}")
+
+    body = {
+        "run_id": "run-1",
+        "tool": "restart_service",
+        "agent_id": "docker",
+        "arguments": {"service": "checkout-api"},
+        "approved": True,
+    }
+    secret = fixture_text("dlp/api_key.txt").split()[3]
+
+    with (
+        mock.patch.object(api_module, "tenant_connection", db.connect),
+        # The decision is mirrored onto the approval row through its own connection.
+        mock.patch.object(approval_requests, "tenant_connection", db.connect),
+        mock.patch.object(api_module, "AuditLedger", _Ledger),
+        mock.patch("citadel.api.app.asyncio.run", lambda coro: coro.close()),
+        mock.patch.object(dlp, "urlopen", analyzer),
+    ):
+        app = create_app(
+            verifier=KeycloakVerifier(ISSUER, AUDIENCE, StaticKeys(key.public_key())),
+            dsn="postgres://fake",
+            private_key=Ed25519PrivateKey.generate(),
+        )
+        client = TestClient(app)
+        headers = {"Authorization": f"Bearer {token}"}
+        carded = client.post("/approvals", json={**body, "reason": reason}, headers=headers)
+        after_card = [event["event_type"] for event in written]
+        decided = [e["payload"] for e in written if e["event_type"] == "approval.decision"]
+        leaked_reason = f"rotating {secret} because it leaked"
+        leaked = client.post("/approvals", json={**body, "reason": leaked_reason}, headers=headers)
+        decided_after_leak = len([e for e in written if e["event_type"] == "approval.decision"])
+
+    stored = json.dumps(decided)
+    # `.get` deliberately: on the unfixed code these keys are absent, and the case
+    # should say "the reason reached the ledger verbatim", not raise a KeyError.
+    kept = decided[0].get("reason", "") if decided else ""
+    checks = {
+        "card does not reach the ledger": "4111" not in stored and card not in stored,
+        "reason is redacted in place": "<CREDIT_CARD>" in kept,
+        "redaction is counted": bool(decided) and decided[0].get("dlp_redactions") == 1,
+        "raw text is not kept": bool(kept) and card not in kept,
+        "redaction is an audited event": after_card[0] == "dlp.event" and len(after_card) == 2,
+        "a credential in the reason is refused": leaked.status_code == 403,
+        "no decision was recorded for the refused reason": decided_after_leak == 1,
+        "the approval still succeeds with PII in it": carded.status_code == 200,
+    }
+    failed = [name for name, ok in checks.items() if not ok]
+    detail = (
+        "reason redacted before persist, credential refused"
+        if not failed
+        else "; ".join(failed)
+    )
+    return Outcome(not failed, detail)
+
+
 def exec_console_framing(case_: Case, _: Path) -> Outcome:
     """RT-HITL-06: no console response may be framed by a same-site page.
 
@@ -1138,6 +1239,7 @@ EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-DLP-07": exec_dlp_unreadable_answer,
     "RT-HITL-05": exec_approval_preview,
     "RT-HITL-06": exec_console_framing,
+    "RT-DLP-08": exec_approval_reason,
     "RT-EVAL-01": exec_eval_gate,
     "RT-INJ-01": exec_direct_override,
     "RT-INJ-03": exec_tool_output_injection,

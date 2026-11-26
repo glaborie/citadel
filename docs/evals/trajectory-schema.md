@@ -11,8 +11,8 @@ Citadel grades **agent trajectories**, not just final text. The unit of evaluati
 | `retrieval.query` | run_id, tenant_id, filter_set_hash, top_k, collection, audit_id | ACL filter set is recorded, not inferred |
 | `retrieval.result` | run_id, chunk_ids, source_uris, revisions, scores | Post-redaction metadata only |
 | `policy.decision` | run_id, subject, tool, args_hash, decision, rule_id, audit_id | Allow, deny, or requires_approval |
-| `dlp.event` | run_id, surface, categories, action, detector_version, audit_id | Redact, block, or pass |
-| `approval.decision` | run_id, approver, decision, reason, ttl, rule_id, audit_id | Signed; before tool execution |
+| `dlp.event` | run_id, surface, categories, action, detector_version, audit_id | Redact, block, or pass; `surface` is `input`, `output` or `record` (an approval reason: persisted and rendered, never executed) |
+| `approval.decision` | run_id, approver, decision, reason, reason_sha256, reason_chars, dlp_redactions, dlp_categories, ttl, rule_id, audit_id | Signed; before tool execution. `reason` is the redacted text, never the raw one |
 | `tool.call` | run_id, tool, tier, args_hash, idempotency_key, status, duration, audit_id | Effects described, secrets excluded |
 | `recovery` | run_id, failed_step, strategy, outcome | Retry, fallback, escalate, abort |
 | `run.end` | run_id, outcome, citation_ids, safety_flags | Final span |

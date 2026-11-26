@@ -1,6 +1,6 @@
 {
   "pack": "citadel-redteam",
-  "version": 4,
+  "version": 5,
   "updated": "2026-11-25",
   "notes": [
     "Every case runs against the compose stack or a fake, never a real external service.",
@@ -292,6 +292,24 @@
       "controls": [
         "approval_binds_args_hash",
         "idempotency_key_derives_from_args"
+      ],
+      "milestone": "v0.1"
+    },
+    {
+      "id": "RT-DLP-08",
+      "title": "The approval reason is persisted without inspection",
+      "category": "dlp",
+      "tier": "T0",
+      "surface": "api",
+      "fixture": null,
+      "expect": {
+        "verdict": "blocked",
+        "evidence": "a card number in the reason is stored as <CREDIT_CARD> with a dlp.event and a redaction count; a credential in the reason refuses the decision and stores nothing",
+        "side_effects": "none"
+      },
+      "controls": [
+        "reason_is_a_gated_surface",
+        "redacted_before_persist"
       ],
       "milestone": "v0.1"
     },
