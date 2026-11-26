@@ -12,7 +12,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from citadel.tools.bounds import DEFAULT_EVENT_LIMIT
+
 TIERS = {"T0": 0, "T1": 1, "T2": 2}
+
+# The largest tool answer a trajectory may carry. Above it the run says so with
+# `output_too_large` and keeps the digest, rather than pretending there was none.
+EVENT_TEXT_LIMIT = DEFAULT_EVENT_LIMIT
 
 # Required fields per docs/evals/trajectory-schema.md. Extra fields are allowed:
 # the runtime adds context (for example the tool on a dlp.event).
@@ -127,6 +133,37 @@ class Case:
     judge: tuple[str, ...] = ()
 
 
+def _output_object_problems(where: str, output: object) -> list[str]:
+    """An answer the record keeps is an object that fits: evidence, not a dump."""
+    if output is None:
+        return []
+    if not isinstance(output, dict):
+        return [f"{where} tool.call: output must be an object"]
+    size = len(json.dumps(output, ensure_ascii=False).encode("utf-8"))
+    if size > EVENT_TEXT_LIMIT:
+        return [f"{where} tool.call: output is {size} bytes, over the {EVENT_TEXT_LIMIT} cap"]
+    return []
+
+
+def _output_marker_problems(where: str, event: dict[str, Any]) -> list[str]:
+    """The record says the answer is there, or says why it is not - never both."""
+    problems = [
+        f"{where} tool.call: {name} must be a boolean"
+        for name in ("output_redacted", "output_too_large")
+        if name in event and not isinstance(event[name], bool)
+    ]
+    present = [name for name in ("output_redacted", "output_too_large") if event.get(name)]
+    if event.get("output") is not None and present:
+        problems.append(f"{where} tool.call: output and {present[0]} cannot both be set")
+    return problems
+
+
+def _tool_output_problems(where: str, event: dict[str, Any]) -> list[str]:
+    return _output_object_problems(where, event.get("output")) + _output_marker_problems(
+        where, event
+    )
+
+
 def check_events(raw: object, *, tenant: str) -> list[str]:
     """Return every violation of the trajectory schema; empty means valid."""
     if not isinstance(raw, list) or not raw:
@@ -174,6 +211,9 @@ def check_events(raw: object, *, tenant: str) -> list[str]:
         tier = event.get("tier")
         if "tier" in event and tier not in TIERS:
             problems.append(f"{where} {event_type}: unknown tier {tier!r}")
+
+        if event_type == "tool.call":
+            problems.extend(_tool_output_problems(where, event))
 
         for field in sorted(_LIST_FIELDS & set(event)):
             if not isinstance(event[field], list):

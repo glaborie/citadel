@@ -346,3 +346,64 @@ def test_the_step_ceiling_stops_a_model_that_never_answers() -> None:
     )
     assert trajectory.outcome == "budget_exceeded"
     assert "steps=2" in trajectory.steps[-2].detail
+
+def _person_and_gateway(hits: list[dict[str, object]]) -> Any:
+    """The detector reports a PERSON; the gateway answers with a plain completion."""
+
+    def opener(request: Any, timeout: Any = None) -> _Response:
+        url = str(request.full_url)
+        if "/analyze" in url:
+            return _Response(hits)
+        return _Response(
+            {
+                "model": "auto/best-reasoning",
+                "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 1, "cost": 1e-06},
+            }
+        )
+
+    return opener
+
+
+def test_a_ledger_prompt_is_not_refused_for_a_name_the_detector_invented() -> None:
+    """`T0\nmodel.call` reads as a PERSON; refusing on that makes every item ungradeable."""
+    hits = [{"entity_type": "PERSON", "start": 0, "end": 3, "score": 0.85}]
+    client = OmniRouteClient(
+        base_url="http://omniroute.test",
+        api_key="k",
+        analyzer_url=ANALYZER,
+        opener=_person_and_gateway(hits),
+        dlp_surface="record",
+    )
+
+    reply = client.complete(messages=[{"role": "user", "content": "T0 model.call"}])
+
+    assert reply.content == "ok"
+
+
+def test_the_same_name_still_stops_a_prompt_that_is_not_from_the_record() -> None:
+    """The default surface is unchanged: an input prompt fails closed."""
+    hits = [{"entity_type": "PERSON", "start": 0, "end": 3, "score": 0.85}]
+    client = OmniRouteClient(
+        base_url="http://omniroute.test",
+        api_key="k",
+        analyzer_url=ANALYZER,
+        opener=_person_and_gateway(hits),
+    )
+
+    with pytest.raises(dlp.DlpBlocked):
+        client.complete(messages=[{"role": "user", "content": "T0 model.call"}])
+
+
+def test_a_credential_blocks_even_a_ledger_prompt() -> None:
+    """`block` is a hard-rule verdict on every surface, so the opt-in cannot hide a token."""
+    client = OmniRouteClient(
+        base_url="http://omniroute.test",
+        api_key="k",
+        analyzer_url=ANALYZER,
+        opener=detector([]),
+        dlp_surface="record",
+    )
+
+    with pytest.raises(dlp.DlpBlocked):
+        client.complete(messages=[{"role": "user", "content": f"log tail\n{CREDENTIAL}"}])

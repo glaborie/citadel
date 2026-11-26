@@ -26,12 +26,17 @@ from citadel.db import tenant_connection
 from citadel.hashing import arguments_hash
 from citadel.net import open_url
 from citadel.policy import AuthorizationRequest, RelationChecker, RunStore, authorize
-from citadel.policy.catalog import load_catalog
+from citadel.policy.catalog import ToolSpec, load_catalog
+from citadel.research import external_flags, label_untrusted
+from citadel.research.client import ResearchError, ResearchRefused, search_web
+from citadel.research.client import fetch_page as fetch_remote_page
 from citadel.telemetry import record_span
 from citadel.tools.bounds import DEFAULT_EVENT_LIMIT, bound
 from citadel.workflows.types import PolicyOutcome, RunEnd, ToolCall, ToolResult
 
 DLP_URL = os.environ.get("CITADEL_DLP_URL", "http://presidio:3000")
+SEARXNG_URL = os.environ.get("CITADEL_SEARXNG_URL", "http://searxng:8080")
+FETCHER_URL = os.environ.get("CITADEL_FETCHER_URL", "http://fetcher:8040")
 # A tool result is part of the activity's return value, which Temporal
 # stores in event history: an uncapped 64 KB body becomes 64 KB of history
 # per call, and a few calls reach the 256 KB warning.
@@ -44,6 +49,23 @@ class Bounded:
 
     payload: dict[str, Any]
     dropped: dict[str, str]
+
+
+@dataclass(frozen=True)
+class WebContent:
+    """What a research service answered, before the output gate."""
+
+    rule_id: str
+    text: str
+    source: str
+
+
+def _web_payload(content: WebContent, flags: list[str]) -> dict[str, Any]:
+    return {
+        "stdout": label_untrusted(content.text, source=content.source),
+        "source": content.source,
+        "content_flags": flags,
+    }
 
 
 def bounded_payload(payload: dict[str, Any]) -> Bounded:
@@ -127,6 +149,13 @@ def _offload_pointer(stored: dict[str, Any]) -> tuple[str, bool]:
     return digest, kept
 
 
+def _stored_flags(stored: dict[str, Any]) -> list[str]:
+    flags = stored.get("content_flags")
+    if not isinstance(flags, list):
+        return []
+    return [str(flag) for flag in flags if isinstance(flag, str)]
+
+
 def _replayed(call: ToolCall, key: str, stored: dict[str, Any]) -> ToolResult:
     """The result of a repeated attempt, describing the output it hands back.
 
@@ -149,6 +178,7 @@ def _replayed(call: ToolCall, key: str, stored: dict[str, Any]) -> ToolResult:
         output_truncated=bool(stored.get("truncated", False)),
         output_ref=output_ref,
         output_stored=stored_any,
+        content_flags=_stored_flags(stored),
     )
 
 
@@ -322,6 +352,31 @@ class ToolActivities:
             )
         return result
 
+    def _recorded_output(
+        self, result: ToolResult
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, str]:
+        """The tool's answer as the record may keep it, and why if it does not.
+
+        Mirrors `_recorded_arguments`: the ledger is append-only, so it takes the same
+        gate, and a body the detector blocks is not carried at all - the digest and the
+        event remain. Oversized is not the same as refused: a 200 KB body the record
+        cannot hold is marked as such, because "no output" and "output too large to
+        keep" are different facts about a run and a grader has to tell them apart.
+        """
+        if not result.output:
+            return None, None, "absent"
+        text = json.dumps(result.output, ensure_ascii=False)
+        if len(text.encode("utf-8")) > EVENT_OUTPUT_LIMIT:
+            return None, None, "too_large"
+        try:
+            gated, report = dlp.gate(text, surface="record", analyzer_url=DLP_URL)
+        except dlp.DlpBlocked as exc:
+            return None, exc.report, "redacted"
+        values, event = _gated_values(gated, report)
+        if values is None:
+            return None, event, "redacted"
+        return values, event, "kept"
+
     def _audit_tool(
         self,
         call: ToolCall,
@@ -333,6 +388,7 @@ class ToolActivities:
         duration: int = 0,
     ) -> None:
         arguments, gated = self._recorded_arguments(call)
+        output, output_event, disposition = self._recorded_output(result)
         payload: dict[str, Any] = {
             "run_id": call.run_id,
             "tool": call.tool,
@@ -351,9 +407,16 @@ class ToolActivities:
             # Where the bytes the cap removed can be read back, when they were kept.
             "output_ref": result.output_ref,
             "output_stored": result.output_stored,
+            "content_flags": result.content_flags,
         }
         if arguments is not None:
             payload["arguments"] = arguments
+        if disposition == "kept" and output is not None:
+            payload["output"] = output
+        elif disposition == "redacted":
+            payload["output_redacted"] = True
+        elif disposition == "too_large":
+            payload["output_too_large"] = True
         ref = self._audit.append(
             tenant_id=call.tenant_id,
             event_type="tool.call",
@@ -375,6 +438,8 @@ class ToolActivities:
         # After the call it explains, so the record reads call then reason.
         if gated is not None:
             self._audit_dlp(call, [gated])
+        if output_event is not None:
+            self._audit_dlp(call, [output_event])
 
     def _recorded_arguments(
         self, call: ToolCall
@@ -425,9 +490,127 @@ class ToolActivities:
 
     def _invoke(self, call: ToolCall) -> ToolResult:
         spec = load_catalog().get(call.tool)
+        if spec is not None and spec.transport == "http":
+            return self._invoke_web(call, spec)
         if spec is not None and spec.tier == "T1":
             return self._invoke_operator(call)
         return self._invoke_sandbox(call)
+
+    def _invoke_web(self, call: ToolCall, spec: ToolSpec) -> ToolResult:
+        """Search or fetch, with the same policy, DLP and caps as a CLI tool.
+
+        The URL guard and the byte cap live in the fetcher; this method owns the
+        half the sandbox would otherwise own: the input gate, the output gate
+        (credential blocks, PII redacts), the label that reaches the model and
+        the statement the trajectory keeps.
+        """
+        denied = self._web_owner(call, spec)
+        if denied is not None:
+            return denied
+        blocked = self._web_input(call)
+        if blocked is not None:
+            return blocked
+        content = self._web_fetch(call, spec)
+        if isinstance(content, ToolResult):
+            return content
+        gated = self._web_output(call, content.text)
+        if isinstance(gated, ToolResult):
+            return gated
+        text, flags = gated
+        return self._web_record(call, spec, replace(content, text=text), flags)
+
+    def _web_owner(self, call: ToolCall, spec: ToolSpec) -> ToolResult | None:
+        if spec.agent == call.agent_id:
+            return None
+        return ToolResult(
+            status="denied",
+            tool=call.tool,
+            rule_id="tool.agent_mismatch",
+            detail=f"{call.tool} belongs to the {spec.agent} agent",
+        )
+
+    def _web_input(self, call: ToolCall) -> ToolResult | None:
+        raw_arguments = json.dumps(call.arguments, ensure_ascii=False)
+        try:
+            _, report = dlp.gate(raw_arguments, surface="input", analyzer_url=DLP_URL)
+        except dlp.DlpBlocked as exc:
+            self._audit_dlp(call, [exc.report])
+            return ToolResult(
+                status="denied",
+                tool=call.tool,
+                rule_id="dlp.unavailable" if exc.reason == "dlp_unavailable" else "dlp.blocked",
+                detail="DLP refused this research call before it left the worker",
+            )
+        self._audit_dlp(call, [report])
+        return None
+
+    def _web_fetch(self, call: ToolCall, spec: ToolSpec) -> ToolResult | WebContent:
+        try:
+            if spec.service == "searxng":
+                return self._web_search(call)
+            if spec.service == "fetcher":
+                return self._web_page(call)
+        except ResearchRefused as exc:
+            return self._web_error(call, "research.url_refused", str(exc), status="denied")
+        except ResearchError as exc:
+            return self._web_error(call, "research.unavailable", str(exc))
+        return self._web_error(
+            call, "research.unconfigured", f"{call.tool} names no research service"
+        )
+
+    def _web_error(
+        self, call: ToolCall, rule_id: str, detail: str, *, status: str = "failed"
+    ) -> ToolResult:
+        return ToolResult(status=status, tool=call.tool, rule_id=rule_id, detail=detail[:300])
+
+    def _web_search(self, call: ToolCall) -> WebContent:
+        query = str(call.arguments.get("query", ""))
+        text = search_web(query, base_url=SEARXNG_URL)
+        return WebContent(rule_id="research.search", text=text, source="")
+
+    def _web_page(self, call: ToolCall) -> WebContent:
+        url = str(call.arguments.get("url", ""))
+        page = fetch_remote_page(url, base_url=FETCHER_URL)
+        text = str(page["text"])
+        if page.get("truncated"):
+            text += "\n\n[the fetcher stopped at its byte cap; this page is truncated]"
+        return WebContent(rule_id="research.fetch", text=text, source=str(page.get("url", "")))
+
+    def _web_output(self, call: ToolCall, text: str) -> ToolResult | tuple[str, list[str]]:
+        try:
+            text, report = dlp.gate(text, surface="output", analyzer_url=DLP_URL)
+        except dlp.DlpBlocked as exc:
+            self._audit_dlp(call, [exc.report])
+            return ToolResult(
+                status="denied",
+                tool=call.tool,
+                rule_id="dlp.unavailable" if exc.reason == "dlp_unavailable" else "dlp.blocked",
+                detail="DLP refused the fetched content before it entered context",
+            )
+        self._audit_dlp(call, [report])
+        return text, external_flags(text)
+
+    def _web_record(
+        self,
+        call: ToolCall,
+        spec: ToolSpec,
+        content: WebContent,
+        flags: list[str],
+    ) -> ToolResult:
+        capped, output_ref, stored = cap_and_offload(self._dsn, call, _web_payload(content, flags))
+        return ToolResult(
+            status="executed",
+            tool=call.tool,
+            rule_id=content.rule_id,
+            detail=f"{call.tool} answered through {spec.service}",
+            output=capped,
+            output_sha256=str(capped.get("output_sha256", "")),
+            output_bytes=int(capped.get("original_bytes", 0)),
+            output_truncated=bool(capped.get("truncated", False)),
+            output_ref=output_ref,
+            output_stored=stored,
+            content_flags=flags,
+        )
 
     def _invoke_operator(self, call: ToolCall) -> ToolResult:
         if not call.approval_ref:

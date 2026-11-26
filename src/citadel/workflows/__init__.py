@@ -16,7 +16,7 @@ from citadel.workflows.specialist import SpecialistWorkflow
 def workflows_for(role: str) -> list[Any]:
     if role == "orchestrator":
         return [RunWorkflow]
-    if role in ("docker", "github"):
+    if role in ("docker", "github", "researcher"):
         return [SpecialistWorkflow]
     raise ValueError(f"unknown worker role {role!r}")
 

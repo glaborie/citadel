@@ -12,7 +12,13 @@ import pytest
 
 from citadel.evals.graders import Grade, grade
 from citadel.evals.runner import main
-from citadel.evals.schema import Case, DatasetError, check_events, load_cases
+from citadel.evals.schema import (
+    EVENT_TEXT_LIMIT,
+    Case,
+    DatasetError,
+    check_events,
+    load_cases,
+)
 
 GOLDEN = Path(__file__).resolve().parents[1] / "evals" / "golden" / "golden.json"
 
@@ -285,3 +291,37 @@ def test_the_cli_fails_an_uncited_claim(tmp_path: Path, capsys: pytest.CaptureFi
 
     assert main([str(path)]) == 1
     assert "operational claim" in capsys.readouterr().out
+
+
+def test_a_recorded_output_has_to_be_an_object() -> None:
+    """A bare string is not an answer a grader can assert on."""
+    case = _case("devops-001")
+    events = [dict(event) for event in case.events]
+    call = next(event for event in events if event["type"] == "tool.call")
+    call["output"] = "a bare string"
+
+    problems = check_events(events, tenant=case.tenant)
+    assert any("output must be an object" in problem for problem in problems)
+
+
+def test_an_output_over_the_cap_is_refused_not_truncated_silently() -> None:
+    """A trajectory carrying more than the cap is a writer bug, not a large answer."""
+    case = _case("devops-001")
+    events = [dict(event) for event in case.events]
+    call = next(event for event in events if event["type"] == "tool.call")
+    call["output"] = {"stdout": "x" * (EVENT_TEXT_LIMIT + 1)}
+
+    problems = check_events(events, tenant=case.tenant)
+    assert any("over the" in problem and "cap" in problem for problem in problems)
+
+
+def test_output_and_a_marker_cannot_both_be_set() -> None:
+    """The record says the answer is there, or says why it is not - not both."""
+    case = _case("devops-001")
+    events = [dict(event) for event in case.events]
+    call = next(event for event in events if event["type"] == "tool.call")
+    call["output"] = {"ok": 1}
+    call["output_redacted"] = True
+
+    problems = check_events(events, tenant=case.tenant)
+    assert any("cannot both be set" in problem for problem in problems)

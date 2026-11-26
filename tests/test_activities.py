@@ -519,8 +519,10 @@ def test_pii_in_the_arguments_is_redacted_before_the_record_keeps_it(
     payload = ledger.events[0]["payload"]
     assert payload["arguments"] == {"owner": "<PERSON>"}
     gated = [event for event in ledger.events if event["event_type"] == "dlp.event"]
-    assert [(event["payload"]["surface"], event["payload"]["action"]) for event in gated] == [
-        ("record", "redact")
+    # The output now takes the same gate, so this asserts the argument surface rather
+    # than the exact set of events - and the values above are the real claim.
+    assert ("record", "redact") in [
+        (event["payload"]["surface"], event["payload"]["action"]) for event in gated
     ]
 
 
@@ -540,8 +542,8 @@ def test_a_secret_in_the_arguments_keeps_the_digest_and_no_values(
     assert "arguments" not in payload
     assert payload["args_hash"] == arguments_hash(item.arguments)
     gated = [event for event in ledger.events if event["event_type"] == "dlp.event"]
-    assert [(event["payload"]["surface"], event["payload"]["action"]) for event in gated] == [
-        ("record", "block")
+    assert ("record", "block") in [
+        (event["payload"]["surface"], event["payload"]["action"]) for event in gated
     ]
 
 
