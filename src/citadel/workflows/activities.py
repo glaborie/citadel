@@ -107,6 +107,20 @@ def cap_and_offload(
     return bounded.payload, str(primary["digest"]), stored
 
 
+def _offload_pointer(stored: dict[str, Any]) -> tuple[str, bool]:
+    """The digest a stored payload points at, and whether any body was kept.
+
+    `cap_and_offload` writes `offloaded` keyed by stream; stdout is the primary one
+    when it exists, because that is the stream a reader asks for first.
+    """
+    offloaded = stored.get("offloaded")
+    if not isinstance(offloaded, dict) or not offloaded:
+        return "", False
+    primary = offloaded.get("stdout") or next(iter(offloaded.values()))
+    digest = str(primary.get("digest", "")) if isinstance(primary, dict) else ""
+    kept = any(bool(item.get("stored")) for item in offloaded.values() if isinstance(item, dict))
+    return digest, kept
+
 def _replayed(call: ToolCall, key: str, stored: dict[str, Any]) -> ToolResult:
     """The result of a repeated attempt, describing the output it hands back.
 
@@ -115,16 +129,7 @@ def _replayed(call: ToolCall, key: str, stored: dict[str, Any]) -> ToolResult:
     kept. Returning the payload with the typed fields left at their defaults told a
     consumer "no output" about a call whose output is stored and readable.
     """
-    offloaded = stored.get("offloaded")
-    output_ref = ""
-    stored_any = False
-    if isinstance(offloaded, dict) and offloaded:
-        primary = offloaded.get("stdout") or next(iter(offloaded.values()))
-        if isinstance(primary, dict):
-            output_ref = str(primary.get("digest", ""))
-        stored_any = any(
-            bool(item.get("stored")) for item in offloaded.values() if isinstance(item, dict)
-        )
+    output_ref, stored_any = _offload_pointer(stored)
     return ToolResult(
         status="replayed",
         tool=call.tool,
