@@ -34,9 +34,33 @@ def activities_for(
     if role == "orchestrator":
         # The orchestrator owns sequencing: it may ask the model for a step and it
         # writes run.end. It never holds a side-effecting tool.
+        # Imported here, not at module scope: the Temporal workflow sandbox
+        # imports this package too, and qdrant_client cannot load twice.
+        from qdrant_client import QdrantClient
+
+        from citadel.env import optional_secret
+        from citadel.retrieval.activities import RetrievalActivities
+        from citadel.retrieval.embed import OmniRouteEmbedder
+        from citadel.retrieval.rerank import TeiReranker
+
         run_activities = RunActivities(dsn=dsn, audit=audit)
         model_activities = ModelActivities(dsn=dsn, audit=audit)
-        return [run_activities.finish_run, model_activities.next_step]
+        retrieval = RetrievalActivities(
+            audit=audit,
+            client=QdrantClient(url=os.environ.get("CITADEL_QDRANT_URL", "http://qdrant:6333")),
+            embedder=OmniRouteEmbedder(
+                base_url=os.environ.get("OMNIROUTE_URL", "http://omniroute:20128/v1"),
+                api_key=optional_secret("OMNIROUTE_API_KEY"),
+                model=os.environ.get("CITADEL_EMBEDDING_MODEL", ""),
+            ),
+            reranker=TeiReranker(os.environ.get("CITADEL_RERANKER_URL", "")),
+            analyzer_url=os.environ.get("CITADEL_DLP_URL", "http://presidio:3000"),
+        )
+        return [
+            run_activities.finish_run,
+            model_activities.next_step,
+            retrieval.retrieve,
+        ]
     if checker is None or run_store is None:
         raise ValueError(f"{role} activities need a policy checker and run store")
     impl = ToolActivities(

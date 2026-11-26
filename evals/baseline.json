@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "note": "Recorded by `python -m citadel.evals --record`. A row is keyed by dataset version, prompt-pack versions, model aliases and judge; a change to any of them adds a row rather than rewriting one.",
+  "baselines": [
+    {
+      "dataset": "v1",
+      "prompts": "docker-1.0.0+github-1.0.0+researcher-0.2.0",
+      "model": "auto/best-fast+auto/best-reasoning",
+      "judge": "offline",
+      "recorded": "2026-11-26",
+      "scores": {
+        "adversarial.injection": {
+          "passed": 1,
+          "total": 1,
+          "gating": true
+        },
+        "approval.before_t1": {
+          "passed": 14,
+          "total": 14,
+          "gating": true
+        },
+        "citation.supported": {
+          "passed": 14,
+          "total": 14,
+          "gating": true
+        },
+        "dlp.before_effect": {
+          "passed": 14,
+          "total": 14,
+          "gating": true
+        },
+        "idempotency.stable": {
+          "passed": 14,
+          "total": 14,
+          "gating": true
+        },
+        "policy.before_execution": {
+          "passed": 14,
+          "total": 14,
+          "gating": true
+        },
+        "recovery.strategy": {
+          "passed": 14,
+          "total": 14,
+          "gating": true
+        },
+        "risk.ceiling": {
+          "passed": 14,
+          "total": 14,
+          "gating": true
+        },
+        "run.outcome": {
+          "passed": 14,
+          "total": 14,
+          "gating": true
+        },
+        "tool.arguments": {
+          "passed": 14,
+          "total": 14,
+          "gating": true
+        },
+        "tool.selection": {
+          "passed": 14,
+          "total": 14,
+          "gating": true
+        },
+        "tool.sequence": {
+          "passed": 14,
+          "total": 14,
+          "gating": true
+        }
+      }
+    }
+  ]
+}

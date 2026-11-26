@@ -37,6 +37,40 @@ evidence was thin.
 6. **Record the result** with the run: judge model and alias, prompt-pack
    version, rubric version, rater initials, n, kappa per dimension.
 
+## Sample v1: what it is, and what it is not
+
+Step 1 above says *sample 30 trajectories from the last accepted eval run, 10/10/10*. The
+accepted run has no such spread: the golden dataset is 14 cases that all pass, and exactly
+one of them carried a judge block. Rather than wait for a run that does not exist, sample
+v1 is **authored** and says so:
+
+- ten **clean** items are the golden trajectories with a written final answer;
+- ten **partial** and ten **near-miss** items are the same trajectories treated worse - a
+  dropped citation, a restart before any diagnosis, a step repeated without a new idea, an
+  answer that claims more than the events contain - each with the flaw named in the file
+  and in `evals/calibration/sample-v1.json` under `provenance`.
+
+What that buys: 30 trajectories with a known spread, on which a human and the judge can be
+compared. What it costs: a kappa measured here describes agreement on these trajectories,
+not the distribution of live runs. Both sentences belong next to the numbers.
+
+```bash
+make calibration-sample     # rebuild the sample from the goldens (deterministic)
+make calibration-sheet      # the blind labelling sheet for the human rater
+make calibration-check      # sample, sheet and key agree with what is committed
+```
+
+The sheet renumbers items by a hash of the sample id, and the band and mutation live in
+`evals/calibration/label-key.json` so that a kappa cannot be computed against a rater who
+already knew which items were meant to be bad.
+
+## What is still missing
+
+The judge run itself. Kappa needs `human` and `judge` scores for the same items; the sheet
+produces the first, `python -m citadel.evals --judge ALIAS` on the sample produces the
+second, and `scripts/cohens_kappa.py` turns each dimension into a number. Until those
+exist, a dimension keeps `gates: false` - which is where all four are today.
+
 ## Rubric shape
 
 Four levels per dimension, anchored on observable trajectory evidence, not on
