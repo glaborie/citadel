@@ -70,6 +70,11 @@ class Case:
     controls: tuple[str, ...]
     milestone: str
     known_gap: str | None
+    # A case with no offline executor may still run in the live suite; the path is
+    # named here so the guard can check it exists and mentions the case.
+    live: str | None = None
+    # For a case nobody covers yet: the issue that will close it.
+    owner: str | None = None
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> Case:
@@ -87,6 +92,8 @@ class Case:
             controls=tuple(str(c) for c in raw["controls"]),
             milestone=str(raw["milestone"]),
             known_gap=None if raw.get("known_gap") is None else str(raw["known_gap"]),
+            live=None if raw.get("live") is None else str(raw["live"]),
+            owner=None if raw.get("owner") is None else str(raw["owner"]),
         )
 
 
@@ -94,6 +101,53 @@ class Case:
 class Outcome:
     passed: bool
     detail: str
+
+
+def current_milestone(version: str) -> str:
+    """`0.1.4` is the v0.1 milestone; the pack ships with the code that declares it."""
+    return f"v{'.'.join(version.split('.')[:2])}"
+
+
+def _milestone_key(milestone: str) -> tuple[int, int]:
+    parts = milestone.lstrip("v").split(".")
+    try:
+        return (int(parts[0]), int(parts[1]) if len(parts) > 1 else 0)
+    except (IndexError, ValueError):
+        raise ValueError(f"unreadable milestone {milestone!r}") from None
+
+
+def declaration_gaps(
+    cases: list[Case], *, current: str, root: Path | None = None
+) -> list[str]:
+    """Every case must be executed somewhere, or declared with an owner beyond today.
+
+    A case is covered when an offline executor exists, or when it names the live
+    test that runs it. Anything else is pending, and pending is only allowed for a
+    later milestone with the issue that will close it named.
+
+    The guard this replaces accepted `v0.1` as a valid milestone for a case pending
+    on v0.1, so it passed for every unimplemented case on the shipped version: it
+    described the pack, it did not constrain it.
+    """
+    base = root or PACK.parent
+    gaps: list[str] = []
+    for case in cases:
+        if case.id in EXECUTORS:
+            if case.live is not None:
+                gaps.append(f"{case.id}: has an executor and a live declaration")
+            continue
+        if case.live is not None:
+            path = base / case.live
+            if not path.exists():
+                gaps.append(f"{case.id}: live declaration {case.live} does not exist")
+            elif case.id not in path.read_text(encoding="utf-8"):
+                gaps.append(f"{case.id}: {case.live} never names the case")
+            continue
+        if _milestone_key(case.milestone) <= _milestone_key(current):
+            gaps.append(f"{case.id}: pending at {case.milestone}, the shipped milestone")
+        if not case.owner:
+            gaps.append(f"{case.id}: pending with no owner")
+    return gaps
 
 
 def load_cases() -> list[Case]:

@@ -1,6 +1,6 @@
 {
   "pack": "citadel-redteam",
-  "version": 5,
+  "version": 6,
   "updated": "2026-11-25",
   "notes": [
     "Every case runs against the compose stack or a fake, never a real external service.",
@@ -43,7 +43,8 @@
         "content_flags_on_ingress",
         "no_write_tool_without_approval"
       ],
-      "milestone": "v0.2"
+            "owner": "#96 - retrieval producers, v0.2 retrieval surface",
+"milestone": "v0.2"
     },
     {
       "id": "RT-INJ-03",
@@ -115,7 +116,8 @@
         "pinned_tool_allowlist",
         "description_hash_review"
       ],
-      "milestone": "v0.4"
+            "owner": "#91 - ADR-022, the v0.4 MCP surface",
+"milestone": "v0.4"
     },
     {
       "id": "RT-AUTHZ-01",
@@ -133,7 +135,8 @@
         "acl_filter_in_query",
         "per_tenant_collection_or_filter"
       ],
-      "milestone": "v0.1"
+            "live": "live/test_stack.py",
+"milestone": "v0.1"
     },
     {
       "id": "RT-AUTHZ-02",
@@ -471,7 +474,8 @@
         "audit_before_resume",
         "hash_chain_verify"
       ],
-      "milestone": "v0.1"
+            "live": "live/test_audit_gap.py",
+"milestone": "v0.1"
     },
     {
       "id": "RT-CACHE-01",
@@ -488,7 +492,8 @@
       "controls": [
         "cache_partition_key_complete"
       ],
-      "milestone": "v0.3"
+            "owner": "ADR-018 - no Citadel-owned cache before v0.3",
+"milestone": "v0.3"
     },
     {
       "id": "RT-CACHE-02",
@@ -505,7 +510,8 @@
       "controls": [
         "policy_version_in_cache_key"
       ],
-      "milestone": "v0.3"
+            "owner": "ADR-018 - no Citadel-owned cache before v0.3",
+"milestone": "v0.3"
     },
     {
       "id": "RT-COST-01",
