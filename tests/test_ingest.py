@@ -27,8 +27,13 @@ def _points(client: QdrantClient, tenant: str) -> list[models.Record]:
     return client.scroll(ingest.collection_name(tenant), limit=100, with_payload=True)[0]
 
 
+def _payload(point: models.Record) -> dict[str, Any]:
+    assert point.payload is not None
+    return point.payload
+
+
 def _revisions(client: QdrantClient, tenant: str) -> set[str]:
-    return {str(point.payload["revision"]) for point in _points(client, tenant)}
+    return {str(_payload(point)["revision"]) for point in _points(client, tenant)}
 
 
 def test_one_collection_per_tenant_and_nothing_crosses() -> None:
@@ -40,11 +45,11 @@ def test_one_collection_per_tenant_and_nothing_crosses() -> None:
 
     assert client.collection_exists("citadel_lab-a")
     assert client.collection_exists("citadel_lab-b")
-    a = {point.payload["tenant_id"] for point in _points(client, "lab-a")}
-    b = {point.payload["tenant_id"] for point in _points(client, "lab-b")}
+    a = {_payload(point)["tenant_id"] for point in _points(client, "lab-a")}
+    b = {_payload(point)["tenant_id"] for point in _points(client, "lab-b")}
     assert a == {"lab-a"}
     assert b == {"lab-b"}
-    assert {point.payload["source_uri"] for point in _points(client, "lab-b")} == {"fs:handbook"}
+    assert {_payload(point)["source_uri"] for point in _points(client, "lab-b")} == {"fs:handbook"}
 
 
 def test_reingesting_an_unchanged_file_stores_nothing_new() -> None:
@@ -139,7 +144,7 @@ def _github(payloads: dict[str, dict[str, Any]], seen: list[Any]) -> Callable[..
 def test_github_reads_use_the_existing_token_and_the_repo_is_the_source() -> None:
     body = "# Runbook\n\nRestart the api after postgres is reachable."
     seen: list[Any] = []
-    payloads = {
+    payloads: dict[str, dict[str, Any]] = {
         "/git/trees/main?recursive=1": {
             "tree": [{"type": "blob", "path": "runbooks/api.md", "sha": "abc", "size": len(body)}],
             "truncated": False,
