@@ -57,6 +57,17 @@ migrate:  ## Re-apply migrations/*.sql to an existing database
 test:  ## Run the test suite (live tests skip themselves)
 	uv run pytest
 
+.PHONY: check
+
+# What CI runs, in the same order, plus the smell gate at info severity. The
+# smell-check job only fails on warnings, so a warning-only local run lets new
+# info-level findings merge; this target is the stricter local gate.
+check:  ## Run the CI gates locally before a push
+	uv run ruff check .
+	uv run mypy
+	uv run pytest
+	uvx smellcheck src/ --min-severity info --baseline .smellcheck-baseline.json --fail-on info
+
 .PHONY: eval
 
 # Deterministic grading of the committed trajectory fixtures.
