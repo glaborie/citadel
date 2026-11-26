@@ -121,6 +121,7 @@ class OmniRouteClient:
         alias: str = "auto/best-fast",
         timeout: int = DEFAULT_TIMEOUT_SECONDS,
         opener: Opener | None = None,
+        dlp_surface: str = "input",
     ) -> None:
         # OMNIROUTE_URL is documented as the OpenAI base (http://host:port/v1);
         # accept both forms so a correct config and a bare host both work.
@@ -132,6 +133,7 @@ class OmniRouteClient:
         self.analyzer_url = analyzer_url
         self.alias = alias
         self.timeout = timeout
+        self.dlp_surface = dlp_surface
         self._opener: Opener = opener or urlopen
 
     def complete(
@@ -144,9 +146,17 @@ class OmniRouteClient:
     ) -> Reply:
         # A credential typed into a prompt is exactly what this blocks: the
         # conversation never reaches the provider with a live token in it.
+        #
+        # `dlp_surface="record"` is for a caller whose text came out of the ledger,
+        # where the `record` surface already redacted in place and refused
+        # credentials at write time. Gating that text as `input` instead fails
+        # closed on a detector false positive - spaCy reads formatted records
+        # (`T0\nmodel.call`, `model_alias=`) as PERSON names - and an instrument
+        # that cannot read the record measures nothing. Credentials still block
+        # here, because `block` is a hard-rule verdict on every surface.
         dlp.gate(
             _conversation_text(messages),
-            surface="input",
+            surface=self.dlp_surface,
             analyzer_url=self.analyzer_url,
             opener=self._opener,
         )

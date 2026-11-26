@@ -21,8 +21,21 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
 SHEET = ROOT / "docs" / "evals" / "calibration-sheet-v1.md"
-KEY = ROOT / "evals" / "calibration" / "label-key-v1.json"
-JUDGE = ROOT / "evals" / "calibration" / "judge-scores-v1.json"
+def artifact_paths(version: int) -> tuple[Path, Path, Path, Path, Path]:
+    """The five artifacts of one rubric version: sheet, key, judge, human, per-dimension.
+
+    Version 1 keeps the bare `labels/` directory because that measurement is signed
+    evidence; later versions get their own, so a re-measurement cannot overwrite it.
+    """
+    calibration = ROOT / "evals" / "calibration"
+    labels = calibration / "labels" if version == 1 else calibration / f"labels-v{version}"
+    return (
+        ROOT / "docs" / "evals" / f"calibration-sheet-v{version}.md",
+        calibration / f"label-key-v{version}.json",
+        calibration / f"judge-scores-v{version}.json",
+        calibration / f"labels-human-v{version}.json",
+        labels,
+    )
 HUMAN = ROOT / "evals" / "calibration" / "labels-human-v1.json"
 LABELS = ROOT / "evals" / "calibration" / "labels"
 DIMENSIONS = ("plan", "grounding", "recovery", "escalation")
@@ -61,10 +74,17 @@ def _complete(scores: dict[str, dict[str, int]]) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Join human labels and judge scores")
     parser.add_argument("--check", action="store_true", help="verify the merged inputs")
+    parser.add_argument(
+        "--version",
+        type=int,
+        default=1,
+        help="rubric version whose sheet, key, scores and labels to pair",
+    )
     args = parser.parse_args(argv)
+    sheet_path, key_path, judge_path, human_path, labels_dir = artifact_paths(args.version)
 
-    sheet = parse_sheet(SHEET.read_text(encoding="utf-8"))
-    key = json.loads(KEY.read_text(encoding="utf-8"))
+    sheet = parse_sheet(sheet_path.read_text(encoding="utf-8"))
+    key = json.loads(key_path.read_text(encoding="utf-8"))
     problems = _complete(sheet)
     if set(sheet) != set(key["items"]):
         problems.append(
@@ -75,10 +95,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"labels: {problem}", file=sys.stderr)
         return 1
 
-    HUMAN.write_text(
+    human_path.write_text(
         json.dumps(
             {
-                "sheet": "docs/evals/calibration-sheet-v1.md",
+                "sheet": f"docs/evals/calibration-sheet-v{args.version}.md",
                 "items": [
                     {"id": item, "sample_id": key["items"][item], **sheet[item]}
                     for item in sorted(sheet)
@@ -95,15 +115,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     judged: dict[tuple[str, str], int] = {}
-    if JUDGE.exists():
-        payload = json.loads(JUDGE.read_text(encoding="utf-8"))
+    if judge_path.exists():
+        payload = json.loads(judge_path.read_text(encoding="utf-8"))
         judged = {
             (item["id"], item["dimension"]): int(item["score"])
             for item in payload["items"]
             if "score" in item
         }
 
-    LABELS.mkdir(parents=True, exist_ok=True)
+    labels_dir.mkdir(parents=True, exist_ok=True)
     for dimension in DIMENSIONS:
         rows = [
             {
@@ -131,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"({', '.join(missing)}) - kappa will use n={len(rows)}",
                 file=sys.stderr,
             )
-        (LABELS / f"{dimension}.json").write_text(
+        (labels_dir / f"{dimension}.json").write_text(
             json.dumps({"items": rows}, indent=2) + "\n", encoding="utf-8"
         )
         print(f"labels: {dimension} -> {len(rows)} paired items")

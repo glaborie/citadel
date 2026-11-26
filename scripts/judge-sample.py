@@ -30,7 +30,11 @@ sys.path.insert(0, str(ROOT / "src"))
 
 SAMPLE = ROOT / "evals" / "calibration" / "sample-v1.json"
 RUBRICS = ROOT / "evals" / "golden" / "rubrics.json"
-OUT = ROOT / "evals" / "calibration" / "judge-scores-v1.json"
+
+
+def scores_path(version: int) -> Path:
+    """One file per rubric version: a score belongs to the anchors it was read against."""
+    return ROOT / "evals" / "calibration" / f"judge-scores-v{version}.json"
 
 
 def _judge(alias: str, analyzer: str) -> Any:
@@ -43,20 +47,31 @@ def _judge(alias: str, analyzer: str) -> Any:
         api_key=optional_secret("OMNIROUTE_API_KEY"),
         analyzer_url=analyzer,
         alias=alias,
+        dlp_surface="record",
     )
+    # The judge reads rendered ledger events, so its prompt is gated as `record`:
+    # a fixture that trips the PERSON detector must not make an item ungradeable,
+    # while a credential still blocks (see `OmniRouteClient.dlp_surface`).
     return OmniJudge(client, alias=alias)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Judge the calibration sample")
+    parser.add_argument(
+        "--version",
+        type=int,
+        default=1,
+        help="rubric version whose score file to write",
+    )
     parser.add_argument("--alias", required=True, help="model alias, as the gateway knows it")
     parser.add_argument(
         "--analyzer",
         default=os.environ.get("PRESIDIO_URL", "http://presidio:3000"),
         help="DLP analyzer the model client uses before any prompt leaves",
     )
-    parser.add_argument("--out", type=Path, default=OUT)
+    parser.add_argument("--out", type=Path, default=None, help="defaults to scores_path(version)")
     args = parser.parse_args(argv)
+    out = args.out or scores_path(args.version)
 
     from citadel.evals.rubric import JudgeMisread, JudgeUnavailable, load_rubrics, render_evidence
     from citadel.evals.schema import load_cases
@@ -97,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
         "recorded": date.today().isoformat(),
         "items": items,
     }
-    args.out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     scored = sum(1 for item in items if "score" in item)
     print(f"judge: {scored}/{len(items)} dimension scores from {args.alias} -> {args.out.name}")
     if problems:

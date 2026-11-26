@@ -1,3 +1,4 @@
+VERSION ?= 1
 .DEFAULT_GOAL := help
 
 .PHONY: help
@@ -90,11 +91,11 @@ calibration-check:  ## Sample, sheet and labels agree with what is committed
 
 .PHONY: calibration-judge
 calibration-judge:  ## Judge the sample (needs the stack up; records scores, not a verdict)
-	uv run python scripts/judge-sample.py --alias $${JUDGE_ALIAS:-auto/best-reasoning}
+	uv run python scripts/judge-sample.py --alias $${JUDGE_ALIAS:-auto/best-reasoning} --version $(VERSION)
 
 .PHONY: calibration-kappa
 calibration-kappa:  ## Pair labels with scores and measure kappa per dimension
-	uv run python scripts/label-merge.py
+	uv run python scripts/label-merge.py --version $(VERSION)
 	for dim in plan grounding recovery escalation; do \
 		uv run python scripts/cohens_kappa.py evals/calibration/labels/$$dim.json; \
 	done
