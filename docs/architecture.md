@@ -150,7 +150,7 @@ The same holds for tool *metadata* from outside the catalog. A registry entry - 
 
 Tool execution runs in an ephemeral sidecar: no egress by default, `cap_drop: ALL`, `no-new-privileges`, read-only rootfs, seccomp, pids/memory limits, per-invocation lifetime, no Docker socket, no inherited secrets. gVisor `runsc` is the approved one-line runtime upgrade. Docker Sandboxes (`sbx`) was rejected and uninstalled: proprietary, login-gated, host daemon outside Compose, 10–30 s startup and an agent allowlist. WASM cannot run general Python tools. `RestrictedPython`-style approaches are not security boundaries.
 
-Researcher network access is via SearXNG + a trafilatura fetcher with size/MIME/time limits, no cookies, no internal targets, no cloud metadata addresses, and explicit `untrusted_external` labelling before content reaches a model.
+Researcher network access is via SearXNG + a trafilatura fetcher with size/MIME/time limits, no cookies, no internal targets, no cloud metadata addresses, and explicit `untrusted_external` labelling before content reaches a model. The two services sit on a dedicated `web` bridge (not `edge`) for egress and on an internal `research` network shared only with `worker-researcher`; neither publishes a port. The worker calls them directly, so the sandbox keeps its no-egress property.
 
 ## 8. Audit, telemetry and evaluation
 

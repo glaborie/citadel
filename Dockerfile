@@ -26,6 +26,16 @@ COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 RUN uv sync --frozen --no-dev --no-editable
 
+# The fetcher is the only image that carries trafilatura. Keeping it out of the
+# shared runtime keeps a scraper dependency off the API, workers and sandbox.
+FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS build-fetcher
+COPY --from=uv /uv /usr/local/bin/uv
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+WORKDIR /app
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+RUN uv sync --frozen --no-dev --no-editable --extra fetcher
+
 # Shared runtime. Deliberately carries no CLI binaries.
 FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS runtime
 RUN useradd --create-home --uid 10001 citadel
@@ -64,3 +74,10 @@ COPY --from=ghcli /usr/local/bin/gh /usr/local/bin/gh
 USER citadel
 EXPOSE 8020
 CMD ["uvicorn", "citadel.tools.runner:app", "--host", "0.0.0.0", "--port", "8020"]
+
+# The bounded web fetcher. It has egress, so it is the one image that carries
+# the scraper; it holds no secret, no model and no policy.
+FROM runtime AS fetcher
+COPY --from=build-fetcher /app/.venv /app/.venv
+EXPOSE 8040
+CMD ["uvicorn", "citadel.research.service:app", "--host", "0.0.0.0", "--port", "8040"]

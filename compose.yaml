@@ -330,6 +330,64 @@ services:
     networks:
       - internal
 
+  searxng:
+    # Public search for the Researcher. It needs the internet, so it sits on
+    # `web`; it also needs to be reachable by the researcher worker, so it sits
+    # on `research` (internal). It is deliberately not on `edge` and publishes
+    # no port: the only caller is the worker, on the internal side.
+    image: searxng/searxng:2026.11.23-a7163d091@sha256:a7fc607aa6723f5a8982105bcc5ffba4d1b9fc7c6922a31a88d6e4cba49ef12a
+    user: "977:977"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+      - /var/cache/searxng:uid=977,gid=977,mode=0755
+    volumes:
+      - ./docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    logging: *logging
+    networks:
+      - research
+      - web
+
+  fetcher:
+    # The only component that opens an arbitrary URL. The guard, byte cap, MIME
+    # allowlist and timeout are in citadel.research; trafilatura is baked into
+    # this image only. `web` is the internet, `research` is how the worker
+    # reaches it; no `edge`, no published port, no secret.
+    build:
+      context: .
+      target: fetcher
+    image: citadel-fetcher:0.1.0
+    user: "10001:10001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    pids_limit: 128
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8040/healthz', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    logging: *logging
+    networks:
+      - research
+      - web
+
   api:
     <<: *app
     command:
@@ -492,6 +550,45 @@ services:
     healthcheck:
       test: ["CMD", "python", "-c", "import pathlib,sys,time; p=pathlib.Path('/tmp/citadel-heartbeat'); sys.exit(0 if p.exists() and time.time()-p.stat().st_mtime < 30 else 1)"]
       <<: *http-health
+
+  worker-researcher:
+    <<: *app
+    command: ["python", "-m", "citadel.worker"]
+    environment:
+      CITADEL_WORKER_ROLE: researcher
+      TEMPORAL_ADDRESS: temporal:7233
+      OPENFGA_API_URL: http://openfga:8080
+      CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
+      CITADEL_OPERATOR_URL: http://operator:8030
+      CITADEL_DB_DSN_FILE: /run/secrets/db_dsn
+      CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
+      OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-citadel}
+      CITADEL_APPROVAL_TTL_SECONDS: ${CITADEL_APPROVAL_TTL_SECONDS:-300}
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      MLFLOW_EXPERIMENT_ID: ${MLFLOW_EXPERIMENT_ID:-1}
+      # The two research tools run here, not in the sandbox: the fetcher is the
+      # only egress point and the worker holds no CLI or socket.
+      CITADEL_DLP_URL: http://presidio:3000
+      CITADEL_SEARXNG_URL: http://searxng:8080
+      CITADEL_FETCHER_URL: http://fetcher:8040
+    secrets:
+      - db_dsn
+    depends_on:
+      temporal:
+        condition: service_healthy
+      searxng:
+        condition: service_healthy
+      fetcher:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib,sys,time; p=pathlib.Path('/tmp/citadel-heartbeat'); sys.exit(0 if p.exists() and time.time()-p.stat().st_mtime < 30 else 1)"]
+      <<: *http-health
+    networks:
+      # Internal for Temporal, policy, the ledger and DLP; `research` for the
+      # two web services. It never joins `web` or `edge`.
+      - internal
+      - research
 
   operator:
     build:
@@ -744,3 +841,10 @@ networks:
   # The proxy must never be reachable from the general internal network.
   sandbox:
     internal: true
+  # Researcher worker <-> SearXNG/fetcher only. Internal, so a compromised
+  # worker cannot use it to reach the internet directly.
+  research:
+    internal: true
+  # The only network with a route off the host that the web services use.
+  # Deliberately distinct from `edge`, which the host-reachable services share.
+  web: {}

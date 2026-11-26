@@ -139,7 +139,17 @@ def test_catalog_covers_the_documented_tiers() -> None:
     assert catalog["restart_service"].tier == "T1"
     assert catalog["open_remediation_pr"].tier == "T1"
     assert catalog["delete_volume"].tier == "T2"
-    assert {spec.agent for spec in catalog.values()} == {"docker", "github"}
+    assert {spec.agent for spec in catalog.values()} == {"docker", "github", "researcher"}
+
+
+def test_the_researcher_owns_only_the_two_web_tools() -> None:
+    catalog = load_catalog()
+    owned = {name for name, spec in catalog.items() if spec.agent == "researcher"}
+    assert owned == {"search_web", "fetch_page"}
+    allowed = authorize(request(agent_id="researcher", tool="search_web"), FakeChecker(), STORE)
+    assert (allowed.outcome, allowed.rule_id) == ("allow", "policy.allowed")
+    denied = authorize(request(agent_id="researcher", tool="restart_service"), FakeChecker(), STORE)
+    assert (denied.outcome, denied.rule_id) == ("deny", "tool.agent_mismatch")
 
 
 def test_t1_tools_are_exactly_the_two_allowed() -> None:

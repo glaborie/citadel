@@ -35,11 +35,7 @@ class Usage:
     def add(self, other: Usage) -> Usage:
         """Totals propagate doubt: one unreported call makes the total unreported."""
         both_reported = self.cost_source == "reported" and other.cost_source == "reported"
-        cost = (
-            (self.cost_usd or 0.0) + (other.cost_usd or 0.0)
-            if both_reported
-            else None
-        )
+        cost = (self.cost_usd or 0.0) + (other.cost_usd or 0.0) if both_reported else None
         return Usage(
             prompt_tokens=self.prompt_tokens + other.prompt_tokens,
             completion_tokens=self.completion_tokens + other.completion_tokens,
@@ -109,6 +105,8 @@ class Step:
     tier: str | None = None
     tokens: int = 0
     cost_usd: float | None = None
+    # Content labels carried by this step (untrusted_external, prompt_injection).
+    flags: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -125,6 +123,9 @@ class Trajectory:
         return tuple(
             step.tool for step in self.steps if step.kind == "tool.call" and step.tool is not None
         )
+
+    def safety_flags(self) -> tuple[str, ...]:
+        return tuple(sorted({flag for step in self.steps for flag in step.flags}))
 
     def summary(self) -> dict[str, Any]:
         """What the report may print: outcomes, counts and cost, never payloads."""

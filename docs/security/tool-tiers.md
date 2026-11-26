@@ -6,7 +6,7 @@ Every tool is classified before it can be registered. Unclassified tools are den
 
 **Default: allowed without HITL.**
 
-Registered in v0.1: `inspect_containers`, `inspect_container`, `read_logs`, `get_service_health`, `compose_config`, `search_code`, `get_pr_status`, `pr_diff`. Design placeholders, not yet registered: `read_file` (allowlisted paths), `search_docs`, `fetch_page`.
+Registered in v0.1: `inspect_containers`, `inspect_container`, `read_logs`, `get_service_health`, `compose_config`, `search_code`, `get_pr_status`, `pr_diff`. Registered in v0.2: `search_web`, `fetch_page` (Researcher only). Design placeholders, not yet registered: `read_file` (allowlisted paths), `search_docs`.
 
 Controls: tenant-scoped token, OpenFGA allow, DLP on input and output, source citation for retrieval, cache permitted with full partition key, audit event still emitted, sandbox still applies.
 
@@ -33,6 +33,27 @@ at least one argument, and `RT-AUTHZ-07` proves three widened calls are refused.
 Output still passes DLP before it is served, and for credentials the action is a
 **refusal**, not a redaction: a diff or a config file with a token in it is not the
 artifact a reviewer asked for, so it is not served at all.
+
+### Web research
+
+`search_web` and `fetch_page` belong to the Researcher and to no other agent. They
+are T0, and they run in the worker rather than the sandbox: the fetcher is the
+only component with an egress route, so the model-influenced sandbox never gains
+one (ADR-020).
+
+- The fetcher resolves a URL, refuses any answer that is not global unicast, then
+  pins the connection to the checked address. Only ports 80 and 443 are allowed;
+  every redirect is checked again.
+- A page is fetched with no cookies, no credentials, a 10-second timeout, a MIME
+  allowlist and a 2 MB cap. A page over the cap is truncated and marked, not
+  served in full.
+- The query and the fetched text pass the same input/output DLP gates as any CLI
+  tool. A credential blocks; PII is redacted.
+- The text is prefixed `untrusted_external` before it reaches a model. A lexical
+  detector adds `prompt_injection` when the page instructs the reader; the run
+  continues read-only and both labels reach `tool.call` and `run.end`.
+- A T1 call suggested by a page still needs a human approval, and the Researcher
+  has no T1 tool to call in the first place.
 
 ## T1 — Reversible write
 
