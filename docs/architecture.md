@@ -183,11 +183,13 @@ MLflow stores versioned eval datasets and `mlflow.genai.evaluate()` results. Sco
 
 ## 10. Deployment topology (Compose, as built)
 
-`api`, `approval-ui`, `temporal`, `temporal-ui`, `worker-orchestrator`, `worker-docker`, `worker-github`, `keycloak`, `postgres`, `openfga`, `openfga-migrate`, `omniroute`, `presidio`, `mlflow`, `qdrant`, `tool-runner`, `operator`, `docker-socket-proxy`, `github-egress`. That is 19 definitions, 18 running services (`openfga-migrate` is a one-shot). Images are pinned by digest in `compose.yaml`.
+`api`, `approval-ui`, `temporal`, `temporal-ui`, `worker-orchestrator`, `worker-docker`, `worker-github`, `keycloak`, `postgres`, `openfga`, `openfga-migrate`, `omniroute`, `presidio`, `mlflow`, `qdrant`, `reranker`, `tool-runner`, `operator`, `docker-socket-proxy`, `github-egress`. That is 20 definitions, 19 running services (`openfga-migrate` is a one-shot). Images are pinned by digest in `compose.yaml`.
 
-Ingestion is a one-shot `ingest` service behind the `tools` profile: `make ingest TENANT=lab-a` reads `knowledge/` and the repositories named by `CITADEL_INGEST_REPOS` into that tenant's Qdrant collection. It is the only service with the knowledge mount and the GitHub read token, and it reaches GitHub through the same allowlisted proxy as the sandbox.
+Ingestion is a one-shot `ingest` service behind the `tools` profile: `make ingest TENANT=lab-a` reads `knowledge/` and the repositories named by `CITADEL_INGEST_REPOS` into that tenant's Qdrant collection, writing a dense vector from the configured embedding alias (after DLP redaction, so the hosted endpoint sees cleaned text) and a server-side BM25 sparse vector. It is the only service with the knowledge mount and the GitHub read token, and it reaches GitHub through the same allowlisted proxy as the sandbox.
 
-Not yet in Compose because they belong to v0.2: `worker-researcher`, `reranker` (TEI), `searxng`, `fetcher`. Prometheus/Grafana remain optional (v0.3).
+The query half is `RetrievalActivities.retrieve` on the orchestrator worker: it builds the ACL filter from the subject's entitlement tags, sends the dense and sparse prefetches in one Qdrant request, fuses with RRF, redacts each candidate through DLP, reranks top 50 to top 8 with the in-stack TEI service, and writes `retrieval.query` / `retrieval.result` with a filter-set digest and citation metadata. No workflow calls it yet; the Researcher specialist in #131 is the first caller.
+
+Not yet in Compose because they belong to v0.2: `worker-researcher`, `searxng`, `fetcher`. Prometheus/Grafana remain optional (v0.3).
 
 ## 11. Verification items (all resolved except the last)
 

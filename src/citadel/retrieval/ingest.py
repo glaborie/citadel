@@ -10,11 +10,10 @@ file adds one revision and leaves the old one retrievable. Old revisions are not
 pruned here (shortcut: re-index is idempotent, not a retention policy; add a
 prune when storage matters).
 
-Vectors are deliberately partial: the sparse BM25 slot is created now because
-its term frequencies are computed locally and its IDF server-side, while the
-dense name arrives in #130 once the embedding endpoint is decided (#136) -
-Qdrant can add a named vector to a live collection. Points omit the dense vector
-until then.
+Two named vectors: server-side BM25 in `text`, and a dense vector in `dense`
+computed through the embedding endpoint. Without an embedder the point carries
+only the sparse vector, which is what the unit tests and a sparse-only rebuild
+use; the query path requires both.
 
     python -m citadel.retrieval.ingest --tenant lab-a --root /knowledge \
         --repo owner/runbooks
@@ -43,11 +42,15 @@ from urllib.request import Request
 
 from qdrant_client import QdrantClient, models
 
-from citadel import env, net
+from citadel import dlp, env, net
+from citadel.retrieval.embed import Embedder, OmniRouteEmbedder
 
 DEFAULT_QDRANT_URL: Final = os.environ.get("CITADEL_QDRANT_URL", "http://qdrant:6333")
+DEFAULT_OMNIROUTE_URL: Final = os.environ.get("OMNIROUTE_URL", "http://omniroute:20128/v1")
+DEFAULT_DLP_URL: Final = os.environ.get("CITADEL_DLP_URL", "http://presidio:3000")
 GITHUB_API: Final = "https://api.github.com"
 SPARSE: Final = "text"
+DENSE: Final = "dense"
 # A runbook is text. Larger files are a binary the model should not be fed, and
 # a whole-repo tree can contain a lockfile larger than the whole value of the repo.
 MAX_FILE_BYTES: Final = 1_000_000
@@ -233,18 +236,28 @@ def allowed_repos(configured: str, requested: list[str]) -> tuple[str, ...]:
     return tuple(requested)
 
 
-def _create(client: QdrantClient, name: str) -> None:
+def _create(client: QdrantClient, name: str, size: int | None) -> None:
     client.create_collection(
         name,
-        vectors_config={},
+        vectors_config=(
+            {DENSE: models.VectorParams(size=size, distance=models.Distance.COSINE)}
+            if size is not None
+            else {}
+        ),
         sparse_vectors_config={SPARSE: models.SparseVectorParams(modifier=models.Modifier.IDF)},
     )
 
 
-def _point(tenant: str, document: Document, rev: str, index: int, text: str) -> models.PointStruct:
+def _point(
+    tenant: str, document: Document, rev: str, chunk: tuple[int, str], dense: list[float] | None
+) -> models.PointStruct:
+    index, text = chunk
+    vector: dict[str, Any] = {SPARSE: sparse(text)}
+    if dense is not None:
+        vector[DENSE] = dense
     return models.PointStruct(
         id=point_id(tenant, document.source_uri, rev, index),
-        vector={SPARSE: sparse(text)},
+        vector=vector,
         payload={
             "tenant_id": tenant,
             "source_uri": document.source_uri,
@@ -256,17 +269,49 @@ def _point(tenant: str, document: Document, rev: str, index: int, text: str) -> 
     )
 
 
-def _index(tenant: str, documents: Iterable[Document]) -> tuple[int, list[models.PointStruct]]:
-    files = 0
+def _chunked(documents: Iterable[Document]) -> list[tuple[Document, str, list[str]]]:
+    """Every document and its chunks, before any vector is computed."""
+    return [
+        (document, revision(document.content), chunks(document.content)) for document in documents
+    ]
+
+
+def _vectors(
+    texts: list[str], embedder: Embedder | None, redact: Callable[[str], str] | None
+) -> list[list[float]]:
+    if embedder is None or not texts:
+        return []
+    embedded = [redact(text) if redact is not None else text for text in texts]
+    vectors = embedder.embed(embedded)
+    if len(vectors) != len(texts):
+        raise IngestRefused("the embedder returned a different number of vectors than chunks")
+    return vectors
+
+
+def _points(
+    tenant: str,
+    prepared: list[tuple[Document, str, list[str]]],
+    vectors: list[list[float]],
+) -> list[models.PointStruct]:
     points: list[models.PointStruct] = []
-    for document in documents:
-        files += 1
-        rev = revision(document.content)
-        points.extend(
-            _point(tenant, document, rev, index, text)
-            for index, text in enumerate(chunks(document.content))
-        )
-    return files, points
+    position = 0
+    for document, rev, pieces in prepared:
+        for index, text in enumerate(pieces):
+            dense = vectors[position] if vectors else None
+            points.append(_point(tenant, document, rev, (index, text), dense))
+            position += 1
+    return points
+
+
+def _index(
+    tenant: str,
+    documents: Iterable[Document],
+    embedder: Embedder | None,
+    redact: Callable[[str], str] | None,
+) -> tuple[int, list[models.PointStruct]]:
+    prepared = _chunked(documents)
+    texts = [text for _, _, pieces in prepared for text in pieces]
+    return len(prepared), _points(tenant, prepared, _vectors(texts, embedder, redact))
 
 
 def ingest(
@@ -274,12 +319,20 @@ def ingest(
     *,
     tenant: str,
     documents: Iterable[Document],
+    embedder: Embedder | None = None,
+    redact: Callable[[str], str] | None = None,
 ) -> Report:
-    """Upsert every chunk into the tenant's collection. Idempotent by point id."""
+    """Upsert every chunk into the tenant's collection. Idempotent by point id.
+
+    `redact` runs before the embedding call: the hosted endpoint sees the same
+    DLP-cleaned text the query path serves, while the stored chunk stays as written.
+    """
     name = collection_name(tenant)
-    if not client.collection_exists(name):
-        _create(client, name)
-    files, points = _index(tenant, documents)
+    files, points = _index(tenant, documents, embedder, redact)
+    if points and not client.collection_exists(name):
+        vector = points[0].vector
+        dense = vector.get(DENSE) if isinstance(vector, dict) else None
+        _create(client, name, len(dense) if isinstance(dense, list) else None)
     for start in range(0, len(points), BATCH):
         client.upsert(name, points=points[start : start + BATCH], wait=True)
     return Report(collection=name, documents=files, chunks=len(points))
@@ -313,10 +366,38 @@ def _sources(args: argparse.Namespace) -> list[Iterable[Document]]:
     return sources
 
 
+def _embedder() -> Embedder:
+    """The endpoint is configuration, and a chunk without a dense vector is unfindable."""
+    model = os.environ.get("CITADEL_EMBEDDING_MODEL", "")
+    if not model:
+        raise IngestRefused("CITADEL_EMBEDDING_MODEL is not set, so no dense vector can be built")
+    return OmniRouteEmbedder(
+        base_url=os.environ.get("OMNIROUTE_URL", DEFAULT_OMNIROUTE_URL),
+        api_key=env.optional_secret("OMNIROUTE_API_KEY"),
+        model=model,
+    )
+
+
+def _redactor() -> Callable[[str], str]:
+    """The embedding endpoint is hosted, so it sees the same DLP-cleaned text."""
+
+    def redact(text: str) -> str:
+        clean, _ = dlp.gate(
+            text, surface="output", analyzer_url=os.environ.get("CITADEL_DLP_URL", DEFAULT_DLP_URL)
+        )
+        return clean
+
+    return redact
+
+
 def _run(sources: list[Iterable[Document]], args: argparse.Namespace) -> None:
     client = QdrantClient(url=args.qdrant_url)
+    embedder = _embedder()
+    redact = _redactor()
     for source in sources:
-        report = ingest(client, tenant=args.tenant, documents=source)
+        report = ingest(
+            client, tenant=args.tenant, documents=source, embedder=embedder, redact=redact
+        )
         print(f"{report.collection}: {report.documents} documents, {report.chunks} chunks")
 
 
@@ -324,7 +405,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         _run(_sources(args), args)
-    except (IngestRefused, OSError) as exc:
+    except (IngestRefused, dlp.DlpBlocked, OSError) as exc:
         # A source read fails closed: what was already upserted is idempotent, so
         # re-running after the fix completes rather than duplicates.
         print(f"ingest refused: {exc}", file=sys.stderr)

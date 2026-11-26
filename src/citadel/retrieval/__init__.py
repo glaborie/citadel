@@ -1,1 +1,1 @@
-"""Permission-aware retrieval: ingestion now, query and citations in #130."""
+"""Permission-aware retrieval: ingest, hybrid query, rerank and citations."""
