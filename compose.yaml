@@ -251,6 +251,9 @@ services:
       - edge
 
   mlflow:
+    # UI internal-only: workers write via OTLP, so no browser path exists. It
+    # may not publish a port or join edge before the ADR-017 Keycloak proxy
+    # fronts it; tests/test_mlflow_exposure.py enforces that.
     image: ghcr.io/mlflow/mlflow:v3.18.0@sha256:257204c77980b0f3450a26eb6089e487603fcdd4509529eadaf88f90669f5c13
     command:
       - mlflow
