@@ -1,0 +1,24 @@
+name: Code Smell Detection
+on: 
+  pull_request:
+    branches:
+    - master
+
+jobs:
+  smell-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write  # Only needed if you want PR comments (e.g., with Smelly Python)
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install smellcheck
+        run: pip install smellcheck
+      - name: Run smellcheck
+        run: |
+          # Generate a baseline once (and commit it), or just fail on any warning
+          smellcheck src/ --fail-on warning
