@@ -44,7 +44,7 @@ from citadel.policy import (
 from citadel.policy.openfga import build_checker
 from citadel.runs import PostgresRunStore
 from citadel.skills import SkillPack, SkillPackError, SkillPackMissing, load_pack
-from citadel.workflows.orchestrator import RunWorkflow, child_workflow_id
+from citadel.workflows.orchestrator import RunWorkflow
 from citadel.workflows.specialist import SpecialistWorkflow
 from citadel.workflows.types import APPROVAL_TTL, ApprovalDecision, RunInput
 
@@ -432,6 +432,20 @@ def create_app(
             relation = "can_approve"
             decided_by = f"agent:{approver.tenant_id}/{approver.actor_id}"
 
+        # The row is the only durable record of which child workflow parked: its
+        # id carries the task-run step, so run and tool cannot rebuild it.
+        with tenant_connection(_dsn(), approver.tenant_id) as conn:
+            parked = conn.execute(
+                "SELECT workflow_id FROM approval_requests"
+                " WHERE run_id = %s AND tool = %s AND status = 'pending'",
+                (body.run_id, body.tool),
+            ).fetchone()
+        if parked is None:
+            raise HTTPException(status_code=409, detail="no pending approval for this run and tool")
+        workflow_id = str(parked[0])
+        if not workflow_id:
+            raise HTTPException(status_code=409, detail="approval recorded no workflow to resume")
+
         # The approval preview is a rendering surface, so the arguments are
         # checked before they can be signed, audited or shown to a human. The
         # operator re-checks at execution; this closes the earlier surface.
@@ -539,6 +553,23 @@ def create_app(
             redactions=redactions,
         )
 
+        decision = ApprovalDecision(
+            approved=body.approved,
+            approver=decided_by,
+            reason=reason,
+            approval_ref=ref.audit_id if body.approved else None,
+        )
+        # Audit is written before the workflow is resumed. The row is closed only
+        # after the signal lands, so a failed signal leaves the approval pending
+        # and retryable instead of consumed for a workflow nobody resumed.
+        try:
+            asyncio.run(_signal_decision(workflow_id, decision))
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"workflow {workflow_id} did not accept the decision: {str(exc)[:200]}",
+            ) from exc
+
         close_request(
             dsn=_dsn(),
             tenant_id=approver.tenant_id,
@@ -548,15 +579,6 @@ def create_app(
             approver=decided_by,
             reason=reason,
         )
-
-        decision = ApprovalDecision(
-            approved=body.approved,
-            approver=decided_by,
-            reason=reason,
-            approval_ref=ref.audit_id if body.approved else None,
-        )
-        # Audit is written before the workflow is resumed.
-        asyncio.run(_signal_decision(child_workflow_id(body.run_id, body.tool), decision))
 
         return {"audit_id": ref.audit_id, "approved": body.approved}
 

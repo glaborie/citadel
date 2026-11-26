@@ -74,6 +74,43 @@ def test_clean_arguments_are_approved_and_audited(
     assert [event["event_type"] for event in events] == ["approval.decision"]
 
 
+def test_the_signal_target_is_the_workflow_the_row_records(
+    env: tuple[TestClient, list[dict[str, Any]], str],
+) -> None:
+    """The row's id carries the step; rebuilding it from run and tool loses it."""
+    client, _events, token = env
+    targets: list[str] = []
+
+    def capture(coro: Any) -> None:
+        targets.append(coro.cr_frame.f_locals["workflow_id"])
+        coro.close()
+
+    with mock.patch("citadel.api.app.asyncio.run", capture):
+        assert _post(client, token, {"service": "checkout-api"}).status_code == 200
+
+    assert targets == ["run-run-1-0-restart_service"]
+
+
+def test_a_failed_signal_leaves_the_approval_pending(
+    env: tuple[TestClient, list[dict[str, Any]], str],
+) -> None:
+    """An approval consumed for a workflow nobody resumed is a lost run."""
+    client, _events, token = env
+
+    def boom(coro: Any) -> None:
+        coro.close()
+        raise RuntimeError("workflow not found")
+
+    with (
+        mock.patch("citadel.api.app.asyncio.run", boom),
+        mock.patch("citadel.api.app.close_request") as mirrored,
+    ):
+        response = _post(client, token, {"service": "checkout-api"})
+
+    assert response.status_code == 502
+    mirrored.assert_not_called()
+
+
 def test_secret_in_arguments_is_refused_before_mint(
     env: tuple[TestClient, list[dict[str, Any]], str],
 ) -> None:

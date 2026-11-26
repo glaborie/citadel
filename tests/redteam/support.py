@@ -41,6 +41,8 @@ class FakeDB:
         self.used_jti: set[str] = set()
         # (user, agent) of the run the API is asked to approve.
         self.run_owner: tuple[str, ...] = ("user-alice", "docker")
+        # The workflow id the pending row records; the API must signal exactly this.
+        self.pending_workflow: tuple[str, ...] | None = ("run-run-1-0-restart_service",)
 
     @contextmanager
     def connect(self, _dsn: str, _tenant: str) -> Iterator[FakeConn]:
@@ -80,6 +82,9 @@ class FakeConn:
                 return Cursor(None)
             self._db.used_jti.add(jti)
             return Cursor((jti,))
+
+        if statement.startswith("SELECT workflow_id FROM approval_requests"):
+            return Cursor(self._db.pending_workflow)
 
         if statement.startswith("UPDATE approval_requests"):
             self._db.approvals.append(params)
