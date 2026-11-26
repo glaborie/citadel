@@ -34,8 +34,12 @@ The table is the architecture; the **Status** column says which rows exist as co
 
 `make up` starts 17 services, unwrapping secrets through SOPS first into
 gitignored Docker-secret files under `secrets/` (never into a container
-environment). It does not build: use `make rebuild` after a pull, or the old
-image keeps running. All health-checked services report healthy; `./scripts/clean-clone-check.sh` installs and passes 381 tests (32 skipped: live-network and live-model cases) from a fresh clone with no hidden files.
+environment). It builds the reranker image on first use, because the model is
+baked in at a pinned revision and never fetched at runtime. It does not build
+the other images: use `make rebuild` after a pull, or the old image keeps
+running. All health-checked services report healthy; `./scripts/clean-clone-check.sh`
+installs and passes 381 tests (32 skipped: live-network and live-model cases)
+from a fresh clone with no hidden files.
 
 | Control | Evidence |
 |---|---|
@@ -111,7 +115,8 @@ docs/security/tool-tiers.md
 docs/evals/trajectory-schema.md
 docs/adr/                     # 23 ADRs and an index
 compose.yaml                  # 17 services, images pinned by digest
-Dockerfile                    # one file, three targets: app / operator / sandbox
+Dockerfile                    # app / operator / sandbox, from one pinned base
+docker/reranker.Dockerfile    # TEI plus the model, pinned by revision
 Makefile                      # `make up` unwraps secrets through SOPS first
 migrations/                   # RLS, tool ledger, audit chain, approvals
 policy/                       # OpenFGA model + compiled JSON
