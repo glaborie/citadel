@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
@@ -11,17 +12,45 @@ def template() -> str:
     return (ROOT / "docker" / "haproxy.cfg.template").read_text(encoding="utf-8")
 
 
-def test_archive_and_export_are_denied_before_the_containers_allow() -> None:
-    rules = [
+def rules() -> list[str]:
+    return [
         line.strip() for line in template().splitlines() if line.strip().startswith("http-request")
     ]
-    deny = next(i for i, rule in enumerate(rules) if "deny" in rule and "archive|export" in rule)
-    blanket = next(
-        i
-        for i, rule in enumerate(rules)
-        if rule.startswith("http-request allow") and rule.endswith("{ env(CONTAINERS) -m bool }")
+
+
+def containers_allows() -> list[str]:
+    return [
+        rule
+        for rule in rules()
+        if rule.startswith("http-request allow")
+        and "/containers" in rule
+        and "{ env(CONTAINERS) -m bool }" in rule
+    ]
+
+
+def test_archive_and_export_are_denied_before_the_containers_allow() -> None:
+    all_rules = rules()
+    deny = next(
+        i for i, rule in enumerate(all_rules) if "deny" in rule and "archive|export" in rule
     )
-    assert deny < blanket, "CONTAINERS=1 would still allow the filesystem endpoints"
+    allows = [i for i, rule in enumerate(all_rules) if rule in containers_allows()]
+    assert allows, "CONTAINERS=1 would still allow the filesystem endpoints"
+    assert deny < min(allows), "CONTAINERS=1 would still allow the filesystem endpoints"
+
+
+def test_only_citadel_names_and_the_list_endpoint_are_allowed() -> None:
+    allows = containers_allows()
+    assert len(allows) == 2, f"container scope must be name + list only, got {allows}"
+    scoped = next(rule for rule in allows if "citadel-" in rule)
+    listing = next(rule for rule in allows if "citadel-" not in rule)
+    found = re.search(r"-m reg -i (\S+)", scoped)
+    assert found, scoped
+    pattern = re.compile(found.group(1), re.IGNORECASE)
+    assert pattern.search("/containers/citadel-api-1/json")
+    assert pattern.search("/v1.43/containers/citadel-postgres-1/logs")
+    assert not pattern.search("/containers/bastion-db/json")
+    assert not pattern.search("/containers/" + "a" * 64 + "/json")
+    assert re.search(r"/containers/json\$", listing)
 
 
 def test_the_template_is_mounted_over_the_image_default() -> None:
