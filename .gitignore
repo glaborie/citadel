@@ -20,8 +20,7 @@ strix_runs/
 docs/evals/red-team-report.md
 
 # Materialised Docker secrets (scripts/provision-secrets.sh). Never commit.
-secrets/db_dsn
-secrets/run_token_private_key
-secrets/console_session_key
-secrets/gh_write_token
-secrets/gh_read_token
+# The SOPS-encrypted source is the one tracked file in this directory.
+secrets/*
+!secrets/citadel.env
+.smellcheck-cache

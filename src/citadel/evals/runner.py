@@ -9,6 +9,7 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
+from citadel.env import optional_secret
 from citadel.evals.graders import Grade, grade
 from citadel.evals.rubric import Judge, OmniJudge, judge_case, load_rubrics
 from citadel.evals.schema import DatasetError, load_cases
@@ -43,7 +44,7 @@ def _judge_from_env(alias: str, analyzer_url: str) -> Judge:
 
     client = OmniRouteClient(
         base_url=os.environ.get("OMNIROUTE_URL", "http://omniroute:20128/v1"),
-        api_key=os.environ.get("OMNIROUTE_API_KEY", ""),
+        api_key=optional_secret("OMNIROUTE_API_KEY"),
         analyzer_url=analyzer_url,
         alias=alias or "auto/best-fast",
     )

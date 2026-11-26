@@ -27,3 +27,29 @@ def test_archive_and_export_are_denied_before_the_containers_allow() -> None:
 def test_the_template_is_mounted_over_the_image_default() -> None:
     compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
     assert "./docker/haproxy.cfg.template:/usr/local/etc/haproxy/haproxy.cfg.template:ro" in compose
+
+
+# Names that would put a credential in Config.Env, which the proxy exposes.
+SENSITIVE_ENV = {
+    "POSTGRES_PASSWORD",
+    "CITADEL_DB_PASSWORD",
+    "KC_DB_PASSWORD",
+    "KC_BOOTSTRAP_ADMIN_PASSWORD",
+    "POSTGRES_PWD",
+    "OPENROUTER_API_KEY",
+    "OMNIROUTE_JWT_SECRET",
+    "OMNIROUTE_API_KEY_SECRET",
+    "OMNIROUTE_STORAGE_ENCRYPTION_KEY",
+    "OMNIROUTE_ADMIN_PASSWORD",
+    "OMNIROUTE_API_KEY",
+}
+
+
+def test_no_service_puts_a_credential_in_its_environment() -> None:
+    compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+    env_names = {
+        line.strip().split(":", 1)[0]
+        for line in compose.splitlines()
+        if line.strip() and line[0].isspace() and ":" in line
+    }
+    assert not env_names & SENSITIVE_ENV

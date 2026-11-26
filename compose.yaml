@@ -38,9 +38,12 @@ services:
     image: postgres:18-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       POSTGRES_DB: ${POSTGRES_DB}
-      CITADEL_DB_PASSWORD: ${CITADEL_DB_PASSWORD}
+      CITADEL_DB_PASSWORD_FILE: /run/secrets/citadel_db_password
+    secrets:
+      - postgres_password
+      - citadel_db_password
     volumes:
       # Postgres 18 keeps PGDATA under /var/lib/postgresql/<major>/docker.
       - postgres-data:/var/lib/postgresql
@@ -57,6 +60,18 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.8.2@sha256:7e66a96e4739239070aeaf72e4c5decf0f7f682cfc725b9f7ea2b336eaba38b3
+    # Keycloak has no *_FILE config source, so the entrypoint reads its two
+    # passwords from the mounted files and exports them into the process env.
+    # Exports are not part of Config.Env, which is what the proxy exposes.
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        set -e
+        export KC_DB_PASSWORD="$$(cat /run/secrets/postgres_password)"
+        export KC_BOOTSTRAP_ADMIN_PASSWORD="$$(cat /run/secrets/keycloak_admin_password)"
+        exec /opt/keycloak/bin/kc.sh "$$@"
+      - --
     command:
       - start
       - --http-enabled=true
@@ -67,13 +82,14 @@ services:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: ${POSTGRES_USER}
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER}
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       KC_HEALTH_ENABLED: "true"
       # Fixed issuer so tokens validate the same way from the host and from
       # inside the network; the API fetches JWKS over the internal URL.
       KC_HOSTNAME: http://localhost:18081
+    secrets:
+      - postgres_password
+      - keycloak_admin_password
     volumes:
       - ./docker/keycloak:/opt/keycloak/data/import:ro
     ports:
@@ -99,12 +115,25 @@ services:
 
   temporal:
     image: temporalio/auto-setup:1.29.7@sha256:f14912b699cf73015ad5c4fc18d522d4b014db90e794039214dfb7c022c2644f
+    # auto-setup reads POSTGRES_PWD but has no file variant, so the entrypoint
+    # reads the mounted secret and exports it before handing over.
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        set -e
+        export POSTGRES_PWD="$$(cat /run/secrets/postgres_password)"
+        exec /etc/temporal/entrypoint.sh "$$@"
+      - --
+    command:
+      - autosetup
     environment:
       DB: postgres12
       DB_PORT: "5432"
       POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PWD: ${POSTGRES_PASSWORD}
       POSTGRES_SEEDS: postgres
+    secrets:
+      - postgres_password
     depends_on:
       postgres:
         condition: service_healthy
@@ -146,10 +175,16 @@ services:
   openfga-migrate:
     image: openfga/openfga:v1.23.0@sha256:2a1b4ef95f2f27e6d420f11cf14390b4f537e699de8d18b6a07d8b355e11cf02
     # One-shot schema migration; the distroless image has no shell to chain it.
+    # The URI carries no password; pgx reads it from the mounted .pgpass file,
+    # so neither Config.Cmd nor Config.Env holds the credential.
     command:
       - migrate
       - --datastore-engine=postgres
-      - --datastore-uri=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/openfga?sslmode=disable
+      - --datastore-uri=postgres://${POSTGRES_USER}@postgres:5432/openfga?sslmode=disable
+    environment:
+      PGPASSFILE: /run/secrets/openfga_pgpass
+    secrets:
+      - openfga_pgpass
     depends_on:
       postgres:
         condition: service_healthy
@@ -163,8 +198,12 @@ services:
     command:
       - run
       - --datastore-engine=postgres
-      - --datastore-uri=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/openfga?sslmode=disable
+      - --datastore-uri=postgres://${POSTGRES_USER}@postgres:5432/openfga?sslmode=disable
       - --playground-enabled=false
+    environment:
+      PGPASSFILE: /run/secrets/openfga_pgpass
+    secrets:
+      - openfga_pgpass
     depends_on:
       openfga-migrate:
         condition: service_completed_successfully
@@ -175,14 +214,32 @@ services:
 
   omniroute:
     image: ghcr.io/cheaper-inference/omniroute:3.8.54@sha256:2c4c755a54f8ce5341bc1856580b71f47a0f16a9afab4a55f84d540810631f68
+    # The image has no *_FILE support for these values, so the entrypoint reads
+    # them from mounted files. OPENROUTER_API_KEY is not used by this image at
+    # all: provider credentials live in its SQLite store, configured through the
+    # dashboard (encrypted with STORAGE_ENCRYPTION_KEY).
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        export JWT_SECRET="$$(cat /run/secrets/omniroute_jwt_secret)"
+        export API_KEY_SECRET="$$(cat /run/secrets/omniroute_api_key_secret)"
+        export STORAGE_ENCRYPTION_KEY="$$(cat /run/secrets/omniroute_storage_encryption_key)"
+        export INITIAL_PASSWORD="$$(cat /run/secrets/omniroute_admin_password)"
+        exec /app/check-permissions.sh "$$@"
+      - --
+    command:
+      - node
+      - dev/run-standalone.mjs
     environment:
       PORT: "20128"
       DATA_DIR: /app/data
-      JWT_SECRET: ${OMNIROUTE_JWT_SECRET}
-      API_KEY_SECRET: ${OMNIROUTE_API_KEY_SECRET}
-      STORAGE_ENCRYPTION_KEY: ${OMNIROUTE_STORAGE_ENCRYPTION_KEY}
-      INITIAL_PASSWORD: ${OMNIROUTE_ADMIN_PASSWORD}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+    secrets:
+      - omniroute_jwt_secret
+      - omniroute_api_key_secret
+      - omniroute_storage_encryption_key
+      - omniroute_admin_password
     volumes:
       - omniroute-data:/app/data
     ports:
@@ -327,9 +384,10 @@ services:
       CITADEL_DLP_URL: http://presidio:3000
       CITADEL_MODEL: ${CITADEL_MODEL:-auto/best-fast}
       OMNIROUTE_URL: ${OMNIROUTE_URL:-http://omniroute:20128/v1}
-      OMNIROUTE_API_KEY: ${OMNIROUTE_API_KEY:-}
+      OMNIROUTE_API_KEY_FILE: /run/secrets/omniroute_api_key
     secrets:
       - db_dsn
+      - omniroute_api_key
     depends_on:
       temporal:
         condition: service_healthy
@@ -485,7 +543,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # The pinned image allows all of /containers when CONTAINERS=1, including
       # /archive and /export (upstream PR #183 is unmerged). This template
-      # denies those two before the blanket allow.
+      # denies those two and forwards only Citadel's own container names.
       - ./docker/haproxy.cfg.template:/usr/local/etc/haproxy/haproxy.cfg.template:ro
     read_only: true
     tmpfs:
@@ -569,6 +627,24 @@ secrets:
     file: ${CITADEL_SECRETS_DIR:-./secrets}/gh_write_token
   gh_read_token:
     file: ${CITADEL_SECRETS_DIR:-./secrets}/gh_read_token
+  postgres_password:
+    file: ${CITADEL_SECRETS_DIR:-./secrets}/postgres_password
+  citadel_db_password:
+    file: ${CITADEL_SECRETS_DIR:-./secrets}/citadel_db_password
+  keycloak_admin_password:
+    file: ${CITADEL_SECRETS_DIR:-./secrets}/keycloak_admin_password
+  openfga_pgpass:
+    file: ${CITADEL_SECRETS_DIR:-./secrets}/openfga_pgpass
+  omniroute_jwt_secret:
+    file: ${CITADEL_SECRETS_DIR:-./secrets}/omniroute_jwt_secret
+  omniroute_api_key_secret:
+    file: ${CITADEL_SECRETS_DIR:-./secrets}/omniroute_api_key_secret
+  omniroute_storage_encryption_key:
+    file: ${CITADEL_SECRETS_DIR:-./secrets}/omniroute_storage_encryption_key
+  omniroute_admin_password:
+    file: ${CITADEL_SECRETS_DIR:-./secrets}/omniroute_admin_password
+  omniroute_api_key:
+    file: ${CITADEL_SECRETS_DIR:-./secrets}/omniroute_api_key
 
 networks:
   internal:
