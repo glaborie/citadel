@@ -144,12 +144,21 @@ tool activity's idempotency path, the API's separation of duties and the
 operator's single-use approval table. The rest need the live stack (Temporal,
 Postgres, the stub tool server) and are reported as pending — never as passing.
 
+A case is covered in one of three ways, and the pack's guard fails closed on all
+three: an offline executor in `harness.EXECUTORS`; a `live` declaration naming the
+live test that reports it, which the guard checks exists and mentions the case; or,
+for a case nobody can run yet, a milestone beyond the one the package is shipping
+and an `owner` naming the issue that closes it. Nothing else is allowed to be
+pending. The guard this replaced accepted any milestone in `{v0.1..v0.4}`, which is
+every case, so it described the pack instead of constraining it — and a case could
+have been unimplemented on the shipped version without a single test going red.
+
 `docs/evals/red-team-report.md` is generated from a run and states the count in
 its first line, so this paragraph never has to be edited to stay true.
 
 ## Live cases
 
-Three cases only mean something against a running stack, so they live in
+Four cases only mean something against a running stack, so they live in
 `tests/redteam/live/` behind `-m live` and `CITADEL_LIVE=1`:
 
 | Case | Live surface |
@@ -178,6 +187,7 @@ silently skips in CI and passes locally is how a team learns to distrust green.
 pytest -m redteam                        # manifest checks plus every executor
 make redteam                             # same, through the venv, verbose
 make redteam-report                      # regenerates docs/evals/red-team-report.md
+make audit-verify TENANT=lab-a           # the ledger's own verify() and unaudited()
 ```
 
 The report is written by `tests/redteam/conftest.py` at session end, from what
