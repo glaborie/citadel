@@ -5,6 +5,10 @@ decision itself. A decision POST forwards to the API with the approver's own
 access token, so server-side authorisation, the DLP check and the audit-before-
 resume ordering all stay in one place.
 
+The session cookie carries a Keycloak refresh token, so a review that sits past
+the 300 s access-token lifespan can still submit; the refresh grant dies with the
+SSO session, so revocation still ends the console session.
+
     KEYCLOAK_ISSUER           public issuer, used for the browser redirect
     KEYCLOAK_INTERNAL_ISSUER  issuer reachable from the container, for tokens
     KEYCLOAK_JWKS_URL         signing keys
@@ -45,7 +49,10 @@ from citadel.workflows.types import APPROVAL_TTL
 
 COOKIE = "citadel_console"
 LOGIN_COOKIE = "citadel_login"
-SESSION_TTL = 300  # seconds; matches the realm access-token lifespan
+# The refresh token dies with the Keycloak SSO session (realm ssoSessionIdleTimeout),
+# so the console session may outlive the 300 s access token but not revocation.
+SESSION_TTL = 1800
+REFRESH_SKEW = 60  # refresh this long before the access token expires
 READ_ROLES = {"operator", "approver", "viewer", "admin", "auditor"}
 RUN_COLUMNS = {
     "id": "id",
@@ -188,6 +195,11 @@ def create_app(
         page is a stale CSRF token and a readable copy of the arguments.
         """
         response = await call_next(request)
+        refreshed = getattr(request.state, "session_cookie", None)
+        if refreshed is not None:
+            response.set_cookie(
+                COOKIE, _sign(refreshed, _key()), max_age=SESSION_TTL, httponly=True, samesite="lax"
+            )
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Content-Security-Policy"] = (
             "frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'"
@@ -254,6 +266,12 @@ def create_app(
         claims = _decode(request.cookies.get(COOKIE, ""), _key())
         if claims is None or int(claims.get("exp", 0)) < int(time.time()):
             return None
+        if int(claims.get("access_exp", 0)) - int(time.time()) <= REFRESH_SKEW:
+            refreshed = _refresh(claims)
+            if refreshed is None:
+                return None
+            claims = refreshed
+            request.state.session_cookie = refreshed
         principal = Principal(
             str(claims.get("sub", "")),
             str(claims.get("tenant", "")),
@@ -275,19 +293,10 @@ def create_app(
         raw = (await request.body()).decode()
         return {key: values[0] for key, values in urllib.parse.parse_qs(raw).items()}
 
-    def _exchange(code: str, verifier_value: str) -> str:
-        form = urllib.parse.urlencode(
-            {
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": _redirect(),
-                "client_id": _client_id(),
-                "code_verifier": verifier_value,
-            }
-        ).encode()
+    def _token_request(form: dict[str, str]) -> dict[str, Any]:
         request = urllib.request.Request(
             f"{_internal()}/protocol/openid-connect/token",
-            data=form,
+            data=urllib.parse.urlencode(form).encode(),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             method="POST",
         )
@@ -296,14 +305,67 @@ def create_app(
                 payload = json.loads(response.read())
         except urllib.error.HTTPError as exc:
             raise HTTPException(
-                status_code=502, detail=f"token exchange refused: {exc.code}"
+                status_code=502, detail=f"token endpoint refused: {exc.code}"
             ) from exc
         except (urllib.error.URLError, OSError, ValueError) as exc:
             raise HTTPException(status_code=502, detail=f"token exchange failed: {exc}") from exc
-        token = payload.get("access_token") if isinstance(payload, dict) else None
-        if not isinstance(token, str):
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=502, detail="token endpoint returned no payload")
+        return payload
+
+    def _exchange(code: str, verifier_value: str) -> dict[str, Any]:
+        payload = _token_request(
+            {
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": _redirect(),
+                "client_id": _client_id(),
+                "code_verifier": verifier_value,
+            }
+        )
+        if not isinstance(payload.get("access_token"), str):
             raise HTTPException(status_code=502, detail="token endpoint returned no access token")
-        return token
+        return payload
+
+    def _refresh(session: dict[str, Any]) -> dict[str, Any] | None:
+        """Trade the refresh token for a new access token, before expiry.
+
+        A refused grant means the SSO session is gone (revoked or idle past the
+        realm timeout), so the console session ends with it: refresh is never a
+        way to outlive revocation. The fresh token is re-verified, and the
+        identity must not change under a rotation.
+        """
+        refresh_token = session.get("refresh_token")
+        if not isinstance(refresh_token, str) or not refresh_token:
+            return None
+        try:
+            payload = _token_request(
+                {
+                    "grant_type": "refresh_token",
+                    "refresh_token": refresh_token,
+                    "client_id": _client_id(),
+                }
+            )
+        except HTTPException:
+            return None
+        token = payload.get("access_token")
+        if not isinstance(token, str):
+            return None
+        try:
+            principal = _verifier().verify(token)
+        except IdentityError:
+            return None
+        if principal.user_id != session.get("sub") or principal.tenant_id != session.get("tenant"):
+            return None
+        now = int(time.time())
+        return {
+            **session,
+            "access_token": token,
+            "refresh_token": payload.get("refresh_token") or refresh_token,
+            "roles": sorted(principal.roles),
+            "access_exp": now + int(payload.get("expires_in", 300)),
+            "exp": now + SESSION_TTL,
+        }
 
     def _decide_api(token: str, payload: dict[str, Any]) -> tuple[int, str]:
         request = urllib.request.Request(
@@ -368,18 +430,22 @@ def create_app(
             raise HTTPException(status_code=400, detail="login state did not match")
         if not code:
             raise HTTPException(status_code=400, detail="missing authorization code")
-        token = _exchange(code, str(pending.get("verifier", "")))
+        payload = _exchange(code, str(pending.get("verifier", "")))
+        token = str(payload["access_token"])
         try:
             principal = _verifier().verify(token)
         except IdentityError as exc:
             raise HTTPException(status_code=401, detail=f"token rejected: {exc}") from exc
+        now = int(time.time())
         session = {
             "access_token": token,
+            "refresh_token": payload.get("refresh_token"),
             "sub": principal.user_id,
             "tenant": principal.tenant_id,
             "roles": sorted(principal.roles),
             "csrf": secrets.token_urlsafe(24),
-            "exp": int(time.time()) + SESSION_TTL,
+            "access_exp": now + int(payload.get("expires_in", 300)),
+            "exp": now + SESSION_TTL,
         }
         response = RedirectResponse("/runs", status_code=303)
         response.set_cookie(
