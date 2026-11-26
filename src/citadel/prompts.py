@@ -54,9 +54,18 @@ class Prompt:
         ]
 
 
-def tool_manifest(agent: str) -> tuple[dict[str, Any], ...]:
-    """The agent's tools, by name, with the parameters policy will accept."""
-    catalog = load_catalog()
+def tool_manifest(
+    agent: str, *, catalog: dict[str, Any] | None = None
+) -> tuple[dict[str, Any], ...]:
+    """The agent's tools, by name, with the parameters policy will accept.
+
+    A closed vocabulary on purpose: name, tier, and each parameter's name, kind and
+    whether it is required. There is no description field, because metadata from a
+    registry is prose written by someone else and prose is what an injection looks
+    like. A field that is not built here cannot be smuggled into a prompt by adding
+    it to a tool definition - see `citadel.tools.registration`.
+    """
+    tools = catalog if catalog is not None else load_catalog()
     return tuple(
         {
             "name": spec.name,
@@ -66,7 +75,7 @@ def tool_manifest(agent: str) -> tuple[dict[str, Any], ...]:
                 for param in spec.params
             ],
         }
-        for spec in sorted(catalog.values(), key=lambda item: item.name)
+        for spec in sorted(tools.values(), key=lambda item: item.name)
         if spec.agent == agent
     )
 
