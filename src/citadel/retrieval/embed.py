@@ -1,8 +1,9 @@
 """Dense embeddings through OmniRoute's OpenAI-compatible endpoint.
 
-No model name is invented here: the alias is configuration, because which
-provider sees the text is the open decision in #136. An empty alias is an
-unavailable endpoint, not a reason to store a chunk no query can find.
+No model name is invented here: the alias is configuration. ADR-025 accepts the
+hosted endpoint for DLP-redacted text only, so callers redact before embedding.
+An empty alias is an unavailable endpoint, not a reason to store a chunk no query
+can find.
 """
 
 from __future__ import annotations

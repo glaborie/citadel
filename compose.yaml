@@ -310,8 +310,8 @@ services:
 
   reranker:
     # Cross-encoder over the fused candidates (ADR-016). In-stack, so no
-    # document text leaves the host for reranking; the embedding endpoint is
-    # still the hosted decision recorded in #136.
+    # document text leaves the host for reranking. The embedding endpoint is
+    # hosted and sees only DLP-redacted text (ADR-025).
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8.1@sha256:c112c540b399592e42cd6383d5d80ec9c9d0a9aabfbbf5a7496ee6a15b8d0b32
     command: ["--model-id", "cross-encoder/ms-marco-MiniLM-L-6-v2"]
     environment:

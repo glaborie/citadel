@@ -28,13 +28,14 @@ Citadel records one ADR per architectural decision. Numbers are sequential; ADR-
 | 022 | Agent approvers for T1 calls | Accepted |
 | 023 | CLI access from the sandbox, never from a worker | Accepted |
 | 024 | Approvals travel as a single-use reference, not a token in history | Accepted |
+| 025 | Hosted embedding may see DLP-redacted text; reranking stays in-stack | Accepted |
 
 ## ADR-008 evolution roadmap
 
 | Milestone | Theme | Key ADRs |
 |---|---|---|
 | v0.1 | Secure vertical slice | 001, 002, 003, 004, 005, 006, 007, 009, 010, 011, 012, 013, 014, 015, 019 |
-| v0.2 | Knowledge and real credentials | 016, 017, 019, 020 |
+| v0.2 | Knowledge and real credentials | 016, 017, 019, 020, 025 |
 | v0.3 | Evaluation and cache | 017, 018 |
 | v0.4 | Protocols and routing | 018, 021 |
 

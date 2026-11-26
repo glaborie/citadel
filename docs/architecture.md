@@ -191,12 +191,12 @@ The query half is `RetrievalActivities.retrieve` on the orchestrator worker: it 
 
 Not yet in Compose because they belong to v0.2: `worker-researcher`, `searxng`, `fetcher`. Prometheus/Grafana remain optional (v0.3).
 
-## 11. Verification items (all resolved except the last)
+## 11. Verification items (all resolved)
 
 1. **OmniRoute upstream and image** — resolved: pinned by digest in `compose.yaml`; the redirect and fork question is documented in `docs/implementation-notes/v0.1-verification.md` §1.
 2. **MLflow image and auth** — resolved: 3.18.0, pinned by digest, internal OTLP write path only (§19). Human-path auth stays open only if the UI is published (ADR-017).
 3. **gVisor `runsc`** — resolved as documented fallback: unavailable on this host, so the hardened sidecar flags are the isolation boundary (ADR-012).
 4. **Keycloak token exchange** — resolved in §5: standard exchange V2 preserves `sub`, `tenant` and roles but cannot carry the run claims, so the API mints its own Ed25519 run token. RFC 8693 delegation (`may_act`) was measured and rejected.
-5. **Hosted reranker/embedding endpoints** — still open, and a v0.2 question: whether the chosen endpoints are acceptable for redacted data.
+5. **Hosted embedding of redacted data** — resolved in ADR-025: chunk and query text pass the `output` DLP surface before the OmniRoute embedding call, and a credential blocks. The reranker is TEI in Compose, so no document leaves the host for reranking. The owner accepted provider-side retention of redacted text on #136.
 
 These were implementation details, not unresolved design decisions.
