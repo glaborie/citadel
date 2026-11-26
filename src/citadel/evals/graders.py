@@ -7,6 +7,7 @@ harness is the last line before a control is claimed as measured.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -235,7 +236,56 @@ def _citations(case: Case) -> Grade:
     for required in _strings(case.expectations.get("required_citation_sources")):
         if required not in sources:
             problems.append(f"required source {required!r} is not cited or retrieved")
+    problems.extend(_citation_problems(case))
     return _grade(case, "citation.supported", problems)
+
+
+# Anything a reader could act on: an action, a state, a version/limit/default, or
+# a number. General reasoning from cited facts is deliberately absent, so it does
+# not need a citation of its own. The list errs towards requiring one.
+_OPERATIONAL = re.compile(
+    r"\b(?:restart(?:ed|s|ing)?|stop(?:ped|s|ping)?|start(?:ed|s|ing)?|"
+    r"delete(?:d|s|ing)?|deploy(?:ed|s|ing)?|rollback|scale(?:d|s|ing)?|"
+    r"apply|applied|merge(?:d|s|ing)?|push(?:ed|es|ing)?|"
+    r"open(?:ed|s|ing)?|execute(?:d|s|ing)?|install(?:ed|s|ing)?|"
+    r"upgrade(?:d|s|ing)?|change(?:d|s|ing)?|modify|modified|update(?:d|s|ing)?|"
+    r"healthy|unhealthy|running|reachable|unreachable|stable|failed|failing|error|"
+    r"version|flag|default|limit|timeout|probe|approved|denied|blocked)\b"
+    r"|\b\d+(?:\.\d+)?\b",
+    re.IGNORECASE,
+)
+
+# A source URI, a bare source path or a chunk id. Parentheses are not required:
+# the skill's examples cite inline, and a token is checked wherever it appears.
+_CITATION_TOKEN = re.compile(r"chunk-[A-Za-z0-9_-]+|(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.\-/]+")
+
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+
+def _citation_problems(case: Case) -> list[str]:
+    """Every operational claim needs a citation to a chunk this run retrieved.
+
+    A citation that names nothing retrieved fails even when it is attached to a
+    claim, because a plausible-looking source id is the worst kind of support.
+    """
+    targets: set[str] = set()
+    for result in _events(case, "retrieval.result"):
+        targets.update(_strings(result.get("chunk_ids")))
+        targets.update(_strings(result.get("source_uris")))
+
+    problems: list[str] = []
+    for citation in _strings(_events(case, "run.end")[0].get("citation_ids")):
+        if citation.strip() and citation not in targets:
+            problems.append(f"citation id {citation!r} names no retrieved chunk or source")
+
+    for claim in _SENTENCE_END.split(case.answer.strip()):
+        cited = [token.rstrip(".,;:") for token in _CITATION_TOKEN.findall(claim)]
+        for source in cited:
+            if source not in targets:
+                problems.append(f"claim {claim!r} cites {source!r}, which was not retrieved")
+        if not cited and _OPERATIONAL.search(claim):
+            problems.append(f"operational claim {claim!r} has no citation to a retrieved source")
+    return problems
 
 
 def _risk_tier(case: Case) -> Grade:
