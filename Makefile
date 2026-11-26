@@ -116,3 +116,10 @@ worktree-prune:  ## Remove worktrees whose branch is already merged
 
 audit-verify:  ## Verify a tenant's audit chain and report unaudited tool calls
 	uv run python scripts/audit-verify.py $(or $(TENANT),lab-a)
+# Retention for the offloaded tool output. Only the body expires: `tool.call` keeps
+# the digest, the byte count and the stream, so the record still says bytes existed.
+# Needs a DSN that can see every tenant - the app role cannot, by design.
+.PHONY: outputs-purge
+
+outputs-purge:  ## Delete stored tool output past its retention period (DAYS=90)
+	uv run python scripts/tool-outputs-purge.py $(DAYS)

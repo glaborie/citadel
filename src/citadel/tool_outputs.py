@@ -26,6 +26,20 @@ from typing import Any
 
 MAX_STORED_BYTES = int(os.environ.get("CITADEL_OUTPUT_STORE_MAX_BYTES", 1_048_576))
 
+# The run history is the account of what happened; a body here is the working copy
+# of it. 90 days is long enough to investigate a quarter's incidents and short
+# enough that an unlucky DLP miss does not become a permanent archive of tool
+# output. Override per deployment, not per call.
+TTL_DAYS = int(os.environ.get("CITADEL_OUTPUT_STORE_TTL_DAYS", 90))
+
+# RETURNING, not a row count: the caller gets the number of bodies actually
+# deleted, which is what a retention job should report.
+PURGE_SQL = (
+    "DELETE FROM tool_outputs"
+    " WHERE created_at < now() - (%s * interval '1 day')"
+    " RETURNING digest"
+)
+
 
 @dataclass(frozen=True)
 class StoredOutput:
@@ -72,3 +86,24 @@ def fetch(conn: Any, *, digest: str) -> str | None:  # noqa: ANN401 - as above
     if row is None:
         return None
     return str(gzip.decompress(bytes(row[0])).decode("utf-8"))
+
+
+def purge(conn: Any, *, days: int | None = None) -> int:  # noqa: ANN401 - as above
+    """Delete bodies past the retention period; return how many went.
+
+    Only the body expires. `tool.call` keeps the digest, the byte count and the
+    stream, so the record still says bytes existed and this store no longer has
+    them - the read-back route already answers 404 for a digest it cannot serve, so
+    an expired body looks like one refused for size. The caller learns "not
+    available", never "never existed".
+
+    Run this as a role that sees every tenant (the table owner, or a role with
+    BYPASSRLS). The app role is tenant-scoped, so under RLS it would delete nothing
+    and exit 0 - a retention job that reports success while retaining everything is
+    the same failure this module exists to avoid, one layer up.
+    """
+    ttl = TTL_DAYS if days is None else days
+    if ttl <= 0:
+        raise ValueError("a retention period of zero days would delete every body")
+    deleted = conn.execute(PURGE_SQL, (ttl,)).fetchall()
+    return len(deleted)

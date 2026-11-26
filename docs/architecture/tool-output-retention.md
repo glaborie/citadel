@@ -70,8 +70,9 @@ or refused for size.
 - **The runner's own cap still loses bytes.** A 10 MB log is cut to 64 KB inside the
   sandbox, before this store exists. Streaming from the sandbox to storage - or a
   larger per-tool cap for `pr_diff` - is the next step if diffs get that big.
-- **Nothing expires.** `tool_outputs` grows; retention is a policy decision (90 days
-  is the obvious default) that needs a job and a delete grant, not a comment.
+- **Retention is a job, not a trigger.** Bodies expire after 90 days (below), but the
+  delete runs from `make outputs-purge` under a DSN that can see every tenant - so an
+  environment that never runs the job still grows.
 - **No download path for binaries.** Everything stored is UTF-8 text; a binary
   artifact would need a content type and a different route.
 
@@ -84,3 +85,21 @@ execution did: `output_sha256`, `output_bytes`, `output_truncated`, `output_ref`
 from it rather than stored twice - but a consumer that reads the audit event sees
 the same numbers on the first call and on the replay, which is the point of writing
 them at all.
+
+## Retention
+
+The run history is the record; a stored body is the working copy of it. Bodies expire
+after **90 days** (`CITADEL_OUTPUT_STORE_TTL_DAYS`, or `make outputs-purge DAYS=30`),
+because a table of tool output that is never deleted is a growing archive, and some of it
+is one DLP miss away from being sensitive.
+
+Only the body goes. `tool.call` keeps the digest, the byte count and the stream name, so
+the record still says bytes existed - and the read-back route already answers 404 for a
+digest it cannot serve, so an expired body is indistinguishable from one refused for size.
+A caller learns "not available", never "never existed".
+
+Who deletes matters as much as when. The job runs as a DSN that can see every tenant
+(`CITADEL_OUTPUT_PURGE_DSN`, the owner or a `BYPASSRLS` role), because the app role is
+tenant-scoped: under RLS it would delete nothing and exit 0. A retention job that reports
+success while retaining everything is the failure this layer exists to prevent, one level
+up. A period of zero is refused rather than obeyed.
