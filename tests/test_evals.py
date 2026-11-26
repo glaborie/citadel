@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from citadel.evals.graders import grade
+from citadel.evals.graders import Grade, grade
 from citadel.evals.runner import main
 from citadel.evals.schema import Case, DatasetError, check_events, load_cases
 
@@ -40,6 +41,10 @@ def _mutate(case: Case, change: Callable[[list[dict[str, Any]]], None]) -> Case:
 
 def _failed(case: Case) -> set[str]:
     return {item.grader for item in grade(case) if not item.passed}
+
+
+def _citation_grade(case: Case) -> Grade:
+    return next(item for item in grade(case) if item.grader == "citation.supported")
 
 
 def test_golden_dataset_has_at_least_twelve_cases_and_all_pass() -> None:
@@ -227,3 +232,56 @@ def test_cli_exits_nonzero_on_a_failing_trajectory(tmp_path: Path) -> None:
     path.write_text(json.dumps(raw))
 
     assert main([str(path)]) == 1
+
+
+def test_an_operational_claim_without_a_citation_fails_with_the_claim() -> None:
+    case = replace(
+        _case("devops-001"),
+        answer="checkout-api is unhealthy and the container is running.",
+    )
+
+    verdict = _citation_grade(case)
+
+    assert not verdict.passed
+    assert "checkout-api is unhealthy" in verdict.detail, "the claim must be visible"
+
+
+def test_a_citation_that_names_no_retrieved_chunk_fails_with_the_source() -> None:
+    case = replace(
+        _case("devops-001"),
+        answer="checkout-api is unhealthy; see runbooks/missing.md.",
+    )
+
+    verdict = _citation_grade(case)
+
+    assert not verdict.passed
+    assert "runbooks/missing.md" in verdict.detail, "the bad source must be visible"
+    assert "checkout-api is unhealthy" in verdict.detail, "the claim must be visible"
+
+
+def test_a_run_end_citation_that_names_nothing_retrieved_fails() -> None:
+    def add_bad_citation(events: list[dict[str, Any]]) -> None:
+        end = next(event for event in events if event["type"] == "run.end")
+        end["citation_ids"].append("chunk-missing")
+
+    verdict = _citation_grade(_mutate(_case("devops-011"), add_bad_citation))
+
+    assert not verdict.passed
+    assert "chunk-missing" in verdict.detail
+
+
+def test_general_reasoning_needs_no_citation() -> None:
+    case = replace(_case("devops-001"), answer="Both sources agree on this point.")
+
+    assert _citation_grade(case).passed
+
+
+def test_the_cli_fails_an_uncited_claim(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    raw: Any = json.loads(GOLDEN.read_text())
+    raw["cases"] = [raw["cases"][0]]
+    raw["cases"][0]["answer"] = "checkout-api is unhealthy."
+    path = tmp_path / "uncited.json"
+    path.write_text(json.dumps(raw))
+
+    assert main([str(path)]) == 1
+    assert "operational claim" in capsys.readouterr().out
