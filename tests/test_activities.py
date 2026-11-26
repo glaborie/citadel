@@ -176,6 +176,44 @@ def test_transport_failure_propagates_so_temporal_retries(
     assert row["status"] == "sent", "the attempt must stay visible to the retry"
 
 
+def test_the_event_is_written_before_the_row_settles(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Crash between the two writes: `sent` with an event, never `executed` without.
+
+    The v0.1 exit review counted nine rows in the other order's window. The
+    durable state a retry now finds says the call may have run, and the ledger
+    already knows it did.
+    """
+    db = FakeDB()
+    ledger = FakeAudit()
+    impl = build(monkeypatch, db, recorder([]), ledger)
+    _detector(monkeypatch)
+
+    class Died(Exception):
+        pass
+
+    def execute(sql: str, params: tuple[Any, ...] = ()) -> Any:
+        if " ".join(sql.split()).startswith("UPDATE tool_calls SET status = %s"):
+            raise Died
+        return FakeConn(db).execute(sql, params)
+
+    @contextmanager
+    def connect(_dsn: str, _tenant: str) -> Iterator[Any]:
+        conn = FakeConn(db)
+        conn.execute = execute  # type: ignore[method-assign]
+        yield conn
+
+    monkeypatch.setattr(activities, "tenant_connection", connect)
+
+    with pytest.raises(Died):
+        impl.execute_tool(call("read_logs"))
+
+    key = idempotency_key(call("read_logs"))
+    assert db.rows[key]["status"] == "sent", "an unrecorded execution must not claim to be done"
+    assert [event["event_type"] for event in ledger.events] == ["tool.call"]
+    assert ledger.events[0]["payload"]["status"] == "executed"
+    assert ledger.events[0]["payload"]["idempotency_key"] == key
+
+
 def test_a_write_that_was_sent_is_never_repeated(monkeypatch: pytest.MonkeyPatch) -> None:
     """The one genuinely unknown outcome: report it, do not guess."""
     item = call("restart_service")
