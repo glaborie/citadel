@@ -6,12 +6,18 @@ it and wins arguments: a credential pattern blocks even when the detector
 scored it zero. Every hard-rule hit keeps what the detector said, so an
 override is reviewable in the audit ledger rather than invisible.
 
-Two rules decide the action:
+Three surfaces decide the action:
 
 * **input** — anything found blocks. Redacting an argument would run a command
   other than the one policy authorised, and for a T1 write, other than the one
   a human approved.
 * **output** — credentials block, PII is redacted in place.
+* **record** — a field a human writes freely and the system persists, renders and
+  exports but never executes: an approval reason. It is not an input, because a
+  refusal to record *why* a human decided sends that text somewhere unaudited
+  (a ticket, a chat) and loses the decision with it; it is not an output, because
+  nothing generated it. Same policy as output: PII is redacted in place, and a
+  credential blocks, because an append-only ledger cannot take a token back.
 
 A detector that is unreachable, slow or unreadable raises `DlpUnavailable` and
 the caller must refuse. Unreadable includes a span in the wrong shape: a missing
@@ -196,7 +202,7 @@ def inspect(
     opener: Opener | None = None,
 ) -> Verdict:
     """Analyse one surface. Raises DlpUnavailable instead of guessing."""
-    if surface not in {"input", "output"}:
+    if surface not in {"input", "output", "record"}:
         raise ValueError(f"unknown DLP surface {surface!r}")
     if not text:
         return Verdict(action="pass", text=text, findings=())
