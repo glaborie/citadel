@@ -5,7 +5,7 @@ to hide what the one above it kept.
 
 | Limit | Where | What it decides |
 |---|---|---|
-| 64 KB per stream | tool runner (`MAX_OUTPUT_BYTES`) | what leaves the sandbox |
+| 64 KB per stream, 512 KB for `pr_diff` | tool runner (`MAX_OUTPUT_BYTES`, or the command's `output_limit`) | what leaves the sandbox |
 | 8 KB per stream in the record | activity (`EVENT_OUTPUT_LIMIT`) | what becomes Temporal event history |
 | 1 MB per stream in storage | `tool_outputs` (`CITADEL_OUTPUT_STORE_MAX_BYTES`) | what the platform will keep |
 
@@ -18,7 +18,9 @@ stream is bounded to head + tail + marker, and the record keeps:
 - the bounded text,
 - `output_sha256` - the digest of the whole stream as the runner returned it,
 - `stream_sha256` - a digest per stream, so stderr is not anonymous,
-- `original_bytes` and `truncated`.
+- `original_bytes` and `truncated`,
+- `discarded_bytes` - what the sandbox measured and never handed over, so a size in
+  the record is the size the tool produced, not the size that survived the cap.
 
 A digest with no way to read the bytes is proof, not evidence. A reviewer could see
 that a 100 KB diff existed and could not read line 4 000 of it without running the
@@ -67,9 +69,15 @@ or refused for size.
 
 ## What this does not do
 
-- **The runner's own cap still loses bytes.** A 10 MB log is cut to 64 KB inside the
-  sandbox, before this store exists. Streaming from the sandbox to storage - or a
-  larger per-tool cap for `pr_diff` - is the next step if diffs get that big.
+- **The sandbox cap still loses bytes, and the record now says how many.** A 10 MB log
+  is cut inside the sandbox, before this store exists; streaming from the sandbox to
+  storage would need object-store credentials in it, which is the one thing the
+  sandbox is built not to have. Instead the cap is per command - a diff is the answer,
+  a log is a stream to grep, so `gh.pr.diff` carries `output_limit: 524288` and
+  everything else keeps 64 KB - and the record carries `original_bytes` (what the tool
+  service measured before its own cap) and `discarded_bytes` (what never reached the
+  platform). `output_ref` therefore points at the whole stream whenever
+  `discarded_bytes` is 0, which is every diff that fits in 512 KB.
 - **Retention is a job, not a trigger.** Bodies expire after 90 days (below), but the
   delete runs from `make outputs-purge` under a DSN that can see every tenant - so an
   environment that never runs the job still grows.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from citadel.tool_outputs import MAX_STORED_BYTES
 from citadel.tools import CommandDenied, load_allowlist, match
 
 
@@ -174,3 +175,18 @@ def test_unknown_agent_is_denied() -> None:
 def test_empty_command_is_denied() -> None:
     with pytest.raises(CommandDenied):
         match([], agent="docker")
+
+def test_a_command_may_raise_its_own_output_cap() -> None:
+    """Only the command whose output IS the answer: a diff, not a log."""
+    commands = load_allowlist()
+    raised = {c.id for c in commands if c.output_limit is not None}
+    assert raised == {"gh.pr.diff"}
+    diff = next(c for c in commands if c.id == "gh.pr.diff")
+    assert diff.output_limit == 524_288
+    # Below the store's limit, or the bytes would be capped again on the way in.
+    assert 0 < int(diff.output_limit or 0) <= MAX_STORED_BYTES
+
+
+def test_a_command_without_a_cap_uses_the_default() -> None:
+    logs = next(c for c in load_allowlist() if c.id == "docker.logs")
+    assert logs.output_limit is None

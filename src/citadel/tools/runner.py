@@ -120,6 +120,16 @@ def _run_context(authorization: Annotated[str | None, Header()] = None) -> RunCo
         raise HTTPException(status_code=403, detail="invalid run token") from exc
 
 
+def _output_limit(command: Any) -> int:  # noqa: ANN401 - an allowlist entry
+    """The command's own transport cap, or the runner default.
+
+    A diff of a large branch is the output the caller asked for; a log is a stream
+    to grep. The override lives on the allowlist entry, so raising it is a catalog
+    change with a review attached rather than an environment variable nobody sees.
+    """
+    return int(command.output_limit or MAX_OUTPUT_BYTES)
+
+
 @app.post("/execute")
 def execute(
     request: ExecuteRequest, ctx: Annotated[RunContext, Depends(_run_context)]
@@ -171,8 +181,9 @@ def execute(
     stderr_checked, report = _guard(completed.stderr or "", surface="output")
     reports.append(report)
 
-    out = bound(stdout_checked, limit=MAX_OUTPUT_BYTES)
-    err = bound(stderr_checked, limit=MAX_OUTPUT_BYTES)
+    limit = _output_limit(command)
+    out = bound(stdout_checked, limit=limit)
+    err = bound(stderr_checked, limit=limit)
     return ExecuteResponse(
         allowlist_id=command.id,
         exit_code=completed.returncode,

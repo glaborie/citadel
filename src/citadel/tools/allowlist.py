@@ -34,6 +34,9 @@ class AllowedCommand:
     max_positional: int
     # "definitive" = output discloses secrets by design, "possible" = may.
     content_risk: str | None = None
+    # Transport cap for this command's output, when the default would cut the thing
+    # a caller actually asked for. A diff is the body; a log is a stream you grep.
+    output_limit: int | None = None
 
 
 def load_allowlist() -> tuple[AllowedCommand, ...]:
@@ -50,6 +53,7 @@ def load_allowlist() -> tuple[AllowedCommand, ...]:
             flags_with_value=frozenset(entry.get("flags_with_value", [])),
             max_positional=int(entry.get("max_positional", 0)),
             content_risk=entry.get("content_risk"),
+            output_limit=None if entry.get("output_limit") is None else int(entry["output_limit"]),
         )
         for entry in raw["commands"]
     )
