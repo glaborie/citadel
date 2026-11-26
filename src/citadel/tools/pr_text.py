@@ -21,10 +21,14 @@ import hashlib
 import os
 import tempfile
 from pathlib import Path
+from typing import Final
 
 # Overridable so a test - and a deployment that wants a volume - can say where.
-DIRECTORY_ENV = "CITADEL_PR_TEXT_DIR"
-SUFFIX = ".txt"
+DIRECTORY_ENV: Final = "CITADEL_PR_TEXT_DIR"
+SUFFIX: Final = ".txt"
+SEED_CHARS: Final = 16
+PRIVATE_DIR: Final = 0o700
+PRIVATE_FILE: Final = 0o600
 
 
 def directory() -> Path:
@@ -37,7 +41,7 @@ def directory() -> Path:
 
 def path_for(tool: str, run_id: str) -> Path:
     """The operator's own name for the file. Nothing a caller can choose."""
-    seed = hashlib.sha256(f"{tool}:{run_id}".encode()).hexdigest()[:16]
+    seed = hashlib.sha256(f"{tool}:{run_id}".encode()).hexdigest()[:SEED_CHARS]
     return directory() / f"{seed}{SUFFIX}"
 
 
@@ -49,12 +53,12 @@ def write(*, tool: str, run_id: str, body: str) -> Path:
     the same directory so a reader never sees a half-written body.
     """
     target = path_for(tool, run_id)
-    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    target.parent.mkdir(parents=True, exist_ok=True, mode=PRIVATE_DIR)
     handle, name = tempfile.mkstemp(dir=target.parent, suffix=".part")
     try:
         with os.fdopen(handle, "w", encoding="utf-8") as stream:
             stream.write(body)
-        os.chmod(name, 0o600)
+        os.chmod(name, PRIVATE_FILE)
         os.replace(name, target)
     except BaseException:
         Path(name).unlink(missing_ok=True)
