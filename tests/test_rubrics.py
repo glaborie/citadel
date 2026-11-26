@@ -146,13 +146,17 @@ def test_a_threshold_outside_the_levels_is_rejected(tmp_path: Path) -> None:
 
 
 def test_evidence_is_trajectory_facts_only() -> None:
+    """Every fact in the record, and none of its bookkeeping."""
     rendered = render_evidence(case())
 
     assert rendered.startswith("Task: Container checkout-api is unhealthy")
-    assert "tool: inspect_containers -> executed" in rendered
-    assert "policy: read_logs allow" in rendered
-    assert "outcome: completed" in rendered
+    assert "tool=inspect_containers" in rendered
+    assert "status=executed" in rendered
+    assert "decision=allow" in rendered
+    assert "outcome=completed" in rendered
     assert "answer: checkout-api is unhealthy" in rendered
+    assert "run_id=" not in rendered, "identifiers are not evidence"
+    assert "args_hash=" not in rendered
 
 
 def test_evidence_is_bounded_so_a_huge_trajectory_cannot_overflow_the_judge() -> None:

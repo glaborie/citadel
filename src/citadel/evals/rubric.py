@@ -168,32 +168,58 @@ class OmniJudge:
 # -------------------------------------------------------------------- evidence
 
 
-def render_evidence(case: Case, *, limit: int = DEFAULT_EVENT_LIMIT) -> str:
-    """A compact, bounded rendering of what the judge is allowed to consider.
+# Bookkeeping the grader never needs: identifiers, digests, versions. Everything else in
+# an event is evidence, and evidence an answer can cite has to reach the judge - a list of
+# fields to *keep* goes stale the moment the record grows a field.
+IDENTIFIER_FIELDS = frozenset(
+    {
+        "run_id",
+        "tenant_id",
+        "user_id",
+        "audit_id",
+        "args_hash",
+        "input_hash",
+        "output_hash",
+        "idempotency_key",
+        "filter_set_hash",
+        "prompt_pack_version",
+        "detector_version",
+        "ttl",
+    }
+)
 
-    Only trajectory facts: the task, each tool call with its outcome, what policy
-    and DLP said. No prose the agent wrote about itself that is not in the record.
+VALUE_LIMIT = 240
+
+
+def _value(raw: object) -> str:
+    text = raw if isinstance(raw, str) else json.dumps(raw, sort_keys=True, default=str)
+    text = " ".join(text.split())
+    if len(text) <= VALUE_LIMIT:
+        return text
+    return f"{text[:VALUE_LIMIT]}\u2026 (+{len(text) - VALUE_LIMIT} chars)"
+
+
+def _facts(event: dict[str, object]) -> str:
+    kept = [
+        f"{field}={_value(value)}"
+        for field, value in event.items()
+        if field != "type" and field not in IDENTIFIER_FIELDS and value not in ("", None, [], {})
+    ]
+    return " ".join(kept)
+
+
+def render_evidence(case: Case, *, limit: int = DEFAULT_EVENT_LIMIT) -> str:
+    """Everything the record holds about the run, in event order, bounded.
+
+    The judge used to see `tool -> status (rule)` and nothing else, so an answer quoting a
+    retrieval score, a latency or an approval was citing evidence the judge had never been
+    shown - and the judge, correctly, called it unsupported. Whatever an answer can cite has
+    to be in here, and a rater has to see exactly this text: `label-sheet.py` renders it.
+
+    Head and tail survive truncation, so a long log loses its middle rather than the answer.
     """
     lines = [f"Task: {case.prompt}"]
-    for event in case.events:
-        kind = event.get("type")
-        if kind == "tool.call":
-            tool = event.get("tool")
-            outcome = event.get("status")
-            rule = event.get("rule_id", "")
-            lines.append(f"tool: {tool} -> {outcome} ({rule})")
-        elif kind == "policy.decision":
-            lines.append(
-                f"policy: {event.get('tool')} {event.get('decision')} {event.get('rule_id')}"
-            )
-        elif kind == "dlp.event":
-            lines.append(
-                f"dlp: {event.get('surface')} {event.get('action')} {event.get('categories')}"
-            )
-        elif kind == "approval.decision":
-            lines.append(f"approval: {event.get('decision')} by {event.get('approver')}")
-        elif kind == "run.end":
-            lines.append(f"outcome: {event.get('outcome')}")
+    lines.extend(f"{event.get('type')}: {_facts(event)}" for event in case.events)
     if case.answer:
         lines.append(f"answer: {case.answer}")
     return bound("\n".join(lines), limit=limit).text
