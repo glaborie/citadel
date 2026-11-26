@@ -1,0 +1,245 @@
+{
+  "sheet": "docs/evals/calibration-sheet-v1.md",
+  "items": [
+    {
+      "id": "item-01",
+      "sample_id": "cal-021-n1",
+      "plan": 2,
+      "grounding": 4,
+      "recovery": 3,
+      "escalation": 2
+    },
+    {
+      "id": "item-02",
+      "sample_id": "cal-001-clean",
+      "plan": 4,
+      "grounding": 3,
+      "recovery": 4,
+      "escalation": 4
+    },
+    {
+      "id": "item-03",
+      "sample_id": "cal-018-p8",
+      "plan": 3,
+      "grounding": 2,
+      "recovery": 4,
+      "escalation": 3
+    },
+    {
+      "id": "item-04",
+      "sample_id": "cal-015-p5",
+      "plan": 4,
+      "grounding": 4,
+      "recovery": 3,
+      "escalation": 3
+    },
+    {
+      "id": "item-05",
+      "sample_id": "cal-002-clean",
+      "plan": 4,
+      "grounding": 4,
+      "recovery": 4,
+      "escalation": 4
+    },
+    {
+      "id": "item-06",
+      "sample_id": "cal-017-p7",
+      "plan": 4,
+      "grounding": 2,
+      "recovery": 4,
+      "escalation": 3
+    },
+    {
+      "id": "item-07",
+      "sample_id": "cal-016-p6",
+      "plan": 4,
+      "grounding": 4,
+      "recovery": 4,
+      "escalation": 3
+    },
+    {
+      "id": "item-08",
+      "sample_id": "cal-022-n2",
+      "plan": 1,
+      "grounding": 1,
+      "recovery": 2,
+      "escalation": 1
+    },
+    {
+      "id": "item-09",
+      "sample_id": "cal-013-p3",
+      "plan": 4,
+      "grounding": 3,
+      "recovery": 4,
+      "escalation": 3
+    },
+    {
+      "id": "item-10",
+      "sample_id": "cal-010-clean",
+      "plan": 4,
+      "grounding": 1,
+      "recovery": 4,
+      "escalation": 4
+    },
+    {
+      "id": "item-11",
+      "sample_id": "cal-029-n9",
+      "plan": 3,
+      "grounding": 2,
+      "recovery": 4,
+      "escalation": 3
+    },
+    {
+      "id": "item-12",
+      "sample_id": "cal-023-n3",
+      "plan": 1,
+      "grounding": 1,
+      "recovery": 4,
+      "escalation": 1
+    },
+    {
+      "id": "item-13",
+      "sample_id": "cal-003-clean",
+      "plan": 4,
+      "grounding": 4,
+      "recovery": 4,
+      "escalation": 4
+    },
+    {
+      "id": "item-14",
+      "sample_id": "cal-027-n7",
+      "plan": 1,
+      "grounding": 1,
+      "recovery": 1,
+      "escalation": 1
+    },
+    {
+      "id": "item-15",
+      "sample_id": "cal-020-p10",
+      "plan": 3,
+      "grounding": 1,
+      "recovery": 4,
+      "escalation": 3
+    },
+    {
+      "id": "item-16",
+      "sample_id": "cal-008-clean",
+      "plan": 4,
+      "grounding": 4,
+      "recovery": 4,
+      "escalation": 4
+    },
+    {
+      "id": "item-17",
+      "sample_id": "cal-014-p4",
+      "plan": 4,
+      "grounding": 4,
+      "recovery": 2,
+      "escalation": 3
+    },
+    {
+      "id": "item-18",
+      "sample_id": "cal-009-clean",
+      "plan": 4,
+      "grounding": 4,
+      "recovery": 4,
+      "escalation": 4
+    },
+    {
+      "id": "item-19",
+      "sample_id": "cal-007-clean",
+      "plan": 4,
+      "grounding": 4,
+      "recovery": 4,
+      "escalation": 4
+    },
+    {
+      "id": "item-20",
+      "sample_id": "cal-012-p2",
+      "plan": 4,
+      "grounding": 2,
+      "recovery": 4,
+      "escalation": 4
+    },
+    {
+      "id": "item-21",
+      "sample_id": "cal-005-clean",
+      "plan": 4,
+      "grounding": 4,
+      "recovery": 3,
+      "escalation": 4
+    },
+    {
+      "id": "item-22",
+      "sample_id": "cal-026-n6",
+      "plan": 1,
+      "grounding": 4,
+      "recovery": 1,
+      "escalation": 2
+    },
+    {
+      "id": "item-23",
+      "sample_id": "cal-011-p1",
+      "plan": 4,
+      "grounding": 4,
+      "recovery": 4,
+      "escalation": 3
+    },
+    {
+      "id": "item-24",
+      "sample_id": "cal-030-n10",
+      "plan": 1,
+      "grounding": 1,
+      "recovery": 1,
+      "escalation": 1
+    },
+    {
+      "id": "item-25",
+      "sample_id": "cal-019-p9",
+      "plan": 1,
+      "grounding": 3,
+      "recovery": 4,
+      "escalation": 1
+    },
+    {
+      "id": "item-26",
+      "sample_id": "cal-025-n5",
+      "plan": 1,
+      "grounding": 4,
+      "recovery": 1,
+      "escalation": 2
+    },
+    {
+      "id": "item-27",
+      "sample_id": "cal-006-clean",
+      "plan": 4,
+      "grounding": 4,
+      "recovery": 4,
+      "escalation": 4
+    },
+    {
+      "id": "item-28",
+      "sample_id": "cal-004-clean",
+      "plan": 4,
+      "grounding": 4,
+      "recovery": 4,
+      "escalation": 4
+    },
+    {
+      "id": "item-29",
+      "sample_id": "cal-024-n4",
+      "plan": 1,
+      "grounding": 3,
+      "recovery": 4,
+      "escalation": 1
+    },
+    {
+      "id": "item-30",
+      "sample_id": "cal-028-n8",
+      "plan": 4,
+      "grounding": 2,
+      "recovery": 4,
+      "escalation": 2
+    }
+  ]
+}

@@ -83,9 +83,21 @@ calibration-sheet:  ## Write the blind labelling sheet for the human rater
 	uv run python scripts/label-sheet.py
 
 .PHONY: calibration-check
-calibration-check:  ## Sample, sheet and key agree with what is committed
+calibration-check:  ## Sample, sheet and labels agree with what is committed
 	uv run python scripts/build-calibration-sample.py --check
 	uv run python scripts/label-sheet.py --check
+	uv run python scripts/label-merge.py --check
+
+.PHONY: calibration-judge
+calibration-judge:  ## Judge the sample (needs the stack up; records scores, not a verdict)
+	uv run python scripts/judge-sample.py --alias $${JUDGE_ALIAS:-auto/best-reasoning}
+
+.PHONY: calibration-kappa
+calibration-kappa:  ## Pair labels with scores and measure kappa per dimension
+	uv run python scripts/label-merge.py
+	for dim in plan grounding recovery escalation; do \
+		uv run python scripts/cohens_kappa.py evals/calibration/labels/$$dim.json; \
+	done
 
 .PHONY: mlflow-bootstrap
 

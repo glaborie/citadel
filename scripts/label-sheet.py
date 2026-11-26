@@ -150,7 +150,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.check:
         problems = []
-        if SHEET.read_text(encoding="utf-8") != sheet:
+        # The committed sheet is the one a human filled in, so the `score:` lines are
+        # expected to differ. Everything else - items, order, requests, events, answers,
+        # anchors - must be exactly what this script would write today.
+        def form(text: str) -> str:
+            return "\n".join(
+                "score:" if line.startswith("score:") else line for line in text.splitlines()
+            )
+
+        if form(SHEET.read_text(encoding="utf-8")) != form(sheet):
             problems.append(f"{SHEET.relative_to(ROOT)} is stale: run scripts/label-sheet.py")
         if json.loads(KEY.read_text(encoding="utf-8")) != key:
             problems.append(f"{KEY.relative_to(ROOT)} is stale: run scripts/label-sheet.py")
