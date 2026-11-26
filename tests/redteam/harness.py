@@ -729,6 +729,39 @@ def _last_index(items: list[str], value: str) -> int:
     return 0
 
 
+def exec_console_framing(case_: Case, _: Path) -> Outcome:
+    """RT-HITL-06: no console response may be framed by a same-site page.
+
+    The decision form carries its own CSRF token, so framing the approval page
+    turns a genuine T1 approval into a click on a page the approver never read.
+    `SameSite=Lax` does not cover it: Lax separates sites, not ports, and the
+    stack publishes the console beside Keycloak, Temporal and MLflow.
+
+    This checks the middleware on the responses reachable without a session. The
+    middleware runs on the response phase for every route, and `tests/test_ui.py`
+    asserts the same headers on the authenticated views, the decide POST and the
+    403 a wrong role gets - so a route that bypassed it would fail there.
+    """
+    from fastapi.testclient import TestClient
+
+    from citadel.ui.app import create_app
+
+    client = TestClient(
+        create_app(dsn="postgres://fake", api_url="http://api.test", session_key="k" * 32)
+    )
+    checked = 0
+    approval = "/approvals/11111111-1111-1111-1111-111111111111"
+    for path in ("/login", "/runs", "/approvals", approval):
+        response = client.get(path, follow_redirects=False)
+        framed_ok = response.headers.get("x-frame-options") == "DENY"
+        csp = response.headers.get("content-security-policy", "")
+        csp_ok = "frame-ancestors 'none'" in csp and "form-action 'self'" in csp
+        if framed_ok and csp_ok:
+            checked += 1
+    ok = checked == 4
+    return Outcome(ok, f"{checked}/4 responses refuse framing (XFO DENY + frame-ancestors)")
+
+
 def exec_approval_preview(case_: Case, _: Path) -> Outcome:
     """RT-HITL-05: a secret in the arguments must not reach the console.
 
@@ -1104,6 +1137,7 @@ EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-DLP-06": exec_output_cap,
     "RT-DLP-07": exec_dlp_unreadable_answer,
     "RT-HITL-05": exec_approval_preview,
+    "RT-HITL-06": exec_console_framing,
     "RT-EVAL-01": exec_eval_gate,
     "RT-INJ-01": exec_direct_override,
     "RT-INJ-03": exec_tool_output_injection,

@@ -1,8 +1,8 @@
 # Red-team report
 
-Generated 2026-11-25 20:14 UTC from `pytest -m redteam`. Do not edit by hand.
+Generated 2026-11-25 20:37 UTC from `pytest -m redteam`. Do not edit by hand.
 
-**25 of 31 blocked or denied as specified** · 0 failing · 0 known gaps · 6 pending · 0 not run · 25 executed in this run.
+**26 of 32 blocked or denied as specified** · 0 failing · 0 known gaps · 6 pending · 0 not run · 26 executed in this run.
 
 A pending case has no executor yet, which usually means it needs the
 live stack (Temporal, Postgres, the stub tool server). A gap is a case
@@ -25,8 +25,9 @@ lowered to make it green. Neither pending nor gap counts as passing.
 | RT-AUTHZ-06 | pass | denied_fail_closed | authorization | policy.unavailable, identity.unknown_run |
 | RT-HITL-01 | pass | denied | hitl | 403 cannot approve your own run |
 | RT-HITL-02 | pass | denied | hitl | 200/409 calls=1 |
-| RT-HITL-03 | pass | auto_denied | hitl | rejected: approval rejected: Signature has expired |
+| RT-HITL-03 | pass | auto_denied | hitl | rejected: approval expired |
 | RT-HITL-04 | pass | denied | hitl | rejected: approval does not match these arguments |
+| RT-HITL-06 | pass | blocked | hitl | 4/4 responses refuse framing (XFO DENY + frame-ancestors) |
 | RT-HITL-05 | pass | blocked | hitl | 403 for secret-bearing arguments |
 | RT-DLP-01 | pass | blocked | dlp | block ['GITHUB_TOKEN'] |
 | RT-DLP-02 | pass | redacted | dlp | redact |
