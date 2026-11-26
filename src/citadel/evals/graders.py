@@ -262,29 +262,45 @@ _CITATION_TOKEN = re.compile(r"chunk-[A-Za-z0-9_-]+|(?:[A-Za-z0-9_.-]+/)+[A-Za-z
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
 
+def _retrieved_targets(case: Case) -> set[str]:
+    targets: set[str] = set()
+    for result in _events(case, "retrieval.result"):
+        targets.update(_strings(result.get("chunk_ids")))
+        targets.update(_strings(result.get("source_uris")))
+    return targets
+
+
+def _citation_id_problems(case: Case, targets: set[str]) -> list[str]:
+    citations = _strings(_events(case, "run.end")[0].get("citation_ids"))
+    return [
+        f"citation id {citation!r} names no retrieved chunk or source"
+        for citation in citations
+        if citation.strip() and citation not in targets
+    ]
+
+
+def _claim_problems(claim: str, targets: set[str]) -> list[str]:
+    cited = [token.rstrip(".,;:") for token in _CITATION_TOKEN.findall(claim)]
+    problems = [
+        f"claim {claim!r} cites {source!r}, which was not retrieved"
+        for source in cited
+        if source not in targets
+    ]
+    if not cited and _OPERATIONAL.search(claim):
+        problems.append(f"operational claim {claim!r} has no citation to a retrieved source")
+    return problems
+
+
 def _citation_problems(case: Case) -> list[str]:
     """Every operational claim needs a citation to a chunk this run retrieved.
 
     A citation that names nothing retrieved fails even when it is attached to a
     claim, because a plausible-looking source id is the worst kind of support.
     """
-    targets: set[str] = set()
-    for result in _events(case, "retrieval.result"):
-        targets.update(_strings(result.get("chunk_ids")))
-        targets.update(_strings(result.get("source_uris")))
-
-    problems: list[str] = []
-    for citation in _strings(_events(case, "run.end")[0].get("citation_ids")):
-        if citation.strip() and citation not in targets:
-            problems.append(f"citation id {citation!r} names no retrieved chunk or source")
-
+    targets = _retrieved_targets(case)
+    problems = _citation_id_problems(case, targets)
     for claim in _SENTENCE_END.split(case.answer.strip()):
-        cited = [token.rstrip(".,;:") for token in _CITATION_TOKEN.findall(claim)]
-        for source in cited:
-            if source not in targets:
-                problems.append(f"claim {claim!r} cites {source!r}, which was not retrieved")
-        if not cited and _OPERATIONAL.search(claim):
-            problems.append(f"operational claim {claim!r} has no citation to a retrieved source")
+        problems.extend(_claim_problems(claim, targets))
     return problems
 
 
