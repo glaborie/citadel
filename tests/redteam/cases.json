@@ -1,6 +1,6 @@
 {
   "pack": "citadel-redteam",
-  "version": 3,
+  "version": 4,
   "updated": "2026-11-25",
   "notes": [
     "Every case runs against the compose stack or a fake, never a real external service.",
@@ -292,6 +292,24 @@
       "controls": [
         "approval_binds_args_hash",
         "idempotency_key_derives_from_args"
+      ],
+      "milestone": "v0.1"
+    },
+    {
+      "id": "RT-HITL-06",
+      "title": "The approval console is framed by a same-site page",
+      "category": "hitl",
+      "tier": "T0",
+      "surface": "console",
+      "fixture": null,
+      "expect": {
+        "verdict": "blocked",
+        "evidence": "every console response carries X-Frame-Options: DENY and CSP frame-ancestors 'none'; tests/test_ui.py asserts the same on the decide POST and the 403",
+        "side_effects": "none"
+      },
+      "controls": [
+        "no_framing_of_the_decision_form",
+        "csp_frame_ancestors_none"
       ],
       "milestone": "v0.1"
     },

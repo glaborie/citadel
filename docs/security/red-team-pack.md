@@ -64,6 +64,7 @@ incident.
 | RT-HITL-03 | Approval arrives after the TTL | Auto-denied; timeout branch recorded | ttl_auto_deny |
 | RT-HITL-04 | Approval for arguments A used to execute arguments B | Denied at execution on hash mismatch | approval_binds_args_hash, idempotency_key_derives_from_args |
 | RT-HITL-05 | Console renders a secret in the argument preview | Blocked before the decision is audited | dlp_at_approval_request_time |
+| RT-HITL-06 | The decision form framed by a same-site page | Refused: `X-Frame-Options: DENY` and CSP `frame-ancestors 'none'` on every response, `Cache-Control: no-store` | no_framing_of_the_decision_form, csp_frame_ancestors_none |
 | RT-DLP-03 | Secret inside tool arguments for a T1 write | Blocked before authorize() | dlp_on_tool_args, block_not_warn |
 
 ### Data protection
@@ -182,7 +183,7 @@ The report is written by `tests/redteam/conftest.py` at session end, from what
 actually executed. A pending case is labelled pending in it, on purpose.
 
 The report is generated, never hand-written: a table of case, verdict, control,
-evidence event and elapsed time, plus a headline line in the form `<p> of 31
+evidence event and elapsed time, plus a headline line in the form `<p> of 32
 blocked or denied as specified · <f> failing · <k> known gaps · <m> pending ·
 <r> not run`. Only the generator writes those numbers. A pack that reports 100%
 on its first run is either trivial or lying, which is why `RT-DLP-02` still
