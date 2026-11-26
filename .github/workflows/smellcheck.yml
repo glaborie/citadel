@@ -22,4 +22,4 @@ jobs:
         run: pip install smellcheck
       - name: Run smellcheck
         run: |
-          smellcheck src/ --min-severity warning baseline .smellcheck-baseline.json --fail-on warning
+          smellcheck src/ --min-severity warning --baseline .smellcheck-baseline.json --fail-on warning
