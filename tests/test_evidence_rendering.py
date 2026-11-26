@@ -73,3 +73,33 @@ def test_the_sheet_carries_the_scores_already_written_on_it() -> None:
     )
 
     assert len(scored) == 30
+
+def test_a_recorded_tool_answer_reaches_the_judge() -> None:
+    """The whole point of #156: an answer that quotes a tool can be checked against it."""
+    import dataclasses
+
+    case = cases()[0]
+    events = [dict(event) for event in case.events]
+    for event in events:
+        if event["type"] == "tool.call":
+            event["output"] = {"stdout": "consumer reconnecting every 90000 ms"}
+            break
+    rendered = render_evidence(dataclasses.replace(case, events=events))
+
+    assert "output=" in rendered
+    assert "reconnecting every 90000 ms" in rendered
+
+def test_a_stated_duration_appears_in_the_evidence() -> None:
+    """The rater took these on trust in v1; the record now has to carry them."""
+    seconds = re.compile(r"\b(\d+(?:\.\d+)?)\s?seconds?\b")
+    millis = re.compile(r"\b(\d+)\s?ms\b")
+    for case in cases():
+        evidence = render_evidence(case)
+        text = case.answer or ""
+        for value in seconds.findall(text):
+            as_ms = str(int(float(value) * 1000))
+            assert value in evidence or as_ms in evidence, (
+                f"{case.id}: answer says {value} seconds, evidence says neither {value} nor {as_ms}"
+            )
+        for value in millis.findall(text):
+            assert value in evidence, f"{case.id}: answer says {value} ms, evidence does not"

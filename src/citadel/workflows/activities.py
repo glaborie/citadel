@@ -322,6 +322,31 @@ class ToolActivities:
             )
         return result
 
+    def _recorded_output(
+        self, result: ToolResult
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, str]:
+        """The tool's answer as the record may keep it, and why if it does not.
+
+        Mirrors `_recorded_arguments`: the ledger is append-only, so it takes the same
+        gate, and a body the detector blocks is not carried at all - the digest and the
+        event remain. Oversized is not the same as refused: a 200 KB body the record
+        cannot hold is marked as such, because "no output" and "output too large to
+        keep" are different facts about a run and a grader has to tell them apart.
+        """
+        if not result.output:
+            return None, None, "absent"
+        text = json.dumps(result.output, ensure_ascii=False)
+        if len(text.encode("utf-8")) > EVENT_OUTPUT_LIMIT:
+            return None, None, "too_large"
+        try:
+            gated, report = dlp.gate(text, surface="record", analyzer_url=DLP_URL)
+        except dlp.DlpBlocked as exc:
+            return None, exc.report, "redacted"
+        values, event = _gated_values(gated, report)
+        if values is None:
+            return None, event, "redacted"
+        return values, event, "kept"
+
     def _audit_tool(
         self,
         call: ToolCall,
@@ -333,6 +358,7 @@ class ToolActivities:
         duration: int = 0,
     ) -> None:
         arguments, gated = self._recorded_arguments(call)
+        output, output_event, disposition = self._recorded_output(result)
         payload: dict[str, Any] = {
             "run_id": call.run_id,
             "tool": call.tool,
@@ -354,6 +380,12 @@ class ToolActivities:
         }
         if arguments is not None:
             payload["arguments"] = arguments
+        if disposition == "kept" and output is not None:
+            payload["output"] = output
+        elif disposition == "redacted":
+            payload["output_redacted"] = True
+        elif disposition == "too_large":
+            payload["output_too_large"] = True
         ref = self._audit.append(
             tenant_id=call.tenant_id,
             event_type="tool.call",
@@ -375,6 +407,8 @@ class ToolActivities:
         # After the call it explains, so the record reads call then reason.
         if gated is not None:
             self._audit_dlp(call, [gated])
+        if output_event is not None:
+            self._audit_dlp(call, [output_event])
 
     def _recorded_arguments(
         self, call: ToolCall
