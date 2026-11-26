@@ -372,13 +372,18 @@ class ToolActivities:
         body = json.dumps(
             {"agent": call.agent_id, "tool": call.tool, "arguments": call.arguments}
         ).encode()
-        return self._post(f"{self._runner_url}/execute", body, call)
+        # The runner verifies this token and takes the agent from its claims; a
+        # run with no token is refused there with 401, never executed unauthenticated.
+        headers = {"Authorization": f"Bearer {call.run_token}"} if call.run_token else None
+        return self._post(f"{self._runner_url}/execute", body, call, headers=headers)
 
-    def _post(self, url: str, body: bytes, call: ToolCall) -> ToolResult:
+    def _post(
+        self, url: str, body: bytes, call: ToolCall, *, headers: dict[str, str] | None = None
+    ) -> ToolResult:
         request = Request(
             url,
             data=body,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", **(headers or {})},
             method="POST",
         )
         try:
@@ -404,7 +409,7 @@ class ToolActivities:
                     ),
                 )
             detail = raw[:300]
-            rule = "tool.refused" if exc.code in (403, 409) else "tool.error"
+            rule = "tool.refused" if exc.code in (401, 403, 409) else "tool.error"
             return ToolResult(
                 status="failed",
                 tool=call.tool,

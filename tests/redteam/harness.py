@@ -55,6 +55,31 @@ COLLECTED: dict[str, tuple[str, str]] = {}
 # stronger evidence, and file execution order must not decide which one counts.
 LIVE: dict[str, tuple[str, str]] = {}
 
+# The runner verifies a run token on every call, so the cases that drive its
+# routes present one signed by this key and put the matching public half in the
+# environment the runner reads.
+_RUNNER_KEY = Ed25519PrivateKey.generate()
+
+
+def runner_client() -> Any:
+    """A tool-runner client that is authenticated as the docker agent."""
+    import os
+
+    from fastapi.testclient import TestClient
+
+    from citadel.tools import runner
+    from tests.redteam import support
+
+    os.environ["CITADEL_RUN_TOKEN_PUBLIC_KEY"] = support.public_key_env(_RUNNER_KEY)
+    token, _ = mint_run_token(
+        Principal("user-alice", "lab-a", frozenset()),
+        agent_id="docker",
+        scopes=frozenset(),
+        risk_tier="T0",
+        private_key=_RUNNER_KEY,
+    )
+    return TestClient(runner.app, headers={"Authorization": f"Bearer {token}"})
+
 
 @dataclass(frozen=True)
 class Case:
@@ -640,8 +665,6 @@ def exec_output_cap(case_: Case, _: Path) -> Outcome:
     from types import SimpleNamespace
     from unittest import mock
 
-    from fastapi.testclient import TestClient
-
     from citadel.tools import runner
     from tests.redteam import support
 
@@ -655,7 +678,7 @@ def exec_output_cap(case_: Case, _: Path) -> Outcome:
         mock.patch.object(dlp, "urlopen", support.DetectorStub([])),
         mock.patch.object(runner, "run", fake_run),
     ):
-        client = TestClient(runner.app)
+        client = runner_client()
         response = client.post(
             "/execute",
             json={"agent": "docker", "tool": "read_logs", "arguments": {"service": "checkout-api"}},
@@ -794,8 +817,6 @@ def exec_refusal_echo(case_: Case, _: Path) -> Outcome:
     """
     from unittest import mock
 
-    from fastapi.testclient import TestClient
-
     from citadel.tools import runner
     from citadel.tools.allowlist import CommandDenied
     from citadel.tools.invoke import build_argv
@@ -824,7 +845,7 @@ def exec_refusal_echo(case_: Case, _: Path) -> Outcome:
         mock.patch.object(dlp, "urlopen", analyzer),
         mock.patch.object(runner, "run", lambda argv: None),
     ):
-        client = TestClient(runner.app)
+        client = runner_client()
         response = client.post(
             "/execute", json={"agent": "docker", "tool": "read_logs", "arguments": arguments}
         )

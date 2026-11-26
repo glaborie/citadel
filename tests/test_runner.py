@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import urllib.error
+from collections.abc import Callable
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from fastapi.testclient import TestClient
 
 from citadel import dlp
+from citadel.identity import Principal, mint_run_token
 from citadel.tools import runner
 from citadel.tools.bounds import bound
 from tests.conftest import AnalyzerResponse
@@ -26,7 +34,30 @@ class Done:
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch, analyzer: list[dict[str, Any]]) -> TestClient:
+def tokens(run_private_key: Ed25519PrivateKey) -> Callable[..., str]:
+    def mint(agent: str = "docker", ttl_seconds: int = 300) -> str:
+        token, _ = mint_run_token(
+            Principal("user-alice", "lab-a", frozenset()),
+            agent_id=agent,
+            scopes=frozenset(),
+            risk_tier="T0",
+            private_key=run_private_key,
+            ttl_seconds=ttl_seconds,
+        )
+        return token
+
+    return mint
+
+
+@pytest.fixture
+def client(
+    monkeypatch: pytest.MonkeyPatch,
+    analyzer: list[dict[str, Any]],
+    run_public_key: Ed25519PublicKey,
+    tokens: Callable[..., str],
+) -> TestClient:
+    public = run_public_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+    monkeypatch.setenv("CITADEL_RUN_TOKEN_PUBLIC_KEY", base64.b64encode(public).decode())
     captured: dict[str, Any] = {"stdout": "ok", "stderr": ""}
 
     def fake_run(argv: list[str]) -> Done:
@@ -34,9 +65,75 @@ def client(monkeypatch: pytest.MonkeyPatch, analyzer: list[dict[str, Any]]) -> T
         return Done(stdout=str(captured["stdout"]), stderr=str(captured["stderr"]))
 
     monkeypatch.setattr(runner, "run", fake_run)
-    test_client = TestClient(runner.app)
+    test_client = TestClient(runner.app, headers={"Authorization": f"Bearer {tokens('docker')}"})
     test_client.captured = captured
     return test_client
+
+
+def test_execute_requires_a_run_token(
+    monkeypatch: pytest.MonkeyPatch, run_public_key: Ed25519PublicKey
+) -> None:
+    """Red team: a workload on the sandbox network with no token at all."""
+    public = run_public_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+    monkeypatch.setenv("CITADEL_RUN_TOKEN_PUBLIC_KEY", base64.b64encode(public).decode())
+    ran: list[list[str]] = []
+
+    def fake_run(argv: list[str]) -> Done:
+        ran.append(argv)
+        return Done()
+
+    monkeypatch.setattr(runner, "run", fake_run)
+
+    response = TestClient(runner.app).post("/execute", json=LOGS)
+
+    assert response.status_code == 401
+    assert ran == [], "the command must not run before the caller is identified"
+
+
+def test_a_token_for_another_agent_is_refused(
+    client: TestClient, tokens: Callable[..., str]
+) -> None:
+    """A github token cannot claim to be docker in the body."""
+    response = client.post(
+        "/execute",
+        json=LOGS,
+        headers={"Authorization": f"Bearer {tokens('github')}"},
+    )
+    assert response.status_code == 403
+    assert response.json()["detail"] == "agent does not match run token"
+    assert "argv" not in client.captured
+
+
+def test_an_expired_token_is_refused(client: TestClient, tokens: Callable[..., str]) -> None:
+    response = client.post(
+        "/execute",
+        json=LOGS,
+        headers={"Authorization": f"Bearer {tokens('docker', ttl_seconds=-10)}"},
+    )
+    assert response.status_code == 403
+    assert "argv" not in client.captured
+
+
+def test_a_token_signed_by_another_key_is_refused(client: TestClient) -> None:
+    token, _ = mint_run_token(
+        Principal("user-alice", "lab-a", frozenset()),
+        agent_id="docker",
+        scopes=frozenset(),
+        risk_tier="T0",
+        private_key=Ed25519PrivateKey.generate(),
+    )
+    response = client.post("/execute", json=LOGS, headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 403
+    assert "argv" not in client.captured
+
+
+def test_a_runner_without_a_verification_key_fails_closed(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CITADEL_RUN_TOKEN_PUBLIC_KEY")
+    response = client.post("/execute", json=LOGS)
+    assert response.status_code == 503
+    assert "argv" not in client.captured
 
 
 def test_execute_runs_the_built_argv(client: TestClient) -> None:
@@ -82,10 +179,14 @@ def test_agent_cannot_run_another_agents_tool(client: TestClient) -> None:
     ],
 )
 def test_sandbox_refuses_t1_whatever_the_caller_asks(
-    client: TestClient, agent: str, tool: str, arguments: dict[str, Any]
+    client: TestClient, tokens: Callable[..., str], agent: str, tool: str, arguments: dict[str, Any]
 ) -> None:
     """Writes belong to the operator; the sandbox never runs one."""
-    response = client.post("/execute", json={"agent": agent, "tool": tool, "arguments": arguments})
+    response = client.post(
+        "/execute",
+        json={"agent": agent, "tool": tool, "arguments": arguments},
+        headers={"Authorization": f"Bearer {tokens(agent)}"},
+    )
     assert response.status_code == 403
     assert "use the operator service" in response.json()["detail"]
 

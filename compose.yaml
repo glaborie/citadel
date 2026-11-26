@@ -583,6 +583,9 @@ services:
     mem_limit: 512m
     environment:
       DOCKER_HOST: tcp://docker-socket-proxy:2375
+      # Verifies the run token every /execute call must present. Public key
+      # only: the sandbox can verify a run's identity but never mint one.
+      CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
       # Output is only served after this service has redacted it.
       CITADEL_DLP_URL: http://presidio:3000
       # All sandbox egress goes through the domain-allowlisted proxy.
