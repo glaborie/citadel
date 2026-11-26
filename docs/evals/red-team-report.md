@@ -1,6 +1,6 @@
 # Red-team report
 
-Generated 2026-11-26 10:10 UTC from `pytest -m redteam`. Do not edit by hand.
+Generated 2026-11-26 10:50 UTC from `pytest -m redteam`. Do not edit by hand.
 
 **29 of 35 blocked or denied as specified** · 0 failing · 0 known gaps · 6 pending · 0 not run · 29 executed in this run.
 

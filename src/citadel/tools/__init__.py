@@ -8,7 +8,7 @@ from citadel.tools.allowlist import (
     match,
 )
 from citadel.tools.bounds import Bounded, bound
-from citadel.tools.invoke import build_argv
+from citadel.tools.invoke import build_argv, needs_body_file
 
 __all__ = [
     "AllowedCommand",
@@ -19,4 +19,5 @@ __all__ = [
     "build_argv",
     "load_allowlist",
     "match",
+    "needs_body_file",
 ]

@@ -17,6 +17,13 @@ from typing import Any
 # Any of these in a token means the caller is trying to build a second command.
 _FORBIDDEN = re.compile(r"[;|&$`<>\n\r\x00]")
 _FLAG_WITH_VALUE = re.compile(r"^(?P<flag>--?[A-Za-z0-9-]+)=(?P<value>.*)$")
+# Flags whose value is written by the operator rather than supplied by a caller:
+# a PR body travels as a file, so the argv can name an absolute path without a
+# caller ever naming one. Only the flags in this set get that allowance, and the
+# value still may not travel, hide a metacharacter, or look like anything other
+# than the file the operator writes.
+_SYSTEM_PATH_FLAGS = frozenset({"--body-file"})
+_OPERATOR_PATH = re.compile(r"^/[A-Za-z0-9_./-]+\.txt$")
 
 
 class CommandDenied(Exception):
@@ -59,26 +66,43 @@ def load_allowlist() -> tuple[AllowedCommand, ...]:
     )
 
 
+def _check_operator_path(tokens: Sequence[str], index: int) -> int:
+    """Validate the value of a system path flag; return how many tokens it spans.
+
+    The value is the operator's file, not an argument. It may be absolute; it may
+    not travel, carry a metacharacter, or be anything but the `.txt` this codebase
+    writes. The flag itself is one token, its value is the next, so the caller walks
+    past two.
+    """
+    flag = tokens[index]
+    value = tokens[index + 1] if index + 1 < len(tokens) else ""
+    if not _OPERATOR_PATH.match(value) or ".." in value:
+        raise CommandDenied(f"the value of {flag} must be the operator's own file")
+    return 2
+
+
 def _check_tokens(tokens: Sequence[str]) -> None:
     """Reject what cannot be a single argv token, without repeating it back.
 
-    The message used to quote the token with `!r`, and both callers return this
-    string in a 403 body. The realistic trigger is ordinary - an agent builds a PR
-    title or a restart reason that contains a shell metacharacter, often next to the
-    very secret that caused the incident - so the exception was the one path where an
-    argument reached the caller, the logs and the transcript without ever meeting the
-    DLP gate. The position and the class are what make the refusal actionable; the
-    value adds nothing an attacker did not already know.
+    Both callers return this string in a 403 body, so quoting the token would be
+    the one path where an argument reaches a caller, a log line and a transcript
+    without meeting the DLP gate. Position and class are what make it actionable.
     """
     if not tokens:
         raise CommandDenied("empty command")
-    for index, token in enumerate(tokens):
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
         if not isinstance(token, str):
             raise CommandDenied(f"non-string token at position {index}")
+        if token in _SYSTEM_PATH_FLAGS:
+            index += _check_operator_path(tokens, index)
+            continue
         if _FORBIDDEN.search(token):
             raise CommandDenied(f"shell metacharacter in argument {index}")
         if token.startswith("/") or ".." in token:
             raise CommandDenied(f"path traversal or absolute path in argument {index}")
+        index += 1
 
 
 def _matches(entry: AllowedCommand, tokens: Sequence[str]) -> bool:

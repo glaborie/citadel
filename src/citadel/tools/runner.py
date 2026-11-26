@@ -21,6 +21,7 @@ from citadel import __version__, dlp
 from citadel.env import secret
 from citadel.identity import IdentityError
 from citadel.identity.run_token import RunContext, public_key_from_env, verify_run_token
+from citadel.policy.catalog import load_catalog
 from citadel.tools import CommandDenied, build_argv
 from citadel.tools.bounds import DEFAULT_OUTPUT_LIMIT, bound
 
@@ -120,6 +121,22 @@ def _run_context(authorization: Annotated[str | None, Header()] = None) -> RunCo
         raise HTTPException(status_code=403, detail="invalid run token") from exc
 
 
+def _refuse_write(tool: str) -> None:
+    """A T1 command is refused before its arguments are examined.
+
+    The sandbox never builds the argv of a command the operator owns, so an
+    argument that would be refused for its own reasons must not mask the tier
+    refusal - and the difference between the two messages must not become a way to
+    probe which commands exist.
+    """
+    spec = load_catalog().get(tool)
+    if spec is not None and spec.tier != "T0":
+        command = spec.command or tool
+        raise HTTPException(
+            status_code=403, detail=f"{command} is {spec.tier}; use the operator service"
+        )
+
+
 def _output_limit(command: Any) -> int:  # noqa: ANN401 - an allowlist entry
     """The command's own transport cap, or the runner default.
 
@@ -147,6 +164,8 @@ def execute(
     _, report = _guard(arguments, surface="input")
     reports.append(report)
 
+    _refuse_write(request.tool)
+
     try:
         argv, command = build_argv(request.tool, request.arguments)
     except CommandDenied as exc:
@@ -154,8 +173,9 @@ def execute(
 
     if command.agent != ctx.agent_id:
         raise HTTPException(status_code=403, detail="agent may not run this command")
-    if command.tier != "T0":
-        # Writes belong to the operator service, never to the sandbox.
+    # The tier was refused above, before any argument was examined; this asserts
+    # the built command agrees with the catalog rather than relying on the order.
+    if command.tier != "T0":  # pragma: no cover - _refuse_write raises first
         raise HTTPException(
             status_code=403, detail=f"{command.id} is {command.tier}; use the operator service"
         )
