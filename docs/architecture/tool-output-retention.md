@@ -74,3 +74,13 @@ or refused for size.
   is the obvious default) that needs a job and a delete grant, not a comment.
 - **No download path for binaries.** Everything stored is UTF-8 text; a binary
   artifact would need a content type and a different route.
+
+## What a replay must report
+
+A repeated attempt that hits an existing idempotency key returns the stored payload
+with `status=replayed`, and it must describe that payload exactly as the first
+execution did: `output_sha256`, `output_bytes`, `output_truncated`, `output_ref` and
+`output_stored`. The digest is in the payload either way, so the fields are derived
+from it rather than stored twice - but a consumer that reads the audit event sees
+the same numbers on the first call and on the replay, which is the point of writing
+them at all.

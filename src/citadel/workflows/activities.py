@@ -13,7 +13,7 @@ import json
 import os
 import time
 import urllib.error
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 from urllib.request import Request
 
@@ -105,6 +105,41 @@ def cap_and_offload(
     primary = offloaded.get("stdout") or next(iter(offloaded.values()))
     stored = any(item["stored"] for item in offloaded.values())
     return bounded.payload, str(primary["digest"]), stored
+
+
+def _replayed(call: ToolCall, key: str, stored: dict[str, Any]) -> ToolResult:
+    """The result of a repeated attempt, describing the output it hands back.
+
+    The stored payload is the same dict the first attempt capped, so every typed
+    field is derivable - `offloaded` names the digest and whether the body was
+    kept. Returning the payload with the typed fields left at their defaults told a
+    consumer "no output" about a call whose output is stored and readable.
+    """
+    offloaded = stored.get("offloaded")
+    output_ref = ""
+    stored_any = False
+    if isinstance(offloaded, dict) and offloaded:
+        primary = offloaded.get("stdout") or next(iter(offloaded.values()))
+        if isinstance(primary, dict):
+            output_ref = str(primary.get("digest", ""))
+        stored_any = any(
+            bool(item.get("stored")) for item in offloaded.values() if isinstance(item, dict)
+        )
+    return ToolResult(
+        status="replayed",
+        tool=call.tool,
+        rule_id="idempotency.replayed",
+        detail="an earlier attempt produced this key",
+        idempotency_key=key,
+        replayed=True,
+        output=stored,
+        output_sha256=str(stored.get("output_sha256", "")),
+        output_bytes=int(stored.get("original_bytes", 0) or 0),
+        output_truncated=bool(stored.get("truncated", False)),
+        output_ref=output_ref,
+        output_stored=stored_any,
+    )
+
 
 
 def idempotency_key(call: ToolCall) -> str:
@@ -246,14 +281,12 @@ class ToolActivities:
         outcome = self._invoke(call)
         duration = round((time.monotonic() - started) * 1000)
 
-        result = ToolResult(
-            status=outcome.status,
-            tool=call.tool,
-            rule_id=outcome.rule_id,
-            detail=outcome.detail,
-            idempotency_key=key,
-            output=outcome.output,
-        )
+        # `replace`, not a field-by-field copy: the earlier spelling listed the
+        # fields it knew about and silently dropped `output_sha256`,
+        # `output_bytes`, `output_truncated`, `output_ref` and `output_stored`, so
+        # the audit event for a capped call reported no cap. A copy that cannot
+        # forget a field added later is the only copy worth writing here.
+        result = replace(outcome, idempotency_key=key)
         with tenant_connection(self._dsn, call.tenant_id) as conn:
             conn.execute(
                 "UPDATE tool_calls SET status = %s, result = %s WHERE idempotency_key = %s",
@@ -319,15 +352,7 @@ class ToolActivities:
         the outcome is genuinely unknown.
         """
         if status in {"executed", "replayed", "failed"}:
-            return ToolResult(
-                status="replayed",
-                tool=call.tool,
-                rule_id="idempotency.replayed",
-                detail="an earlier attempt produced this key",
-                idempotency_key=key,
-                replayed=True,
-                output=result or {},
-            )
+            return _replayed(call, key, result or {})
         if tier == "T1":
             # The approval was consumed and the command may have run. Retrying
             # would either duplicate it or be refused; neither is a result.

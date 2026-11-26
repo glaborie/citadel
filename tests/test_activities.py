@@ -578,6 +578,120 @@ def test_the_capped_bytes_are_kept_where_the_digest_points(
     assert stored == body, "the store must hold the text the runner returned, not the cap"
 
 
+OUTPUT_FIELDS = ('output_sha256', 'output_bytes', 'output_truncated', 'output_ref', 'output_stored')
+
+BIG = "HEAD\n" + ("c" * 60_000) + "\nEND\n"
+
+
+def _serving(body: str) -> Any:
+    def urlopen(_request: Any, timeout: Any = None) -> Reply:
+        return Reply(
+            {"allowlist_id": "docker.logs", "stdout": body, "stderr": "", "truncated": False}
+        )
+
+    return urlopen
+
+
+def _through_the_real_invoker(
+    monkeypatch: pytest.MonkeyPatch, db: FakeDB, ledger: Any, body: str
+) -> ToolActivities:
+    """`execute_tool` with the sandbox path intact, so the cap actually runs."""
+    impl = build(monkeypatch, db, recorder([]), ledger)
+    monkeypatch.setattr(impl, "_invoke", impl._invoke_sandbox)
+    monkeypatch.setattr(net, "urlopen", _serving(body))
+    return impl
+
+
+def test_a_capped_call_reports_the_cap_in_its_own_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The rebuild after invoke copied the fields it knew about and dropped the rest.
+
+    `_post` set `output_sha256`, `output_bytes`, `output_truncated`, `output_ref` and
+    `output_stored`; `execute_tool` then built a fresh ToolResult from six of them, so
+    the audit event for a capped call said no cap had been applied and the caller
+    could not read the output back.
+    """
+    ledger = FakeAudit()
+    impl = _through_the_real_invoker(monkeypatch, FakeDB(), ledger, BIG)
+
+    result = impl.execute_tool(call("read_logs"))
+
+    digest = hashlib.sha256(BIG.encode()).hexdigest()
+    assert result.output_sha256 == digest
+    assert result.output_bytes == len(BIG.encode())
+    assert result.output_truncated is True
+    assert result.output_ref == digest
+    assert result.output_stored is True
+
+    payload = ledger.events[-1]["payload"]
+    assert payload["output_sha256"] == digest
+    assert payload["output_ref"] == digest
+    assert payload["output_truncated"] is True
+
+
+def test_a_replay_reports_the_same_fields_as_the_first_execution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The acceptance criterion: field by field, replay equals first execution."""
+    ledger = FakeAudit()
+    db = FakeDB()
+    impl = _through_the_real_invoker(monkeypatch, db, ledger, BIG)
+    item = call("read_logs")
+
+    first = impl.execute_tool(item)
+    second = impl.execute_tool(item)
+
+    assert second.status == "replayed"
+    assert second.replayed is True
+    for name in OUTPUT_FIELDS:
+        assert getattr(second, name) == getattr(first, name), name
+    assert second.output == first.output
+
+    # The audit event a consumer reads says the same thing as the result.
+    payload = ledger.events[-1]["payload"]
+    assert payload["status"] == "replayed"
+    assert payload["output_ref"] == first.output_ref
+    assert payload["output_sha256"] == first.output_sha256
+    assert payload["output_bytes"] == first.output_bytes
+    assert payload["output_truncated"] is True
+
+
+def test_a_replay_of_a_call_that_stored_nothing_still_matches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The equality is the contract, not the non-emptiness."""
+    impl = _through_the_real_invoker(monkeypatch, FakeDB(), FakeAudit(), "short\n")
+    item = call("read_logs")
+
+    first = impl.execute_tool(item)
+    second = impl.execute_tool(item)
+
+    # A short output still reports its digest: the cap is not the only reason to
+    # know what was returned.
+    assert first.output_sha256 == hashlib.sha256(b"short\n").hexdigest()
+    assert first.output_truncated is False
+    assert first.output_stored is False
+    for name in OUTPUT_FIELDS:
+        assert getattr(second, name) == getattr(first, name), name
+
+
+def test_a_replay_of_a_legacy_row_invents_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A row written before the fields existed must not gain a fabricated digest."""
+    item = call("read_logs")
+    db = FakeDB({idempotency_key(item): {"status": "executed", "result": {"stdout": "hi"}}})
+    impl = build(monkeypatch, db, recorder([]))
+    result = impl.execute_tool(item)
+
+    assert result.status == "replayed"
+    assert result.output == {"stdout": "hi"}
+    assert result.output_sha256 == ""
+    assert result.output_bytes == 0
+    assert result.output_truncated is False
+    assert result.output_ref == ""
+    assert result.output_stored is False
+
+
 def test_the_audit_record_states_that_a_cap_was_applied(monkeypatch: pytest.MonkeyPatch) -> None:
     """A silence is not evidence: the event carries the digest of what it hid."""
     ledger = FakeAudit()
