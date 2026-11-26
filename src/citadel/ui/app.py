@@ -34,10 +34,13 @@ from typing import Any
 import jwt
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from starlette.middleware.base import RequestResponseEndpoint
 
 from citadel import __version__
 from citadel.db import tenant_connection
+from citadel.env import secret
 from citadel.identity import IdentityError, KeycloakVerifier, Principal
+from citadel.net import open_url
 from citadel.workflows.types import APPROVAL_TTL
 
 COOKIE = "citadel_console"
@@ -111,9 +114,7 @@ def _order(columns: dict[str, str], sort: str, direction: str, default: str) -> 
     return f"{column} {'DESC' if direction == 'desc' else 'ASC'}"
 
 
-def _sort_header(
-    label: str, key: str, sort: str, direction: str, filters: dict[str, str]
-) -> str:
+def _sort_header(label: str, key: str, sort: str, direction: str, filters: dict[str, str]) -> str:
     marker = ""
     if key == sort:
         marker = " ▲" if direction == "asc" else " ▼"
@@ -169,23 +170,50 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(title="Citadel Approval Console", version=__version__)
 
+    @app.middleware("http")
+    async def _refuse_to_be_framed(
+        request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        """No console page may be framed, and none may be cached.
+
+        The decision form carries its own CSRF token, so framing
+        `/approvals/<id>` in a decoy page turns a genuine approval into a click on
+        something the approver never read. `SameSite=Lax` does not cover it: Lax
+        separates sites, not ports, and the stack publishes the console beside
+        Keycloak, Temporal and MLflow, so a page on any of them is same-site and
+        gets the cookie. The cookie stays Lax regardless - the OIDC callback is a
+        cross-site navigation, and Strict would drop the session on the way back.
+
+        `Cache-Control: no-store` is part of the same control: a cached approval
+        page is a stale CSRF token and a readable copy of the arguments.
+        """
+        response = await call_next(request)
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Content-Security-Policy"] = (
+            "frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'"
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.exception_handler(LoginRequired)
     def _to_login(_: Request, __: LoginRequired) -> RedirectResponse:
         return RedirectResponse("/login", status_code=303)
 
     def _dsn() -> str:
-        return dsn if dsn is not None else os.environ["CITADEL_DB_DSN"]
+        return dsn if dsn is not None else secret("CITADEL_DB_DSN")
 
     def _key() -> str:
-        value = (
-            session_key
-            if session_key is not None
-            else os.environ.get("CITADEL_CONSOLE_SESSION_KEY")
-        )
-        if not value:
+        if session_key is not None:
+            return session_key
+        try:
+            return secret("CITADEL_CONSOLE_SESSION_KEY")
+        except KeyError as exc:
             # Unconfigured sessions are a denial, never an unsigned cookie.
-            raise HTTPException(status_code=503, detail="CITADEL_CONSOLE_SESSION_KEY is not set")
-        return value
+            raise HTTPException(
+                status_code=503, detail="CITADEL_CONSOLE_SESSION_KEY is not set"
+            ) from exc
 
     def _verifier() -> KeycloakVerifier:
         if verifier is not None:
@@ -264,7 +292,7 @@ def create_app(
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=10) as response:
+            with open_url(request, timeout=10) as response:
                 payload = json.loads(response.read())
         except urllib.error.HTTPError as exc:
             raise HTTPException(
@@ -285,7 +313,7 @@ def create_app(
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=10) as response:
+            with open_url(request, timeout=10) as response:
                 return response.status, response.read().decode()
         except urllib.error.HTTPError as exc:
             return exc.code, exc.read().decode()
@@ -392,7 +420,9 @@ def create_app(
         order = _order(RUN_COLUMNS, sort, dir, "created")
         with tenant_connection(_dsn(), principal.tenant_id) as conn:
             rows = conn.execute(
-                "SELECT id, user_id, agent_id, risk_tier, status, created_at"
+                # `order` comes from the RUN_COLUMNS whitelist; every value is a
+                # bound parameter.
+                "SELECT id, user_id, agent_id, risk_tier, status, created_at"  # nosec B608
                 " FROM runs WHERE " + " AND ".join(clauses) + f" ORDER BY {order} LIMIT 100",
                 tuple(params),
             ).fetchall()
@@ -619,7 +649,9 @@ def create_app(
         order = _order(AUDIT_COLUMNS, sort, dir, "seq")
         with tenant_connection(_dsn(), principal.tenant_id) as conn:
             rows = conn.execute(
-                "SELECT seq, event_type, actor_type, actor_id, payload, created_at"
+                # `order` comes from the AUDIT_COLUMNS whitelist; every value is a
+                # bound parameter.
+                "SELECT seq, event_type, actor_type, actor_id, payload, created_at"  # nosec B608
                 " FROM audit_events"
                 " WHERE (%s = '' OR event_type = %s)"
                 " AND (%s = '' OR actor_id ILIKE %s)"

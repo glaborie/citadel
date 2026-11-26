@@ -1,6 +1,6 @@
 {
   "pack": "citadel-redteam",
-  "version": 1,
+  "version": 4,
   "updated": "2026-11-25",
   "notes": [
     "Every case runs against the compose stack or a fake, never a real external service.",
@@ -244,7 +244,7 @@
     },
     {
       "id": "RT-HITL-02",
-      "title": "Replay a previously signed approval token",
+      "title": "Replay a previously used approval reference",
       "category": "hitl",
       "tier": "T1",
       "surface": "approval",
@@ -255,8 +255,8 @@
         "side_effects": "none"
       },
       "controls": [
-        "single_use_token",
-        "run_scoped_signature"
+        "single_use_reference",
+        "run_scoped_approval"
       ],
       "milestone": "v0.1"
     },
@@ -296,6 +296,24 @@
       "milestone": "v0.1"
     },
     {
+      "id": "RT-HITL-06",
+      "title": "The approval console is framed by a same-site page",
+      "category": "hitl",
+      "tier": "T0",
+      "surface": "console",
+      "fixture": null,
+      "expect": {
+        "verdict": "blocked",
+        "evidence": "every console response carries X-Frame-Options: DENY and CSP frame-ancestors 'none'; tests/test_ui.py asserts the same on the decide POST and the 403",
+        "side_effects": "none"
+      },
+      "controls": [
+        "no_framing_of_the_decision_form",
+        "csp_frame_ancestors_none"
+      ],
+      "milestone": "v0.1"
+    },
+    {
       "id": "RT-HITL-05",
       "title": "Approval UI renders a secret in the argument preview",
       "category": "hitl",
@@ -304,7 +322,7 @@
       "fixture": "fixtures/approval/secret_in_args.json",
       "expect": {
         "verdict": "blocked",
-        "evidence": "403 plus a dlp.event row, before the token is minted",
+        "evidence": "403 plus a dlp.event row, before the decision is audited",
         "side_effects": "none"
       },
       "controls": [
@@ -521,6 +539,43 @@
       "controls": [
         "scan_before_bound",
         "output_digest_kept"
+      ],
+      "milestone": "v0.1"
+    },
+    {
+      "id": "RT-DLP-07",
+      "title": "A detector answer the reader cannot parse must block, not pass",
+      "category": "dlp",
+      "tier": "T0",
+      "surface": "dlp",
+      "fixture": null,
+      "expect": {
+        "verdict": "blocked",
+        "evidence": "every unreadable span raises DlpUnavailable and gate() refuses with dlp_unavailable; an empty finding list still passes",
+        "side_effects": "none"
+      },
+      "controls": [
+        "fail_closed_dlp",
+        "unreadable_answer_is_a_refusal"
+      ],
+      "milestone": "v0.1"
+    },
+    {
+      "id": "RT-AUTHZ-07",
+      "title": "A secret-disclosing command cannot be widened by the caller",
+      "category": "authorization",
+      "tier": "T0",
+      "surface": "tool_call",
+      "fixture": null,
+      "expect": {
+        "verdict": "denied_and_alerted",
+        "evidence": "policy.decision deny tool.unknown / command denied: unexpected arguments",
+        "side_effects": "none"
+      },
+      "controls": [
+        "deny_by_default",
+        "catalog_required",
+        "pinned_arguments"
       ],
       "milestone": "v0.1"
     }

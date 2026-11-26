@@ -38,8 +38,14 @@ class Prompt:
 
     @property
     def pack_id(self) -> str:
-        """What a run records as `prompt_pack_version`."""
-        return f"{self.pack}@{self.version}"
+        """What a run records as `prompt_pack_version`: the pack's own name.
+
+        `docker-1.0.0`, not `docker-1.0.0@1.0.0`. The name already carries the
+        version, `POST /runs` validates the request against `SkillPack.name`, and
+        every recorded run and eval fixture uses that form; a second spelling
+        made every submitted run fail its own provenance check.
+        """
+        return self.pack
 
     def messages(self) -> list[dict[str, str]]:
         return [

@@ -116,7 +116,7 @@ sequenceDiagram
     else T1 write tool
         S->>T: request approval gate (wait)
         T->>U: pending approval in console
-        U->>T: approve/deny + reason (signed, TTL)
+        U->>T: approve/deny + reason (by reference, TTL)
         T->>A: approval event before resume
         T-->>S: resume with decision
         S->>S: execute with idempotency key
@@ -125,7 +125,7 @@ sequenceDiagram
     O->>ML: trace with audit event IDs
 ```
 
-Failure policy: DLP detector unavailable, policy service unreachable, missing tenant claim, or malformed approval token all produce a **blocked run**, not a permissive fallback.
+Failure policy: DLP detector unavailable, a detector answer the reader cannot parse (a span missing a field, a non-numeric score, an offset outside the text), policy service unreachable, missing tenant claim, or malformed approval token all produce a **blocked run**, not a permissive fallback.
 
 ## 5. Specialist topology
 
@@ -171,7 +171,7 @@ MLflow stores versioned eval datasets and `mlflow.genai.evaluate()` results. Sco
 | Secret exfiltration to hosted model | Local fail-closed DLP, credential masking, no secrets in sandboxes |
 | Duplicate side effects on retry | Durable idempotency keys + Postgres unique constraint; documented crash window |
 | Sandbox escape | No socket, no egress, dropped caps, gVisor upgrade; no host credentials in runner |
-| Approval forgery | Keycloak RBAC, server-side authorisation, CSRF, TTL, signed reason, audit before resume |
+| Approval forgery | Keycloak RBAC, server-side authorisation, CSRF, TTL, signed reason, audit before resume, and `X-Frame-Options: DENY` plus CSP `frame-ancestors 'none'` on every console response - a framed decision form is a decoy click on a real approval |
 | Cache leak | Tenant + entitlement partition before similarity search, TTL, no T1/T2 caching |
 | Trace/prompt leakage to MLflow | Keycloak proxy, internal-only network, redaction before export |
 

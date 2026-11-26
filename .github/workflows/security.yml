@@ -6,12 +6,13 @@ on:
   pull_request:
     branches: [master, main]
   schedule:
+    # One weekly full sweep; everything runs on this event. A second cron would
+    # re-run every job, because a scheduled run cannot be diffed.
     - cron: "17 4 * * 1"   # Mondays 04:17 UTC — off-peak, avoids minute-0 congestion
   workflow_dispatch:
 
 permissions:
   contents: read
-  security-events: write   # required for SARIF upload to the Security tab
 
 concurrency:
   group: security-${{ github.workflow }}-${{ github.ref }}
@@ -21,13 +22,59 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
+  # Decides what the rest of the jobs run for, so a docs-only change does not
+  # pay for CodeQL, Bandit and an SBOM. Skips are expected, not failures: the
+  # gate below only reacts to a failure or a cancellation.
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-24.04
+    outputs:
+      python: ${{ steps.diff.outputs.python }}
+      deps: ${{ steps.diff.outputs.deps }}
+      workflows: ${{ steps.diff.outputs.workflows }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0          # the base commit has to be in the clone
+          persist-credentials: false
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          # A scheduled, manual, new-branch or force-pushed run cannot be diffed
+          # against a known base, so it runs everything. Unknown means changed.
+          if [ "$EVENT" = "schedule" ] || [ "$EVENT" = "workflow_dispatch" ] \
+             || [ -z "${BASE:-}" ] \
+             || [ "$BASE" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            python=true; deps=true; workflows=true
+          else
+            files=$(git diff --name-only "$BASE"...HEAD)
+            match() { printf '%s\n' "$files" | grep -Eq "$1" && echo true || echo false; }
+            python=$(match '^(src|tests|evals|scripts|skills|policy|migrations)/|^(pyproject\.toml|uv\.lock|Makefile|\.python-version)$')
+            deps=$(match '^(pyproject\.toml|uv\.lock|Dockerfile)$|^docker/|^compose\.ya?ml$')
+            workflows=$(match '^\.github/')
+          fi
+          echo "python=$python" >> "$GITHUB_OUTPUT"
+          echo "deps=$deps" >> "$GITHUB_OUTPUT"
+          echo "workflows=$workflows" >> "$GITHUB_OUTPUT"
+
   # ───────────────────────────── SAST ─────────────────────────────
   bandit:
+    needs: [changes]
+    if: needs.changes.outputs.python == 'true'
+    permissions:
+      contents: read
+      security-events: write   # upload-sarif writes here, and nowhere else
     name: SAST · Bandit
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: "3.12"
           enable-cache: true
@@ -41,17 +88,28 @@ jobs:
         run: uv run --with 'bandit[sarif]' bandit -r src -ll -ii -f sarif -o bandit.sarif
       - name: Upload Bandit SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           sarif_file: bandit.sarif
           category: bandit
 
   semgrep:
+    permissions:
+      contents: read
+      security-events: write   # upload-sarif writes here, and nowhere else
     name: SAST · Semgrep
+    # Ordered, not because the scans depend on each other but because three
+    # SARIF uploads landing within the same few seconds fail at "Uploading
+    # results" (seen on #43: Bandit passed, Semgrep and CodeQL failed, and each
+    # passed when re-run alone). One upload at a time is deterministic.
+    needs: [changes, bandit]
+    if: always() && (needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true')
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: "3.12"
           enable-cache: true
@@ -69,40 +127,48 @@ jobs:
             --error
       - name: Upload Semgrep SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           sarif_file: semgrep.sarif
           category: semgrep
 
   codeql:
     name: SAST · CodeQL
+    needs: [changes, semgrep]
+    if: always() && needs.changes.outputs.python == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
       actions: read          # required by CodeQL on non-public repos
     steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           languages: python
           queries: security-extended
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
       - run: uv sync --frozen
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           category: codeql-python
 
   # ───────────────────────────── SCA ──────────────────────────────
   pip-audit:
     name: SCA · pip-audit
+    needs: [changes]
+    if: needs.changes.outputs.deps == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
@@ -117,46 +183,123 @@ jobs:
     name: Secrets · Gitleaks
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0          # full history — required to scan past commits
+          persist-credentials: false
       - name: Install Gitleaks
-        # bump to the latest release from https://github.com/gitleaks/gitleaks/releases
+        # Version and checksum from
+        # https://github.com/gitleaks/gitleaks/releases/tag/v8.21.2 - bump both together.
+        env:
+          GITLEAKS_VERSION: 8.21.2
+          GITLEAKS_SHA256: 5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba
         run: |
-          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
-            | tar -xz -C /usr/local/bin gitleaks
+          curl -sSfL -o /tmp/gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tgz -C /usr/local/bin gitleaks
+          rm -f /tmp/gitleaks.tgz
       - name: Scan history
-        run: gitleaks detect --source . --verbose --redact --no-banner
+        run: gitleaks detect --source . --config .gitleaks.toml --verbose --redact --no-banner
   
   # ───────────────────Static analysis for GitHub Actions───────────
   zizmor:
     name: Workflow Security · zizmor
+    needs: [changes]
+    if: needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      security-events: write   # required to upload SARIF to the Security tab
-      actions: read            # required by upload-sarif on private repos
+      # Remove security-events: write if you no longer upload SARIF from this job
+      # security-events: write
+      actions: read            # required on private repos
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: false   # zizmor's own recommended hardening
+          persist-credentials: false
 
-      - name: Run zizmor
-        uses: zizmorcore/zizmor-action@v0.9.0   # bundles zizmor 1.33 by default
+      - name: Run zizmor (blocking)
+        uses: zizmorcore/zizmor-action@bd12b495c90993a4301c73398142281a61499af3 # v0.9.0   # bundles zizmor 1.33 by default
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          online-audits:  true
+          advanced-security: false   # ← forces --format=github / annotations
+          annotations: true          # ← enables annotations and non-zero exit on findings
 
+  # ─────────────────────────── SBOM creation ───────────────────────
+  sbom:
+    name: Supply Chain · SBOM
+    needs: [changes]
+    if: needs.changes.outputs.deps == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read            # to read the repo
+      # contents: write         # uncomment only if you want SBOMs attached to GitHub Releases
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c  # v0.24.3
+        with:
+          format: spdx-json
+          artifact-name: citadel-sbom.spdx.json
+          # upload-release-assets: true   # default is true; see note below
+
+  grype-weekly:
+    name: SCA · Grype (Weekly)
+    # Weekly by name, so weekly by trigger: it scans whatever the vulnerability
+    # databases say today, not what this pull request touched. #84.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write   # to upload SARIF to the Security tab
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0
+        with:
+          format: spdx-json
+          artifact-name: citadel-sbom.spdx.json
+          # Without output-file the SBOM goes to a temp dir and only the artifact
+          # survives, so the next step had nothing to read.
+          output-file: citadel-sbom.spdx.json
+          # If you only want the file for this job, you can skip the artifact upload:
+          # upload-artifact: false
+
+      - name: Scan SBOM with Grype
+        id: grype
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
+        with:
+          sbom: citadel-sbom.spdx.json   # adjust if your SBOM filename differs
+          output-format: sarif
+          fail-build: true                # ← this makes the job fail on findings
+          severity-cutoff: high           # ← High or Critical will break the build
+          # only-fixed: true              # optional: ignore CVEs without a fix
+
+      - name: Upload Grype SARIF
+        if: always()                     # upload even if the scan failed, so you can see why
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          sarif_file: ${{ steps.grype.outputs.sarif }}
+          category: grype-weekly
+          
   # ─────────────────────────── Gate ──────────────────────────────
   security-check:
     name: Security · Gate
-    needs: [bandit, semgrep, codeql, pip-audit, gitleaks, zimor]
+    needs: [changes, bandit, semgrep, codeql, pip-audit, gitleaks, zizmor, sbom, grype-weekly]
     if: always()
     runs-on: ubuntu-24.04
     steps:
-      - name: Verify all security jobs passed
-        uses: re-actors/alls-green@release/v1
-        with:
-          jobs: ${{ toJSON(needs) }}
-        allowed-skips: codeql   # remove if you disable CodeQL entirely
+      - name: Fail if any job failed
+        # A skipped job now means "not applicable to this change", so only a
+        # real failure or cancellation fails the gate. No allowlist to maintain.
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

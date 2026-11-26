@@ -21,6 +21,9 @@ class Grade:
     grader: str
     passed: bool
     detail: str
+    # A judged dimension may report without gating: the calibration protocol
+    # decides when a dimension has earned the right to fail a run.
+    gating: bool = True
 
 
 def grade(case: Case) -> list[Grade]:

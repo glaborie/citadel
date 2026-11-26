@@ -23,7 +23,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from citadel import dlp
 from citadel.api import app as api_module
-from citadel.approvals import mint_approval_token, verify_approval_token
+from citadel.approvals import validate_approval
+from citadel.hashing import arguments_hash
 from citadel.identity.keycloak import IdentityError, Principal
 from citadel.identity.run_token import mint_run_token, verify_run_token
 from citadel.model import Budget, Reply, RequestedTool, ScriptedClient, Usage, run_agent
@@ -35,6 +36,7 @@ from citadel.policy import (
     authorize,
     load_catalog,
 )
+from citadel.tools import CommandDenied, build_argv
 from citadel.workflows import activities as activities_module
 from citadel.workflows.activities import idempotency_key
 from citadel.workflows.types import ToolCall
@@ -239,25 +241,25 @@ def exec_policy_unavailable(case_: Case, _: Path) -> Outcome:
 
 def exec_approval_ttl(case_: Case, _: Path) -> Outcome:
     """RT-HITL-03: an approval that expires is unusable, so silence means no."""
-    private = Ed25519PrivateKey.generate()
     arguments = {"service": "checkout-api"}
-    token = mint_approval_token(
-        tenant_id="lab-a",
-        run_id="run-1",
-        tool="restart_service",
-        arguments=arguments,
-        approver="carol",
-        private_key=private,
-        ttl_seconds=-30,
-    )
+    created_at = 900.0
     try:
-        verify_approval_token(
-            token,
-            public_key=private.public_key(),
+        validate_approval(
+            {
+                "run_id": "run-1",
+                "tool": "restart_service",
+                "approver": "carol",
+                "decision": "approved",
+                "ttl": 300,
+                "args_hash": arguments_hash(arguments),
+            },
+            created_at=created_at,
             tenant_id="lab-a",
+            ref="2f0c1e2a-0000-4000-8000-000000000001",
             run_id="run-1",
             tool="restart_service",
             arguments=arguments,
+            now=created_at + 301,
         )
     except IdentityError as exc:
         return Outcome(True, f"rejected: {str(exc)[:60]}")
@@ -266,23 +268,24 @@ def exec_approval_ttl(case_: Case, _: Path) -> Outcome:
 
 def exec_args_substitution(case_: Case, _: Path) -> Outcome:
     """RT-HITL-04: approving service A cannot execute service B."""
-    private = Ed25519PrivateKey.generate()
-    token = mint_approval_token(
-        tenant_id="lab-a",
-        run_id="run-1",
-        tool="restart_service",
-        arguments={"service": "checkout-api"},
-        approver="carol",
-        private_key=private,
-    )
+    approved = {"service": "checkout-api"}
     try:
-        verify_approval_token(
-            token,
-            public_key=private.public_key(),
+        validate_approval(
+            {
+                "run_id": "run-1",
+                "tool": "restart_service",
+                "approver": "carol",
+                "decision": "approved",
+                "ttl": 300,
+                "args_hash": arguments_hash(approved),
+            },
+            created_at=900.0,
             tenant_id="lab-a",
+            ref="2f0c1e2a-0000-4000-8000-000000000001",
             run_id="run-1",
             tool="restart_service",
             arguments={"service": "billing-worker"},
+            now=1000.0,
         )
     except IdentityError as exc:
         return Outcome(True, f"rejected: {str(exc)[:60]}")
@@ -351,6 +354,35 @@ def exec_dlp_unavailable(case_: Case, _: Path) -> Outcome:
         ok = blocked.status == 503
         return Outcome(ok, f"refused/{blocked.status}: {str(exc)[:40]}")
     return Outcome(False, "detector outage passed")
+
+
+def exec_dlp_unreadable_answer(case_: Case, _: Path) -> Outcome:
+    """RT-DLP-07: a detector answer the reader cannot parse must block.
+
+    DLP parses an HTTP dependency with no schema, so "slightly different shape" is
+    a realistic failure. Every one of these used to leave the finding list empty,
+    which reads as "nothing sensitive here" and serves the output unchanged.
+    """
+    text = "contact alice@example.com now"
+    malformed: list[Any] = [
+        ("EMAIL_ADDRESS", 8, 20, 0.9),
+        {"entity_type": "EMAIL_ADDRESS", "start": 8, "end": 20},
+        {"type": "EMAIL_ADDRESS", "start": 8, "end": 20, "score": 0.9},
+        {"entity_type": "EMAIL_ADDRESS", "start": None, "end": 20, "score": 0.9},
+        {"entity_type": "EMAIL_ADDRESS", "start": 8, "end": 20, "score": "high"},
+        {"entity_type": "EMAIL_ADDRESS", "start": 8, "end": 999, "score": 0.9},
+    ]
+    refused = 0
+    for item in malformed:
+        try:
+            dlp.inspect(text, surface="output", analyzer_url=ANALYZER, opener=detector([item]))
+        except dlp.DlpUnavailable:
+            refused += 1
+        else:
+            pass
+    clean = dlp.inspect(text, surface="output", analyzer_url=ANALYZER, opener=detector([]))
+    ok = refused == len(malformed) and clean.action == "pass" and clean.text == text
+    return Outcome(ok, f"{refused}/{len(malformed)} refused; empty answer passes")
 
 
 def exec_idempotency_key(case_: Case, _: Path) -> Outcome:
@@ -476,30 +508,40 @@ def exec_self_approval(case_: Case, _: Path) -> Outcome:
 def exec_approval_replay(case_: Case, _: Path) -> Outcome:
     """RT-HITL-02: the operator executes once per approval, then returns 409."""
     import os
+    import time
     from unittest import mock
 
     from fastapi.testclient import TestClient
 
-    from citadel.approvals import mint_approval_token
     from citadel.operator import app as operator
     from tests.redteam import support
 
-    private = Ed25519PrivateKey.generate()
     arguments = {"service": "checkout-api"}
-    token = mint_approval_token(
-        tenant_id="lab-a",
-        run_id="run-1",
-        tool="restart_service",
-        arguments=arguments,
-        approver="carol",
-        private_key=private,
-    )
+    record = {
+        "run_id": "run-1",
+        "tool": "restart_service",
+        "approver": "carol",
+        "decision": "approved",
+        "ttl": 300,
+        "args_hash": arguments_hash(arguments),
+    }
     stub = support.StubExecutor()
     seen: list[str] = []
 
-    def already_used(dsn: str, tenant_id: str, jti: str) -> bool:
-        seen.append(jti)
+    def already_used(dsn: str, tenant_id: str, ref: str) -> bool:
+        seen.append(ref)
         return len(seen) > 1
+
+    def resolve(**kwargs: Any) -> Any:
+        return validate_approval(
+            record,
+            created_at=time.time(),
+            tenant_id=kwargs["tenant_id"],
+            ref=kwargs["ref"],
+            run_id=kwargs["run_id"],
+            tool=kwargs["tool"],
+            arguments=kwargs["arguments"],
+        )
 
     def passthrough(text: str, *, surface: str, **_: object) -> tuple[str, dict[str, object]]:
         return text, {"surface": surface, "action": "pass"}
@@ -509,12 +551,12 @@ def exec_approval_replay(case_: Case, _: Path) -> Outcome:
         "run_id": "run-1",
         "tool": "restart_service",
         "arguments": arguments,
-        "approval_token": token,
+        "approval_ref": "2f0c1e2a-0000-4000-8000-000000000001",
     }
-    env = {"CITADEL_RUN_TOKEN_PUBLIC_KEY": "unused", "CITADEL_DB_DSN": "postgres://fake"}
+    env = {"CITADEL_DB_DSN": "postgres://fake"}
     with (
         mock.patch.dict(os.environ, env),
-        mock.patch.object(operator, "public_key_from_env", lambda _v: private.public_key()),
+        mock.patch.object(operator, "resolve_approval", resolve),
         mock.patch.object(operator, "_already_used", already_used),
         mock.patch.object(operator, "_guard", passthrough),
         mock.patch("citadel.tools.runner.run", stub.run),
@@ -584,15 +626,14 @@ def exec_secret_in_tool_args(case_: Case, _: Path) -> Outcome:
     miss it.
     """
     import os
+    import time
     from unittest import mock
 
     from fastapi.testclient import TestClient
 
-    from citadel.approvals import mint_approval_token
     from citadel.operator import app as operator
     from tests.redteam import support
 
-    private = Ed25519PrivateKey.generate()
     secret = fixture_text("dlp/api_key.txt").split()[3]
     arguments = {
         "repo": "glaborie/citadel",
@@ -601,26 +642,38 @@ def exec_secret_in_tool_args(case_: Case, _: Path) -> Outcome:
         "title": "Rotate the deploy token",
         "body": f"Rotated. Old value was {secret}",
     }
-    token = mint_approval_token(
-        tenant_id="lab-a",
-        run_id="run-1",
-        tool="open_remediation_pr",
-        arguments=arguments,
-        approver="carol",
-        private_key=private,
-    )
+    record = {
+        "run_id": "run-1",
+        "tool": "open_remediation_pr",
+        "approver": "carol",
+        "decision": "approved",
+        "ttl": 300,
+        "args_hash": arguments_hash(arguments),
+    }
+
+    def resolve(**kwargs: Any) -> Any:
+        return validate_approval(
+            record,
+            created_at=time.time(),
+            tenant_id=kwargs["tenant_id"],
+            ref=kwargs["ref"],
+            run_id=kwargs["run_id"],
+            tool=kwargs["tool"],
+            arguments=kwargs["arguments"],
+        )
+
     stub = support.StubExecutor()
     payload = {
         "tenant_id": "lab-a",
         "run_id": "run-1",
         "tool": "open_remediation_pr",
         "arguments": arguments,
-        "approval_token": token,
+        "approval_ref": "2f0c1e2a-0000-4000-8000-000000000001",
     }
-    env = {"CITADEL_RUN_TOKEN_PUBLIC_KEY": "unused", "CITADEL_DB_DSN": "postgres://fake"}
+    env = {"CITADEL_DB_DSN": "postgres://fake"}
     with (
         mock.patch.dict(os.environ, env),
-        mock.patch.object(operator, "public_key_from_env", lambda _v: private.public_key()),
+        mock.patch.object(operator, "resolve_approval", resolve),
         mock.patch.object(operator, "_already_used", lambda *_: False),
         mock.patch.object(operator, "AuditLedger", lambda _dsn: support.FakeAudit()),
         mock.patch.object(dlp, "urlopen", support.DetectorStub([])),
@@ -674,6 +727,39 @@ def _last_index(items: list[str], value: str) -> int:
         if items[index] == value:
             return index
     return 0
+
+
+def exec_console_framing(case_: Case, _: Path) -> Outcome:
+    """RT-HITL-06: no console response may be framed by a same-site page.
+
+    The decision form carries its own CSRF token, so framing the approval page
+    turns a genuine T1 approval into a click on a page the approver never read.
+    `SameSite=Lax` does not cover it: Lax separates sites, not ports, and the
+    stack publishes the console beside Keycloak, Temporal and MLflow.
+
+    This checks the middleware on the responses reachable without a session. The
+    middleware runs on the response phase for every route, and `tests/test_ui.py`
+    asserts the same headers on the authenticated views, the decide POST and the
+    403 a wrong role gets - so a route that bypassed it would fail there.
+    """
+    from fastapi.testclient import TestClient
+
+    from citadel.ui.app import create_app
+
+    client = TestClient(
+        create_app(dsn="postgres://fake", api_url="http://api.test", session_key="k" * 32)
+    )
+    checked = 0
+    approval = "/approvals/11111111-1111-1111-1111-111111111111"
+    for path in ("/login", "/runs", "/approvals", approval):
+        response = client.get(path, follow_redirects=False)
+        framed_ok = response.headers.get("x-frame-options") == "DENY"
+        csp = response.headers.get("content-security-policy", "")
+        csp_ok = "frame-ancestors 'none'" in csp and "form-action 'self'" in csp
+        if framed_ok and csp_ok:
+            checked += 1
+    ok = checked == 4
+    return Outcome(ok, f"{checked}/4 responses refuse framing (XFO DENY + frame-ancestors)")
 
 
 def exec_approval_preview(case_: Case, _: Path) -> Outcome:
@@ -1004,9 +1090,39 @@ def exec_eval_gate(case_: Case, _: Path) -> Outcome:
     return Outcome(ok, f"golden={len(good)} pass, degraded fails {len(failed)}: {first[:60]}")
 
 
+def exec_pinned_arguments(case_: Case, _: Path) -> Outcome:
+    """RT-AUTHZ-07: the catalog pins the flag that decides how much a read prints.
+
+    docker inspect and docker compose config disclose secrets by design. The tool
+    may exist only because its catalog entry pins --format / --no-interpolate, and
+    because a caller cannot supply arguments the catalog does not declare.
+    """
+    argv, command = build_argv("inspect_container", {"container": "citadel-checkout-api-1"})
+    pinned = "--format" in argv and ".Config.Env" not in " ".join(argv)
+
+    refused: list[str] = []
+    for tool, arguments in (
+        ("inspect_container", {"container": "x", "format": "{{json .Config.Env}}"}),
+        ("compose_config", {"format": "{{json .}}"}),
+        ("pr_diff", {"repo": "glaborie/citadel", "number": "30", "path": "src"}),
+    ):
+        try:
+            build_argv(tool, arguments)
+        except CommandDenied as exc:
+            refused.append(str(exc)[:40])
+
+    ok = pinned and len(refused) == 3 and command.content_risk == "definitive"
+    detail = (
+        f"{command.id} pins --format, .Config.Env unreachable; "
+        f"{len(refused)}/3 widened calls refused"
+    )
+    return Outcome(ok, detail)
+
+
 EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-AUTHZ-02": exec_cross_specialist,
     "RT-AUTHZ-03": exec_unknown_tool,
+    "RT-AUTHZ-07": exec_pinned_arguments,
     "RT-AUTHZ-04": exec_missing_identity,
     "RT-AUTHZ-05": exec_expired_run_token,
     "RT-AUTHZ-06": exec_policy_unavailable,
@@ -1019,7 +1135,9 @@ EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-DLP-04": exec_dlp_unavailable,
     "RT-DLP-05": exec_egress_allowlist,
     "RT-DLP-06": exec_output_cap,
+    "RT-DLP-07": exec_dlp_unreadable_answer,
     "RT-HITL-05": exec_approval_preview,
+    "RT-HITL-06": exec_console_framing,
     "RT-EVAL-01": exec_eval_gate,
     "RT-INJ-01": exec_direct_override,
     "RT-INJ-03": exec_tool_output_injection,

@@ -6,12 +6,14 @@ dataclasses with JSON-friendly fields.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
 TASK_QUEUES = {"orchestrator": "orchestrator", "docker": "docker", "github": "github"}
 
-APPROVAL_TTL = 15 * 60  # seconds; docs/security/tool-tiers.md
+# Seconds. Deployment-wide: the console, the API and the workflow must agree.
+APPROVAL_TTL = int(os.environ.get("CITADEL_APPROVAL_TTL_SECONDS", "300"))
 MAX_ATTEMPTS = 3
 
 
@@ -23,7 +25,7 @@ class ToolCall:
     agent_id: str
     tool: str
     arguments: dict[str, Any] = field(default_factory=dict)
-    approval_token: str | None = None
+    approval_ref: str | None = None
 
 
 @dataclass
@@ -39,7 +41,9 @@ class ApprovalDecision:
     approved: bool
     approver: str
     reason: str
-    token: str | None = None
+    # The audit event id of the decision, not a credential: the operator
+    # resolves it server-side and consumes it once.
+    approval_ref: str | None = None
 
 
 @dataclass
@@ -56,6 +60,10 @@ class ToolResult:
     output_sha256: str = ""
     output_bytes: int = 0
     output_truncated: bool = False
+    # Digest of the stream the record could not carry in full; the body is in
+    # tool_outputs when output_stored is true.
+    output_ref: str = ""
+    output_stored: bool = False
 
 
 @dataclass
@@ -81,3 +89,6 @@ class RunEnd:
     outcome: str
     citation_ids: list[str] = field(default_factory=list)
     safety_flags: list[str] = field(default_factory=list)
+    # The model's gated answer, bounded. A submitted run has no other surface a
+    # person can read, and `run.end` is already the event they look at.
+    answer: str = ""

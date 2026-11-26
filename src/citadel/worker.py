@@ -11,6 +11,7 @@ import asyncio
 import os
 import signal
 import sys
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -20,13 +21,14 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from citadel import telemetry
+from citadel.env import secret
 from citadel.policy import RelationChecker, RunStore
 from citadel.policy.openfga import build_checker
 from citadel.runs import PostgresRunStore
 from citadel.workflows import activities_for, namespace, temporal_address, workflows_for
 from citadel.workflows.types import TASK_QUEUES
 
-HEARTBEAT = Path("/tmp/citadel-heartbeat")
+HEARTBEAT = Path(tempfile.gettempdir()) / "citadel-heartbeat"
 HEARTBEAT_INTERVAL = 5
 MAX_WORKERS = 8
 
@@ -42,7 +44,7 @@ async def serve(role: str) -> None:
 
     client = await Client.connect(temporal_address(), namespace=namespace())
 
-    dsn = os.environ["CITADEL_DB_DSN"]
+    dsn = secret("CITADEL_DB_DSN")
     checker: RelationChecker | None = None
     run_store: RunStore | None = None
     if role != "orchestrator":

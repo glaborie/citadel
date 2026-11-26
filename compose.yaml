@@ -20,7 +20,6 @@ x-app: &app
     context: .
     target: app
   image: citadel-app:0.1.0
-  env_file: .env
   restart: unless-stopped
   security_opt:
     - no-new-privileges:true
@@ -125,8 +124,11 @@ services:
     environment:
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_CORS_ORIGINS: http://localhost:18080
+      # History carries run inputs, DLP verdicts and tool output: read-only,
+      # loopback only, operator debugging only.
+      TEMPORAL_DISABLE_WRITE_ACTIONS: "true"
     ports:
-      - "18080:8080"
+      - "127.0.0.1:18080:8080"
     depends_on:
       temporal:
         condition: service_healthy
@@ -240,12 +242,20 @@ services:
       KEYCLOAK_ISSUER: http://localhost:18081/realms/citadel
       KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/citadel/protocol/openid-connect/certs
       KEYCLOAK_AUDIENCE: citadel-agent
-      CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      CITADEL_RUN_TOKEN_PRIVATE_KEY: ${CITADEL_RUN_TOKEN_PRIVATE_KEY}
+      CITADEL_DB_DSN_FILE: /run/secrets/db_dsn
+      CITADEL_RUN_TOKEN_PRIVATE_KEY_FILE: /run/secrets/run_token_private_key
       CITADEL_DLP_URL: http://presidio:3000
       OPENFGA_API_URL: http://openfga:8080
+      OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-citadel}
       KEYCLOAK_ADMIN_URL: http://keycloak:8080
       CITADEL_SKILLS_DIR: /app/skills
+      CITADEL_APPROVAL_TTL_SECONDS: ${CITADEL_APPROVAL_TTL_SECONDS:-300}
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      MLFLOW_EXPERIMENT_ID: ${MLFLOW_EXPERIMENT_ID:-1}
+    secrets:
+      - db_dsn
+      - run_token_private_key
     ports:
       - "18000:8000"
     depends_on:
@@ -273,9 +283,13 @@ services:
       KEYCLOAK_AUDIENCE: citadel-agent
       CITADEL_CONSOLE_CLIENT_ID: citadel-console
       CITADEL_CONSOLE_REDIRECT_URI: http://localhost:18001/callback
-      CITADEL_CONSOLE_SESSION_KEY: ${CITADEL_CONSOLE_SESSION_KEY}
+      CITADEL_CONSOLE_SESSION_KEY_FILE: /run/secrets/console_session_key
       CITADEL_API_URL: http://api:8000
-      CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CITADEL_DB_DSN_FILE: /run/secrets/db_dsn
+      CITADEL_APPROVAL_TTL_SECONDS: ${CITADEL_APPROVAL_TTL_SECONDS:-300}
+    secrets:
+      - db_dsn
+      - console_session_key
     ports:
       - "18001:8001"
     depends_on:
@@ -300,8 +314,13 @@ services:
       OPENFGA_API_URL: http://openfga:8080
       CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
       CITADEL_OPERATOR_URL: http://operator:8030
-      CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CITADEL_DB_DSN_FILE: /run/secrets/db_dsn
       CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
+      OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-citadel}
+      CITADEL_APPROVAL_TTL_SECONDS: ${CITADEL_APPROVAL_TTL_SECONDS:-300}
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      MLFLOW_EXPERIMENT_ID: ${MLFLOW_EXPERIMENT_ID:-1}
       # The model step runs here, so this worker needs the pack on disk, the
       # detector and the gateway. It is the only worker that talks to a model.
       CITADEL_SKILLS_DIR: /app/skills
@@ -309,6 +328,8 @@ services:
       CITADEL_MODEL: ${CITADEL_MODEL:-auto/best-fast}
       OMNIROUTE_URL: ${OMNIROUTE_URL:-http://omniroute:20128/v1}
       OMNIROUTE_API_KEY: ${OMNIROUTE_API_KEY:-}
+    secrets:
+      - db_dsn
     depends_on:
       temporal:
         condition: service_healthy
@@ -325,8 +346,15 @@ services:
       OPENFGA_API_URL: http://openfga:8080
       CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
       CITADEL_OPERATOR_URL: http://operator:8030
-      CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CITADEL_DB_DSN_FILE: /run/secrets/db_dsn
       CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
+      OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-citadel}
+      CITADEL_APPROVAL_TTL_SECONDS: ${CITADEL_APPROVAL_TTL_SECONDS:-300}
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      MLFLOW_EXPERIMENT_ID: ${MLFLOW_EXPERIMENT_ID:-1}
+    secrets:
+      - db_dsn
     depends_on:
       temporal:
         condition: service_healthy
@@ -343,8 +371,15 @@ services:
       OPENFGA_API_URL: http://openfga:8080
       CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
       CITADEL_OPERATOR_URL: http://operator:8030
-      CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CITADEL_DB_DSN_FILE: /run/secrets/db_dsn
       CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
+      OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-citadel}
+      CITADEL_APPROVAL_TTL_SECONDS: ${CITADEL_APPROVAL_TTL_SECONDS:-300}
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      MLFLOW_EXPERIMENT_ID: ${MLFLOW_EXPERIMENT_ID:-1}
+    secrets:
+      - db_dsn
     depends_on:
       temporal:
         condition: service_healthy
@@ -358,8 +393,8 @@ services:
       target: operator
     image: citadel-operator:0.1.0
     # The only component that writes. It never sees model output; it accepts a
-    # validated (tenant, run, tool, arguments) tuple plus a signed approval
-    # token. See ADR-023 item 3.
+    # validated (tenant, run, tool, arguments) tuple plus the audit reference of
+    # the approval. See ADR-023 item 3 and ADR-024.
     command:
       - uvicorn
       - citadel.operator.app:app
@@ -378,11 +413,10 @@ services:
     pids_limit: 128
     mem_limit: 256m
     environment:
-      CITADEL_DB_DSN: postgresql://citadel_app:${CITADEL_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
+      CITADEL_DB_DSN_FILE: /run/secrets/db_dsn
       DOCKER_HOST: unix:///var/run/docker.sock
-      # The write token is injected here and nowhere else; gh reads GH_TOKEN.
-      GH_TOKEN: ${GH_WRITE_TOKEN:-unset}
+      # The write token is injected into the gh child, never the service env.
+      GH_TOKEN_FILE: /run/secrets/gh_write_token
       # DLP is the only reason this service is allowed to return command text.
       CITADEL_DLP_URL: http://presidio:3000
       # gh reaches GitHub only through the domain-allowlisted proxy. Loopback
@@ -391,6 +425,9 @@ services:
       HTTP_PROXY: http://github-egress:3128
       NO_PROXY: localhost,127.0.0.1,docker-socket-proxy,presidio
       no_proxy: localhost,127.0.0.1,docker-socket-proxy,presidio
+    secrets:
+      - db_dsn
+      - gh_write_token
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
@@ -446,6 +483,10 @@ services:
       SECRETS: "0"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # The pinned image allows all of /containers when CONTAINERS=1, including
+      # /archive and /export (upstream PR #183 is unmerged). This template
+      # denies those two before the blanket allow.
+      - ./docker/haproxy.cfg.template:/usr/local/etc/haproxy/haproxy.cfg.template:ro
     read_only: true
     tmpfs:
       # The entrypoint renders haproxy.cfg in /tmp and writes a pidfile in /run.
@@ -489,9 +530,10 @@ services:
       # Loopback and in-stack calls must never traverse the egress proxy.
       NO_PROXY: localhost,127.0.0.1,docker-socket-proxy,presidio
       no_proxy: localhost,127.0.0.1,docker-socket-proxy,presidio
-      # gh reads GH_TOKEN; the secret is named for what it is, so the
-      # write token can never be passed here by accident.
-      GH_TOKEN: ${GH_READ_TOKEN:-unset}
+      # gh reads GH_TOKEN; the token comes from the mounted read-only secret.
+      GH_TOKEN_FILE: /run/secrets/gh_read_token
+    secrets:
+      - gh_read_token
     depends_on:
       presidio:
         condition: service_healthy
@@ -512,6 +554,21 @@ volumes:
   postgres-data:
   omniroute-data:
   mlflow-data:
+
+# Injected from the host environment (i.e. .env) and mounted as files, so they
+# never appear in a container's Config.Env, which the Docker API exposes.
+# `scripts/provision-secrets.sh` writes these files; see `make up`.
+secrets:
+  db_dsn:
+    file: ${CITADEL_SECRETS_DIR:-./secrets}/db_dsn
+  run_token_private_key:
+    file: ${CITADEL_SECRETS_DIR:-./secrets}/run_token_private_key
+  console_session_key:
+    file: ${CITADEL_SECRETS_DIR:-./secrets}/console_session_key
+  gh_write_token:
+    file: ${CITADEL_SECRETS_DIR:-./secrets}/gh_write_token
+  gh_read_token:
+    file: ${CITADEL_SECRETS_DIR:-./secrets}/gh_read_token
 
 networks:
   internal:

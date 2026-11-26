@@ -1,10 +1,11 @@
 """The operator service: the only component that performs a T1 write.
 
 It is deliberately narrow. A caller supplies a tool name and named arguments
-that a human already approved plus the signed token proving it; the operator
-re-builds the argv from the catalog and runs it. It accepts no command line and
-no free text, so a prompt-injected agent cannot compose an action of its own.
-The worst it can do is replay an approval, which the jti table prevents.
+that a human already approved plus the audit reference of that decision; the
+operator resolves the reference, re-builds the argv from the catalog and runs it.
+It accepts no command line and no free text, so a prompt-injected agent cannot
+compose an action of its own. The worst it can do is replay an approval, which
+the consumed reference prevents.
 """
 
 from __future__ import annotations
@@ -18,11 +19,11 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from citadel import __version__, dlp
-from citadel.approvals import verify_approval_token
+from citadel.approvals import resolve_approval
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
+from citadel.env import secret
 from citadel.identity import IdentityError
-from citadel.identity.run_token import public_key_from_env
 from citadel.tools import CommandDenied, build_argv
 from citadel.tools import runner as executor
 
@@ -39,15 +40,19 @@ class ExecuteRequest(BaseModel):
     run_id: str
     tool: str
     arguments: dict[str, Any] = {}
-    approval_token: str
+    approval_ref: str
 
 
-def _already_used(dsn: str, tenant_id: str, jti: str) -> bool:
+def _dsn() -> str:
+    return secret("CITADEL_DB_DSN")
+
+
+def _already_used(dsn: str, tenant_id: str, ref: str) -> bool:
     with tenant_connection(dsn, tenant_id) as conn:
         row = conn.execute(
             "INSERT INTO approval_tokens (jti, tenant_id) VALUES (%s, %s)"
             " ON CONFLICT (jti) DO NOTHING RETURNING jti",
-            (jti, tenant_id),
+            (ref, tenant_id),
         ).fetchone()
     return row is None
 
@@ -71,7 +76,7 @@ def _guard(
         return dlp.gate(text, surface=surface, analyzer_url=DLP_URL)
     except dlp.DlpBlocked as exc:
         # A refused check is still an event an auditor must be able to see.
-        AuditLedger(os.environ["CITADEL_DB_DSN"]).append(
+        AuditLedger(_dsn()).append(
             tenant_id=tenant_id,
             event_type="dlp.event",
             actor_type="user",
@@ -85,12 +90,11 @@ def _guard(
 
 @app.post("/execute")
 def execute(request: ExecuteRequest) -> dict[str, Any]:
-    public_key = public_key_from_env(os.environ["CITADEL_RUN_TOKEN_PUBLIC_KEY"])
     try:
-        claims = verify_approval_token(
-            request.approval_token,
-            public_key=public_key,
+        claims = resolve_approval(
+            dsn=_dsn(),
             tenant_id=request.tenant_id,
+            ref=request.approval_ref,
             run_id=request.run_id,
             tool=request.tool,
             arguments=request.arguments,
@@ -98,8 +102,8 @@ def execute(request: ExecuteRequest) -> dict[str, Any]:
     except IdentityError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
-    if _already_used(os.environ["CITADEL_DB_DSN"], request.tenant_id, claims.jti):
-        raise HTTPException(status_code=409, detail="approval token already used")
+    if _already_used(_dsn(), request.tenant_id, claims.ref):
+        raise HTTPException(status_code=409, detail="approval already used")
 
     # The approver authorised the service name; build_argv derives the container
     # name and validates the derived argv — never a validated argv rewritten.

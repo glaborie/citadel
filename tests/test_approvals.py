@@ -1,62 +1,56 @@
-"""Approval tokens: signed, scoped and not interchangeable with run tokens."""
+"""Approval references: scoped, single use and never a credential in history."""
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from types import SimpleNamespace
+from typing import Any
+
 import pytest
-from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-    Ed25519PrivateKey,
-    Ed25519PublicKey,
-)
 
-from citadel.approvals import mint_approval_token, verify_approval_token
+from citadel import approvals
+from citadel.approvals import resolve_approval, validate_approval
 from citadel.hashing import arguments_hash
-from citadel.identity import IdentityError, Principal, mint_run_token
+from citadel.identity import IdentityError
+
+ARGS = {"service": "checkout-api"}
+CREATED_AT = 900.0
+NOW = 1000.0
 
 
-@pytest.fixture(scope="module")
-def key() -> Ed25519PrivateKey:
-    return Ed25519PrivateKey.generate()
-
-
-@pytest.fixture(scope="module")
-def pub(key: Ed25519PrivateKey) -> Ed25519PublicKey:
-    return key.public_key()
-
-
-def token(key: Ed25519PrivateKey, **overrides: object) -> str:
-    base: dict[str, object] = {
-        "tenant_id": "lab-a",
+def record(**overrides: Any) -> dict[str, Any]:
+    base: dict[str, Any] = {
         "run_id": "run-1",
         "tool": "restart_service",
-        "arguments": {"service": "checkout-api"},
         "approver": "user-carol",
+        "decision": "approved",
+        "ttl": 300,
+        "args_hash": arguments_hash(ARGS),
     }
     base.update(overrides)
-    return mint_approval_token(**base, private_key=key)  # type: ignore[arg-type]
+    return base
 
 
-def verify(pub: Ed25519PublicKey, value: str) -> object:
-    return verify_approval_token(
-        value,
-        public_key=pub,
-        tenant_id="lab-a",
-        run_id="run-1",
-        tool="restart_service",
-        arguments={"service": "checkout-api"},
-    )
+def check(entry: dict[str, Any], **overrides: Any) -> approvals.ApprovalClaims:
+    base: dict[str, Any] = {
+        "created_at": CREATED_AT,
+        "tenant_id": "lab-a",
+        "ref": "2f0c1e2a-0000-4000-8000-000000000001",
+        "run_id": "run-1",
+        "tool": "restart_service",
+        "arguments": ARGS,
+        "now": NOW,
+    }
+    base.update(overrides)
+    return validate_approval(entry, **base)
 
 
-def test_valid_approval_is_accepted(key: Ed25519PrivateKey, pub: Ed25519PublicKey) -> None:
-    claims = verify_approval_token(
-        token(key),
-        public_key=pub,
-        tenant_id="lab-a",
-        run_id="run-1",
-        tool="restart_service",
-        arguments={"service": "checkout-api"},
-    )
+def test_valid_approval_is_accepted() -> None:
+    claims = check(record())
     assert claims.approver == "user-carol"
-    assert claims.jti
+    assert claims.ref
+    assert claims.arguments_hash == arguments_hash(ARGS)
 
 
 def test_arguments_hash_is_order_independent() -> None:
@@ -64,48 +58,73 @@ def test_arguments_hash_is_order_independent() -> None:
 
 
 @pytest.mark.parametrize(
-    ("kwargs", "match"),
+    ("overrides", "match"),
     [
-        ({"tenant_id": "lab-b"}, "another tenant"),
         ({"run_id": "run-2"}, "another run"),
         ({"tool": "open_remediation_pr"}, "another tool"),
-        ({"arguments": {"service": "database"}}, "does not match these arguments"),
+        ({"args_hash": arguments_hash({"service": "database"})}, "does not match these"),
+        ({"decision": "denied"}, "was not granted"),
+        ({"approver": ""}, "names no approver"),
+        ({"ttl": 0}, "no usable lifetime"),
+        ({"ttl": "300"}, "no usable lifetime"),
     ],
 )
-def test_scope_mismatches_are_rejected(
-    key: Ed25519PrivateKey, pub: Ed25519PublicKey, kwargs: dict[str, object], match: str
-) -> None:
+def test_bad_records_are_rejected(overrides: dict[str, Any], match: str) -> None:
     """An approval for one action must not authorise another."""
     with pytest.raises(IdentityError, match=match):
-        verify(pub, token(key, **kwargs))
+        check(record(**overrides))
 
 
-def test_forged_approval_is_rejected(pub: Ed25519PublicKey) -> None:
-    attacker = Ed25519PrivateKey.generate()
-    with pytest.raises(IdentityError):
-        verify(pub, token(attacker))
+def test_expired_approval_is_rejected() -> None:
+    with pytest.raises(IdentityError, match="expired"):
+        check(record(), now=CREATED_AT + 301)
 
 
-def test_expired_approval_is_rejected(key: Ed25519PrivateKey, pub: Ed25519PublicKey) -> None:
-    with pytest.raises(IdentityError):
-        verify(pub, token(key, ttl_seconds=-5))
+def test_run_token_string_is_not_a_usable_reference() -> None:
+    """Red team: a delegated run token has no meaning to the operator."""
+    with pytest.raises(IdentityError, match="not valid"):
+        resolve_approval(
+            dsn="unused",
+            tenant_id="lab-a",
+            ref="eyJhbGciOiJFZERTQSJ9.payload.signature",
+            run_id="run-1",
+            tool="restart_service",
+            arguments=ARGS,
+        )
 
 
-def test_run_token_cannot_be_used_as_an_approval(
-    key: Ed25519PrivateKey, pub: Ed25519PublicKey
-) -> None:
-    """Red team: a delegated run token replayed as an approval."""
-    run_token, _ = mint_run_token(
-        Principal("user-alice", "lab-a", frozenset()),
-        agent_id="docker",
-        scopes=frozenset(),
-        risk_tier="T1",
-        private_key=key,
+def test_resolve_reads_the_audit_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    @contextmanager
+    def fake_connection(_dsn: str, _tenant: str) -> Iterator[SimpleNamespace]:
+        yield SimpleNamespace(
+            execute=lambda *_a: SimpleNamespace(fetchone=lambda: (record(), CREATED_AT))
+        )
+
+    monkeypatch.setattr(approvals, "tenant_connection", fake_connection)
+    claims = resolve_approval(
+        dsn="unused",
+        tenant_id="lab-a",
+        ref="2f0c1e2a-0000-4000-8000-000000000001",
+        run_id="run-1",
+        tool="restart_service",
+        arguments=ARGS,
+        now=NOW,
     )
-    with pytest.raises(IdentityError):
-        verify(pub, run_token)
+    assert claims.approver == "user-carol"
 
 
-def test_mint_requires_a_tenant(key: Ed25519PrivateKey) -> None:
-    with pytest.raises(IdentityError):
-        token(key, tenant_id="")
+def test_unknown_reference_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    @contextmanager
+    def fake_connection(_dsn: str, _tenant: str) -> Iterator[SimpleNamespace]:
+        yield SimpleNamespace(execute=lambda *_a: SimpleNamespace(fetchone=lambda: None))
+
+    monkeypatch.setattr(approvals, "tenant_connection", fake_connection)
+    with pytest.raises(IdentityError, match="no approval"):
+        resolve_approval(
+            dsn="unused",
+            tenant_id="lab-a",
+            ref="2f0c1e2a-0000-4000-8000-000000000001",
+            run_id="run-1",
+            tool="restart_service",
+            arguments=ARGS,
+        )

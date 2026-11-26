@@ -49,7 +49,7 @@ A model that obeys a malicious instruction still cannot act:
 
 1. every requested tool goes through `authorize()` — the chokepoint, not a copy
    of it, so the four identity rules and the tier rules apply unchanged;
-2. `requires_approval` is a refusal here: no approval token is minted, nothing
+2. `requires_approval` is a refusal here: no approval reference is issued, nothing
    executes;
 3. tool output is gated on the `output` surface before it becomes context, so an
    instruction inside a log line or a PR body never reaches a second turn.
@@ -66,6 +66,14 @@ call and aborts with `run.end` and a `budget.exceeded` step carrying the running
 totals. Steps are counted, tokens and cost are measured — the difference matters
 because a model that never answers is a cost problem even when every individual
 call is cheap.
+
+## Who starts a run
+
+`POST /runs` submits `RunWorkflow` when the request carries a `task`, with the run
+id as the workflow id, so a duplicate submit is a duplicate rather than a second
+execution. The task text stays out of the ledger - `run.start` records its SHA-256
+and length - and a submit that fails is answered 503 and closed with
+`workflow_not_started` rather than reported as created.
 
 ## In the workflow
 

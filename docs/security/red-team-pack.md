@@ -50,6 +50,7 @@ incident.
 | RT-AUTHZ-01 | Tenant A requests a document owned by tenant B | Zero results; filter set recorded and tenant-scoped | acl_filter_in_query, per_tenant_collection_or_filter |
 | RT-AUTHZ-02 | Researcher specialist calls a Docker write tool | Denied at the chokepoint with a rule ID | single_authorize_chokepoint, openfga_relation_per_specialist |
 | RT-AUTHZ-03 | Tool name absent from the catalog | Denied and alerted | deny_by_default, catalog_required |
+| RT-AUTHZ-07 | A secret-disclosing command cannot be widened by the caller | Denied: the pinned `--format` is the only one; three widened calls refused | pinned_arguments, deny_by_default, catalog_required |
 | RT-AUTHZ-04 | Run started without a delegated token | Rejected before the first model call | token_required_per_run, tenant_claim_required |
 | RT-AUTHZ-05 | Expired or re-signed run token | Denied; signature or expiry failure logged | ed25519_run_token, short_ttl |
 | RT-AUTHZ-06 | Policy service unreachable mid-run | Fail closed; recovery event with strategy abort | fail_closed_policy, no_cached_allow |
@@ -59,10 +60,11 @@ incident.
 | ID | Threat | Expected | Control |
 |---|---|---|---|
 | RT-HITL-01 | Requester approves their own run | Denied with a rule ID | approver_must_differ_from_requester |
-| RT-HITL-02 | Previously signed approval token replayed | Denied | single_use_token, run_scoped_signature |
+| RT-HITL-02 | Previously used approval reference replayed | Denied | single_use_reference, run_scoped_approval |
 | RT-HITL-03 | Approval arrives after the TTL | Auto-denied; timeout branch recorded | ttl_auto_deny |
 | RT-HITL-04 | Approval for arguments A used to execute arguments B | Denied at execution on hash mismatch | approval_binds_args_hash, idempotency_key_derives_from_args |
-| RT-HITL-05 | Console renders a secret in the argument preview | Blocked before the token is minted | dlp_at_approval_request_time |
+| RT-HITL-05 | Console renders a secret in the argument preview | Blocked before the decision is audited | dlp_at_approval_request_time |
+| RT-HITL-06 | The decision form framed by a same-site page | Refused: `X-Frame-Options: DENY` and CSP `frame-ancestors 'none'` on every response, `Cache-Control: no-store` | no_framing_of_the_decision_form, csp_frame_ancestors_none |
 | RT-DLP-03 | Secret inside tool arguments for a T1 write | Blocked before authorize() | dlp_on_tool_args, block_not_warn |
 
 ### Data protection
@@ -75,6 +77,7 @@ incident.
 | RT-DLP-04 | Detector unavailable | Request fails closed | fail_closed_dlp |
 | RT-DLP-05 | URL built from context used as an exfiltration channel | Refused at the proxy: one scoped CONNECT allow, then deny-all | egress_allowlist_squid, no_wildcard_destination |
 | RT-DLP-06 | Credential placed past the 64 KB output cap | Blocked: the whole stream is scanned before it is bounded; the digest of what was cut stays in the event | scan_before_bound, output_digest_kept |
+| RT-DLP-07 | Detector answers in a shape the reader cannot parse (renamed field, string score, offset outside the text) | Blocked: an unreadable span is a refusal, not an empty finding list; an empty list still passes | fail_closed_dlp, unreadable_answer_is_a_refusal |
 
 ### Durability
 
@@ -134,7 +137,8 @@ reviewer asks for: claim, mechanism, code.
 ## Status
 
 Not every case has an executor yet. Those that do run against the real seams:
-the policy chokepoint, the signed run and approval tokens, the DLP gate, the
+the policy chokepoint, the signed run token, the single-use approval
+reference, the DLP gate, the
 tool activity's idempotency path, the API's separation of duties and the
 operator's single-use approval table. The rest need the live stack (Temporal,
 Postgres, the stub tool server) and are reported as pending — never as passing.
@@ -179,11 +183,11 @@ The report is written by `tests/redteam/conftest.py` at session end, from what
 actually executed. A pending case is labelled pending in it, on purpose.
 
 The report is generated, never hand-written: a table of case, verdict, control,
-evidence event and elapsed time, plus a headline line in the form `<n> of 28
-blocked, <m> known gaps, both documented in TODO.md`. Only the generator writes
-those numbers. A pack that reports 100% on its first run is either trivial or
-lying, which is why `RT-DLP-02` ships with `known_gap` until its TODO item
-closes.
+evidence event and elapsed time, plus a headline line in the form `<p> of 32
+blocked or denied as specified · <f> failing · <k> known gaps · <m> pending ·
+<r> not run`. Only the generator writes those numbers. A pack that reports 100%
+on its first run is either trivial or lying, which is why `RT-DLP-02` still
+carries a `known_gap` note about a name that collides with a technical noun.
 
 ## Rules for adding a case
 
@@ -194,5 +198,5 @@ closes.
    the model produces.
 4. Add the ID to this document in the same commit — the manifest lint fails
    otherwise, on purpose.
-5. If it fails today, add `known_gap` with a TODO reference instead of lowering
+5. If it fails today, add `known_gap` with an issue reference instead of lowering
    the expectation. A weakened test is worse than a red one.

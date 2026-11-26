@@ -11,12 +11,14 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import tempfile
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from citadel import __version__, dlp
+from citadel.env import secret
 from citadel.tools import CommandDenied, build_argv
 from citadel.tools.bounds import DEFAULT_OUTPUT_LIMIT, bound
 
@@ -57,10 +59,18 @@ class ExecuteResponse(BaseModel):
 
 
 def _child_env(binary: str = "") -> dict[str, str]:
-    keys = SAFE_ENV_KEYS + BINARY_ENV_KEYS.get(binary, ())
-    env = {key: os.environ[key] for key in keys if key in os.environ}
+    env = {key: os.environ[key] for key in SAFE_ENV_KEYS if key in os.environ}
+    if binary in BINARY_ENV_KEYS:
+        # The token reaches only the child that needs it, and comes from a
+        # mounted file so the container environment never carries it.
+        try:
+            for name in BINARY_ENV_KEYS[binary]:
+                env[name] = secret(name)
+        except KeyError:
+            # Unconfigured gh is a refusal from gh itself, never a silent pass.
+            pass
     env.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
-    env.setdefault("HOME", "/tmp")
+    env.setdefault("HOME", tempfile.gettempdir())
     return env
 
 

@@ -219,6 +219,96 @@ def test_malformed_detector_response_is_fail_closed() -> None:
         dlp.inspect("anything", surface="output", analyzer_url=URL, opener=detector({"oops": 1}))
 
 
+TEXT = "contact alice@example.com now"
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        pytest.param(("EMAIL_ADDRESS", 8, 20, 0.9), id="tuple-not-span"),
+        pytest.param(
+            {"entity_type": "EMAIL_ADDRESS", "start": 8, "end": 20}, id="score-missing"
+        ),
+        pytest.param(
+            {"type": "EMAIL_ADDRESS", "start": 8, "end": 20, "score": 0.9}, id="field-renamed"
+        ),
+        pytest.param(
+            {"entityType": "EMAIL_ADDRESS", "start": 8, "end": 20, "score": 0.9},
+            id="camelcase",
+        ),
+        pytest.param(
+            {"entity_type": "EMAIL_ADDRESS", "start": None, "end": 20, "score": 0.9},
+            id="start-null",
+        ),
+        pytest.param(
+            {"entity_type": "EMAIL_ADDRESS", "start": "8", "end": 20, "score": 0.9},
+            id="start-string",
+        ),
+        pytest.param(
+            {"entity_type": "EMAIL_ADDRESS", "start": True, "end": 20, "score": 0.9},
+            id="start-bool",
+        ),
+        pytest.param(
+            {"entity_type": "EMAIL_ADDRESS", "start": 8, "end": 20, "score": "high"},
+            id="score-string",
+        ),
+        pytest.param(
+            {"entity_type": "EMAIL_ADDRESS", "start": 8, "end": 20, "score": True},
+            id="score-bool",
+        ),
+        pytest.param(
+            {"entity_type": "EMAIL_ADDRESS", "start": 8, "end": 999, "score": 0.9},
+            id="span-past-the-end",
+        ),
+        pytest.param(
+            {"entity_type": "EMAIL_ADDRESS", "start": 20, "end": 8, "score": 0.9},
+            id="end-before-start",
+        ),
+        pytest.param(
+            {"entity_type": "", "start": 8, "end": 20, "score": 0.9}, id="no-entity-type"
+        ),
+    ],
+)
+def test_a_span_the_reader_cannot_parse_is_a_refusal(item: Any) -> None:
+    """Dropping what the reader cannot parse is how redaction stops silently.
+
+    Every case here used to produce an empty finding list, which `inspect` reads as
+    `pass` and the caller serves unchanged: a detector that answers differently
+    disables the only content control on tool output. The last two used to escape
+    as TypeError and ValueError, i.e. a 500 rather than a deliberate refusal.
+    """
+    with pytest.raises(dlp.DlpUnavailable):
+        dlp.inspect(TEXT, surface="output", analyzer_url=URL, opener=detector([item]))
+
+
+def test_a_span_in_an_unexpected_payload_shape_is_refused() -> None:
+    with pytest.raises(dlp.DlpUnavailable):
+        dlp.inspect(TEXT, surface="output", analyzer_url=URL, opener=detector({"results": []}))
+
+
+def test_a_detector_that_found_nothing_still_passes() -> None:
+    """Refusing unreadable answers must not turn a clean answer into a block."""
+    verdict = dlp.inspect(TEXT, surface="output", analyzer_url=URL, opener=detector([]))
+
+    assert verdict.action == "pass"
+    assert verdict.text == TEXT
+
+
+def test_gate_refuses_an_unreadable_span_and_serves_no_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The refusal must reach the caller as DlpBlocked, with no content attached."""
+    malformed = [{"entity_type": "EMAIL_ADDRESS", "start": 8, "score": 0.9}]
+    monkeypatch.setattr(dlp, "urlopen", detector(malformed))
+
+    with pytest.raises(dlp.DlpBlocked) as caught:
+        dlp.gate(TEXT, surface="output", analyzer_url=URL)
+
+    assert caught.value.reason == "dlp_unavailable"
+    assert caught.value.status == 503
+    assert "alice@example.com" not in json.dumps(caught.value.report)
+
+
 def test_gate_reports_an_unavailable_detector_as_503(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(dlp, "urlopen", failing(TimeoutError("slow")))
     with pytest.raises(dlp.DlpBlocked) as caught:

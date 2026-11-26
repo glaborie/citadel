@@ -7,7 +7,6 @@ signed directly so the tests drive the same routes a logged-in browser would.
 from __future__ import annotations
 
 import time
-import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -16,6 +15,7 @@ import jwt
 import pytest
 from fastapi.testclient import TestClient
 
+from citadel import net
 from citadel.ui import app as ui_app
 
 KEY = "test-session-key-0123456789abcdef"
@@ -150,6 +150,73 @@ def test_argument_preview_is_escaped(env: tuple[TestClient, FakeDB]) -> None:
     assert "&lt;script&gt;" in response.text
 
 
+FRAMING = {
+    "x-frame-options": "DENY",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+    "cache-control": "no-store",
+}
+
+
+def _assert_refuses_framing(response: Any) -> None:
+    for header, expected in FRAMING.items():
+        assert response.headers[header] == expected, header
+    csp = response.headers["content-security-policy"]
+    assert "frame-ancestors 'none'" in csp
+    assert "form-action 'self'" in csp
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/", "/runs", "/approvals", f"/approvals/{REQUEST}", "/audit"],
+)
+def test_every_console_view_refuses_framing(
+    env: tuple[TestClient, FakeDB], path: str
+) -> None:
+    """A framed approval page is a T1 write decided by a decoy click."""
+    client, _ = env
+    _login(client)
+
+    response = client.get(path)
+
+    assert response.status_code == 200, path
+    _assert_refuses_framing(response)
+
+
+def test_the_login_redirect_refuses_framing(env: tuple[TestClient, FakeDB]) -> None:
+    """A redirect is also a response a framing page can follow."""
+    client, _ = env
+
+    response = client.get("/runs", follow_redirects=False)
+
+    assert response.status_code == 303
+    _assert_refuses_framing(response)
+
+
+def test_a_decision_post_refuses_framing(env: tuple[TestClient, FakeDB]) -> None:
+    client, _ = env
+    _login(client)
+
+    response = client.post(
+        f"/approvals/{REQUEST}/decide",
+        data={"decision": "approve", "reason": "ok"},
+        follow_redirects=False,
+    )
+
+    _assert_refuses_framing(response)
+
+
+def test_a_refusal_refuses_framing(env: tuple[TestClient, FakeDB]) -> None:
+    """The 403 a wrong role gets is still a page: it must not be framable either."""
+    client, _ = env
+    _login(client, roles=["nobody"])
+
+    response = client.get("/runs")
+
+    assert response.status_code == 403
+    _assert_refuses_framing(response)
+
+
 def test_decide_requires_csrf(env: tuple[TestClient, FakeDB]) -> None:
     client, _ = env
     _login(client)
@@ -215,7 +282,7 @@ def test_decide_forwarded_to_the_api_with_the_user_token(
         seen["body"] = request.data
         return Reply()
 
-    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    monkeypatch.setattr(net, "urlopen", fake)
     response = client.post(
         f"/approvals/{REQUEST}/decide",
         data={"csrf": "csrf-value", "decision": "approve", "reason": "looks fine"},

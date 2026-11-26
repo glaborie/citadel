@@ -219,9 +219,9 @@ def test_history_is_appended_after_the_task() -> None:
 
     history = [
         {"role": "assistant", "content": "checking"},
-        {"role": "tool", "content": "ok"},
+        {"role": "user", "content": "[tool result] ok"},
     ]
     turns = _messages(request(history=history), "system text")
 
-    assert [turn["role"] for turn in turns] == ["system", "user", "assistant", "tool"]
+    assert [turn["role"] for turn in turns] == ["system", "user", "assistant", "user"]
     assert turns[1]["content"] == "why is checkout-api restarting?"

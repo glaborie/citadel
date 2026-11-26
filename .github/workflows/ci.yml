@@ -15,12 +15,52 @@ concurrency:
 # The gates are independent, so they run as parallel jobs. `check` is the
 # aggregator that branch protection requires: it adds no work of its own and
 # fails when any shard does, leaving the required status context stable.
+#
+# The workflow itself always starts, whatever changed: `check` is a required
+# status context, and a workflow skipped by `paths:` never reports it, which
+# leaves the pull request unable to merge. So the filtering happens per job,
+# after one job has decided what actually changed.
 jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-24.04
+    outputs:
+      python: ${{ steps.diff.outputs.python }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0          # the base commit has to be in the clone
+          persist-credentials: false
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          # A scheduled, manual, new-branch or force-pushed run cannot be diffed
+          # against a known base, so it runs everything. Unknown means changed.
+          if [ "$EVENT" = "schedule" ] || [ "$EVENT" = "workflow_dispatch" ] \
+             || [ -z "${BASE:-}" ] \
+             || [ "$BASE" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            python=true
+          elif git diff --name-only "$BASE"...HEAD | grep -Eq \
+               '^(src|tests|evals|scripts|skills|policy|migrations)/|^(pyproject\.toml|uv\.lock|Makefile|\.python-version)$|^\.github/workflows/ci\.yml$'; then
+            python=true
+          else
+            python=false
+          fi
+          echo "python=$python" >> "$GITHUB_OUTPUT"
   lint:
+    needs: [changes]
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No job here pushes; the checkout credential is a token to steal.
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: "3.12"
           enable-cache: true
@@ -28,10 +68,15 @@ jobs:
       - run: uv run ruff check .
 
   typecheck:
+    needs: [changes]
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No job here pushes; the checkout credential is a token to steal.
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: "3.12"
           enable-cache: true
@@ -39,10 +84,15 @@ jobs:
       - run: uv run mypy
 
   test:
+    needs: [changes]
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No job here pushes; the checkout credential is a token to steal.
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: "3.12"
           enable-cache: true
@@ -51,10 +101,15 @@ jobs:
       - run: uv run pytest
 
   eval:
+    needs: [changes]
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No job here pushes; the checkout credential is a token to steal.
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: "3.12"
           enable-cache: true
@@ -62,7 +117,7 @@ jobs:
       - run: uv run python -m citadel.evals
 
   check:
-    needs: [lint, typecheck, test, eval]
+    needs: [changes, lint, typecheck, test, eval]
     if: always()
     runs-on: ubuntu-24.04
     steps:

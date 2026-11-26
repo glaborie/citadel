@@ -79,3 +79,55 @@ description of a practice lead, not of a framework.
 - **Letting a judge gate safety.** A confident judge is not a control.
 - **Reporting kappa without the human ceiling.** It looks rigorous and says
   nothing about whether the task is well-posed.
+
+## Implementation
+
+The instrument exists; the calibration run does not. That split is deliberate and
+it is visible in the code, because a judge that gates before anyone measured it
+is the thing this document argues against.
+
+| Piece | Where |
+|---|---|
+| Rubric catalogue: four dimensions, four anchored levels each | `evals/golden/rubrics.json` |
+| Loading and validation (a gap in the levels is a dataset error) | `citadel/evals/rubric.py` |
+| Band table and `may_gate` decision, straight from step 4 | `rubric.band` |
+| Judge as a model call, JSON-only answer | `rubric.OmniJudge` |
+| Evidence rendering, bounded to 8 KB with a digest | `rubric.render_evidence` |
+| Kappa per dimension | `scripts/cohens_kappa.py` |
+
+Run it against the gateway:
+
+```bash
+uv run python -m citadel.evals --judge auto/best-fast
+```
+
+Two failure modes are handled as failures rather than as scores, because both
+would otherwise read as a pass:
+
+- **the verdict cannot be read** - no JSON object, a quoted score, an
+  out-of-scale level - is a `JudgeMisread` and the grade fails;
+- **the judge cannot be reached** is a `JudgeUnavailable` and the grade fails.
+
+The evidence the judge sees is the trajectory: task, each tool call and its
+outcome, policy and DLP decisions, the recorded answer. It is capped at 8 KB of
+head and tail with the digest of the whole stream, so a 100 KB log cannot push
+the rubric out of the context window or out of the record.
+
+**Every dimension ships report-only.** `gates: false` in the catalogue for all
+four, including `plan` and `grounding`, because no kappa has been measured yet.
+A dimension earns the right to fail a run in the PR that records its calibration:
+
+```json
+{ "dimension": "plan", "gates": true, "gating_requires": "kappa 0.71, n=30, 2026-12-01" }
+```
+
+The mechanism is tested in both directions: a failing report-only dimension
+leaves the exit code alone (`NOTE` in the output), and a failing gating dimension
+returns 1.
+
+### Still open
+
+The sample described in step 1 - 30 trajectories, stratified 10/10/10, two
+independent raters - has not been drawn. Until it is, the judge produces a number
+with a decimal point and no known error, and the documented consequence applies:
+it may report, it may not gate.

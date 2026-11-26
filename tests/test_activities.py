@@ -8,6 +8,7 @@ connection; no database is needed.
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import io
 import json
@@ -20,7 +21,7 @@ from typing import Any, cast
 
 import pytest
 
-from citadel import approval_requests, dlp
+from citadel import approval_requests, dlp, net
 from citadel.hashing import arguments_hash
 from citadel.policy import Decision
 from citadel.workflows import activities
@@ -42,6 +43,8 @@ class FakeDB:
     def __init__(self, rows: dict[str, dict[str, Any]] | None = None) -> None:
         self.rows: dict[str, dict[str, Any]] = rows or {}
         self.approvals: list[tuple[Any, ...]] = []
+        # (tenant_id, digest) -> gzipped body, as tool_outputs stores it.
+        self.outputs: dict[tuple[str, str], bytes] = {}
 
     @contextmanager
     def connect(self, _dsn: str, _tenant: str) -> Iterator[FakeConn]:
@@ -73,6 +76,13 @@ class FakeConn:
         if statement.startswith("INSERT INTO approval_requests"):
             self._db.approvals.append(params)
             return _Cursor(None)
+        if statement.startswith("INSERT INTO tool_outputs"):
+            tenant_id, digest, _run_id, _tool, _stream, body, _size = params
+            self._db.outputs.setdefault((tenant_id, digest), body)
+            return _Cursor(None)
+        if statement.startswith("SELECT body FROM tool_outputs"):
+            body = self._db.outputs.get(("lab-a", str(params[0])))
+            return _Cursor((body,) if body is not None else None)
         raise AssertionError(f"unexpected SQL: {statement}")
 
 
@@ -244,7 +254,7 @@ def test_dlp_reports_on_a_successful_call_reach_the_ledger(
     def urlopen(_request: Any, timeout: Any = None) -> Reply:
         return Reply({"allowlist_id": "docker.ps", "dlp": [report]})
 
-    monkeypatch.setattr(activities, "urlopen", urlopen)
+    monkeypatch.setattr(net, "urlopen", urlopen)
     result = impl._post("http://runner/execute", b"{}", call("read_logs"))
 
     assert result.status == "executed"
@@ -264,7 +274,7 @@ def test_a_dlp_block_is_audited_and_reported(monkeypatch: pytest.MonkeyPatch) ->
             request.full_url, 403, "Forbidden", Message(), io.BytesIO(body)
         )
 
-    monkeypatch.setattr(activities, "urlopen", urlopen)
+    monkeypatch.setattr(net, "urlopen", urlopen)
     result = impl._post("http://runner/execute", b"{}", call("read_logs"))
 
     assert (result.status, result.rule_id) == ("failed", "dlp.blocked")
@@ -284,7 +294,7 @@ def test_an_unavailable_detector_is_reported_as_such(monkeypatch: pytest.MonkeyP
             request.full_url, 503, "Unavailable", Message(), io.BytesIO(body)
         )
 
-    monkeypatch.setattr(activities, "urlopen", urlopen)
+    monkeypatch.setattr(net, "urlopen", urlopen)
     result = impl._post("http://runner/execute", b"{}", call("read_logs"))
 
     assert result.rule_id == "dlp.unavailable"
@@ -456,12 +466,18 @@ def test_finish_run_writes_the_end_event(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(activities, "tenant_connection", db.connect)
 
     RunActivities(dsn="unused", audit=cast(Any, ledger)).finish_run(
-        RunEnd(run_id="run-1", tenant_id="lab-a", outcome="completed")
+        RunEnd(
+            run_id="run-1",
+            tenant_id="lab-a",
+            outcome="completed",
+            answer="two containers are running",
+        )
     )
 
     assert db.status == "completed"
     assert [event["event_type"] for event in ledger.events] == ["run.end"]
     assert ledger.events[0]["payload"]["outcome"] == "completed"
+    assert ledger.events[0]["payload"]["answer"] == "two containers are running"
 
 
 def test_finish_run_does_not_fork_an_existing_end(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -489,7 +505,7 @@ def test_a_large_tool_result_is_capped_before_it_enters_the_history(
             {"allowlist_id": "docker.logs", "stdout": body, "stderr": "", "truncated": False}
         )
 
-    monkeypatch.setattr(activities, "urlopen", urlopen)
+    monkeypatch.setattr(net, "urlopen", urlopen)
     result = impl._post("http://runner/execute", b"{}", call("read_logs"))
 
     assert len(result.output["stdout"].encode("utf-8")) <= activities.EVENT_OUTPUT_LIMIT
@@ -498,6 +514,34 @@ def test_a_large_tool_result_is_capped_before_it_enters_the_history(
     assert result.output_sha256 == hashlib.sha256(body.encode()).hexdigest()
     assert result.output_bytes == len(body.encode())
     assert result.output_truncated is True
+
+
+def test_the_capped_bytes_are_kept_where_the_digest_points(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The record proves the bytes existed; the store is how a reviewer reads them.
+
+    Without this, a 100 KB diff could only be reviewed by running the tool again,
+    which for a T1 write means repeating the side effect.
+    """
+    body = "HEAD\n" + ("b" * 60_000) + "\nEND\n"
+    db = FakeDB()
+    impl = build(monkeypatch, db, recorder([]), FakeAudit())
+
+    def urlopen(_request: Any, timeout: Any = None) -> Reply:
+        return Reply(
+            {"allowlist_id": "docker.logs", "stdout": body, "stderr": "", "truncated": False}
+        )
+
+    monkeypatch.setattr(net, "urlopen", urlopen)
+    result = impl._post("http://runner/execute", b"{}", call("read_logs"))
+
+    digest = hashlib.sha256(body.encode()).hexdigest()
+    assert result.output_ref == digest
+    assert result.output_stored is True
+    assert (("lab-a", digest) in db.outputs), "the body was not kept"
+    stored = gzip.decompress(db.outputs[("lab-a", digest)]).decode()
+    assert stored == body, "the store must hold the text the runner returned, not the cap"
 
 
 def test_the_audit_record_states_that_a_cap_was_applied(monkeypatch: pytest.MonkeyPatch) -> None:
