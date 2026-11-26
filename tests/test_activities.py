@@ -410,11 +410,15 @@ def test_a_t1_request_is_recorded_for_the_console(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(activities, "authorize", lambda *args, **kwargs: decision)
     _detector(monkeypatch)
 
-    outcome = impl.authorize_tool(call("restart_service"))
+    item = call("restart_service")
+    item.workflow_id = f"run-{item.run_id}-1-restart_service"
+    outcome = impl.authorize_tool(item)
 
     assert outcome.outcome == "requires_approval"
     assert len(db.approvals) == 1
-    tenant, run_id, tool, agent, arguments, tier, rule_id, requested_by = db.approvals[0]
+    tenant, run_id, tool, agent, arguments, tier, rule_id, requested_by, workflow_id = db.approvals[
+        0
+    ]
     assert (tenant, run_id, tool, agent, tier, rule_id, requested_by) == (
         "lab-a",
         call("restart_service").run_id,
@@ -424,6 +428,7 @@ def test_a_t1_request_is_recorded_for_the_console(monkeypatch: pytest.MonkeyPatc
         "policy.tier_requires_approval",
         "user-alice",
     )
+    assert workflow_id == item.workflow_id, "the row must carry the child's own id"
     assert json.loads(arguments) == {"service": "checkout-api"}
 
 

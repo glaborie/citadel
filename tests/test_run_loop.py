@@ -16,7 +16,7 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from citadel.workflows.model_step import ModelStepRequest, ModelStepResult
-from citadel.workflows.orchestrator import RunWorkflow
+from citadel.workflows.orchestrator import RunWorkflow, child_workflow_id
 from citadel.workflows.specialist import SpecialistWorkflow
 from citadel.workflows.types import PolicyOutcome, RunEnd, RunInput, ToolCall, ToolResult
 
@@ -154,6 +154,13 @@ def test_a_tool_request_is_delegated_then_answered() -> None:
     assert requests[1].history, "step two must see what step one said"
     assert requests[1].history[0]["role"] == "assistant"
     assert ends[0].outcome == "completed"
+
+
+def test_the_specialist_reports_the_child_id_the_orchestrator_minted() -> None:
+    """The approval row records this id, so it must be the one the orchestrator used."""
+    _, _, calls, _ = asyncio.run(run_task([wants("restart_service"), answered()]))
+
+    assert calls[0].workflow_id == child_workflow_id(task_input().run_id, "restart_service", 1)
 
 
 def test_a_denied_tool_is_fed_back_not_hidden() -> None:

@@ -17,12 +17,18 @@ if TYPE_CHECKING:
 
 
 def record_request(*, dsn: str, call: ToolCall, tier: str, rule_id: str) -> None:
-    """A T1 call is waiting; a retry must not add a second row."""
+    """A T1 call is waiting; a retry must not add a second row.
+
+    `call.workflow_id` is the child's own runtime id, so a later decision signals
+    the workflow that parked rather than rebuilding a step-scoped id from the
+    run and tool this row happens to carry.
+    """
     with tenant_connection(dsn, call.tenant_id) as conn:
         conn.execute(
             "INSERT INTO approval_requests"
-            " (tenant_id, run_id, tool, agent_id, arguments, tier, rule_id, requested_by)"
-            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+            " (tenant_id, run_id, tool, agent_id, arguments, tier, rule_id,"
+            " requested_by, workflow_id)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
             " ON CONFLICT (run_id, tool) DO NOTHING",
             (
                 call.tenant_id,
@@ -33,6 +39,7 @@ def record_request(*, dsn: str, call: ToolCall, tier: str, rule_id: str) -> None
                 tier,
                 rule_id,
                 call.user_id,
+                call.workflow_id,
             ),
         )
 

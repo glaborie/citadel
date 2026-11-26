@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import timedelta
 
 from temporalio import workflow
@@ -29,6 +30,9 @@ class SpecialistWorkflow:
 
     @workflow.run
     async def run(self, call: ToolCall) -> ToolResult:
+        # Its own runtime id is the one the approval row must record: the
+        # orchestrator's step-scoped id never has to be reconstructed by hand.
+        call = replace(call, workflow_id=workflow.info().workflow_id)
         outcome = await workflow.execute_activity_method(
             activities.ToolActivities.authorize_tool,
             call,

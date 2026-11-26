@@ -34,6 +34,10 @@ class ToolCall:
     # The API-minted run token the sandbox verifies. Identity comes from it, so
     # the body's agent string is a claim the runner checks, never trusts.
     run_token: str = ""
+    # The child's own Temporal id, filled in by the specialist from its runtime
+    # info. The approval row stores it, so the API signals the workflow that
+    # actually parked instead of rebuilding an id from run and tool.
+    workflow_id: str = ""
 
 
 @dataclass
