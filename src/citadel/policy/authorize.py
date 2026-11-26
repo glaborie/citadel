@@ -148,25 +148,58 @@ def authorize_approval(
     checker: RelationChecker,
     catalog: dict[str, ToolSpec] | None = None,
 ) -> Decision:
-    """Decide whether an agent may approve a T1 call. Same fail-closed order.
+    """Decide whether an agent may approve a T1 call.
 
-    1. missing tenant or agent                  -> deny
-    2. tool absent from the catalog             -> deny
-    3. tool is not T1                           -> deny (T0 needs no approval, T2 is human-only)
-    4. approving agent == run's agent           -> deny (four eyes)
-    5. policy service unreachable or erroring   -> deny
-    6. OpenFGA says no                          -> deny
-    7. otherwise                                -> allow
+    Fail-closed at every step, in this order: identity present, tool known, tier is
+    T1, the two agents differ, the policy service answers, and the answer is yes.
+    T0 needs no approval; T2 is human-only.
     """
     tools = catalog if catalog is not None else load_catalog()
+    denial = _denial(request, tools, checker)
+    if denial is not None:
+        return denial
+    tier = tools[request.tool].tier
+    return Decision(
+        outcome="allow",
+        rule_id="approval.agent_allowed",
+        reason="the agent holds can_approve for this tool",
+        tier=tier,
+    )
 
+
+def _denial(
+    request: ApprovalAuthorization,
+    tools: dict[str, ToolSpec],
+    checker: RelationChecker,
+) -> Decision | None:
+    """The first reason to refuse, in the fail-closed order.
+
+    Each rule returns `None` when it does not refuse, so the chain reads as the
+    checklist it is: the first non-`None` is the decision.
+    """
+    return (
+        _identity_denial(request)
+        or _catalog_denial(request, tools)
+        or _four_eyes_denial(request, tools)
+        or _policy_denial(request, checker, tools[request.tool])
+    )
+
+
+def _identity_denial(request: ApprovalAuthorization) -> Decision | None:
+    """Every identity the decision needs, or the reason it cannot be made."""
     if not request.tenant_id.strip():
         return _deny("identity.missing_tenant", "no tenant on the approval request")
     if not request.approving_agent.strip():
         return _deny("identity.missing_agent", "no approving agent on the approval request")
     if not request.origin_agent.strip():
         return _deny("identity.missing_agent", "no originating agent on the approval request")
+    return None
 
+
+def _catalog_denial(
+    request: ApprovalAuthorization, tools: dict[str, ToolSpec]
+) -> Decision | None:
+    """The tool must exist and must be T1: T0 needs no approval, T2 is human-only."""
     spec = tools.get(request.tool)
     if spec is None:
         return _deny("tool.unknown", f"tool {request.tool!r} is not in the catalog")
@@ -176,14 +209,26 @@ def authorize_approval(
             f"{request.tool} is {spec.tier}; agents approve T1 calls only",
             spec.tier,
         )
+    return None
 
-    if request.approving_agent == request.origin_agent:
-        return _deny(
-            "approval.self_approval_denied",
-            "an agent cannot approve a run it proposed",
-            spec.tier,
-        )
 
+def _four_eyes_denial(
+    request: ApprovalAuthorization, tools: dict[str, ToolSpec]
+) -> Decision | None:
+    """The agent that proposes a call is never the agent that approves it."""
+    if request.approving_agent != request.origin_agent:
+        return None
+    return _deny(
+        "approval.self_approval_denied",
+        "an agent cannot approve a run it proposed",
+        tools[request.tool].tier,
+    )
+
+
+def _policy_denial(
+    request: ApprovalAuthorization, checker: RelationChecker, spec: ToolSpec
+) -> Decision | None:
+    """Rules 5-6: the policy service must answer, and the answer must be yes."""
     try:
         allowed = checker.can_approve(
             agent=agent_object(request.tenant_id, request.approving_agent),
@@ -198,10 +243,4 @@ def authorize_approval(
             "no can_approve relationship for this agent and tool",
             spec.tier,
         )
-
-    return Decision(
-        outcome="allow",
-        rule_id="approval.agent_allowed",
-        reason="the agent holds can_approve for this tool",
-        tier=spec.tier,
-    )
+    return None

@@ -178,25 +178,33 @@ def create_app(
         try:
             principal = active.verify(token)
         except IdentityError as user_error:
-            try:
-                key = _key()
-            except (KeyError, IdentityError, ValueError) as exc:
-                raise HTTPException(status_code=503, detail="api cannot verify run tokens") from exc
-            try:
-                context = verify_run_token(token, key.public_key())
-            except IdentityError as exc:
-                raise HTTPException(status_code=401, detail=str(user_error)) from exc
-            return Approver(
-                tenant_id=context.tenant_id,
-                actor_type="agent",
-                actor_id=context.agent_id,
-                on_behalf_of=context.user_id,
-            )
+            return _agent_approver(token, user_error)
         return Approver(
             tenant_id=principal.tenant_id,
             actor_type="user",
             actor_id=principal.user_id,
             roles=principal.roles,
+        )
+
+    def _agent_approver(token: str, user_error: IdentityError) -> Approver:
+        """The second credential: a run token, whose agent identity is verified.
+
+        Reached only after the user token was refused, and it refuses in turn rather
+        than falling back: no verified run token means no approver.
+        """
+        try:
+            key = _key()
+        except (KeyError, IdentityError, ValueError) as exc:
+            raise HTTPException(status_code=503, detail="api cannot verify run tokens") from exc
+        try:
+            context = verify_run_token(token, key.public_key())
+        except IdentityError as exc:
+            raise HTTPException(status_code=401, detail=str(user_error)) from exc
+        return Approver(
+            tenant_id=context.tenant_id,
+            actor_type="agent",
+            actor_id=context.agent_id,
+            on_behalf_of=context.user_id,
         )
 
     def _checker() -> RelationChecker:
