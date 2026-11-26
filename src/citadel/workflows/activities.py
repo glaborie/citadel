@@ -297,12 +297,15 @@ class ToolActivities:
         # the audit event for a capped call reported no cap. A copy that cannot
         # forget a field added later is the only copy worth writing here.
         result = replace(outcome, idempotency_key=key)
+        # The event goes before the row settles. A worker killed between the two
+        # writes then leaves `sent` with an event - which is true - instead of
+        # `executed` with none, a completed call the ledger cannot prove.
+        self._audit_tool(call, result, args_hash=args_hash, key=key, tier=tier, duration=duration)
         with tenant_connection(self._dsn, call.tenant_id) as conn:
             conn.execute(
                 "UPDATE tool_calls SET status = %s, result = %s WHERE idempotency_key = %s",
                 (result.status, json.dumps(result.output), key),
             )
-        self._audit_tool(call, result, args_hash=args_hash, key=key, tier=tier, duration=duration)
         return result
 
     def _audit_tool(
