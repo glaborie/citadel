@@ -21,9 +21,9 @@ NAME = os.environ.get("MLFLOW_EXPERIMENT_NAME", "citadel-trajectories")
 EXPECTED = os.environ.get("MLFLOW_EXPERIMENT_ID", "")
 
 
-def _call(path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+def _call(path: str, body: dict[str, Any] | None = None, base: str = BASE) -> dict[str, Any]:
     request = urllib.request.Request(
-        f"{BASE}{path}",
+        f"{base}{path}",
         data=json.dumps(body).encode() if body is not None else None,
         headers={"Content-Type": "application/json"},
         method="POST" if body is not None else "GET",
@@ -33,16 +33,34 @@ def _call(path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
     return payload
 
 
-def ensure_experiment() -> str:
+def ensure_experiment(base: str = BASE) -> str:
+    """The experiment id, creating the experiment only when the name is absent."""
     query = urllib.parse.quote(NAME, safe="")
     try:
-        found = _call(f"/api/2.0/mlflow/experiments/get-by-name?experiment_name={query}")
+        found = _call(f"/api/2.0/mlflow/experiments/get-by-name?experiment_name={query}", base=base)
         return str(found["experiment"]["experiment_id"])
     except urllib.error.HTTPError as exc:
         if exc.code != 404:
             raise
-    created = _call("/api/2.0/mlflow/experiments/create", {"name": NAME})
+    created = _call("/api/2.0/mlflow/experiments/create", {"name": NAME}, base=base)
     return str(created["experiment_id"])
+
+
+def experiment_exists(experiment_id: str, base: str = BASE) -> bool:
+    """Whether this tracking server knows the id. 404 is a no; anything else raises.
+
+    Telemetry uses this to decide between the configured id and the configured name.
+    A wrong id is not an error at MLflow - it is a 404 on every span - so the question
+    has to be asked once, at startup, instead of per batch.
+    """
+    try:
+        query = urllib.parse.quote(experiment_id)
+        _call(f"/api/2.0/mlflow/experiments/get?experiment_id={query}", base=base)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return False
+        raise
+    return True
 
 
 def check_expected(found: str, expected: str) -> str | None:
