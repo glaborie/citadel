@@ -51,8 +51,17 @@ frontend dockerfrontend
     # revision 1d2966298e83). Upstream PR #183 adds ALLOW_ARCHIVE/ALLOW_EXPORT;
     # until a release carries it, CONTAINERS=1 must not imply a filesystem read.
     # /archive extracts any path and /export the whole rootfs, including
-    # /run/secrets, so both are denied before the blanket allow.
+    # /run/secrets, so both are denied before any container allow.
     http-request deny if { path,url_dec -m reg -i ^(/v[\d\.]+)?/containers/[a-zA-Z0-9_.-]+/(archive|export) }
+
+    # #110: the proxy fronts the host daemon, so an unrestricted /containers
+    # allow exposes the Config.Env of every project on it. Only Citadel's own
+    # names are accepted. A container id carries no `citadel-` prefix, so an
+    # id-based request falls through to the deny below; callers must use the
+    # name, which is what the T0 tools already send.
+    http-request allow if { path,url_dec -m reg -i ^(/v[\d\.]+)?/containers/citadel-[a-zA-Z0-9_.-]+/(json|logs|stats|top)$ } { env(CONTAINERS) -m bool }
+    # The list endpoint is what `docker ps` and `docker compose ps` use.
+    http-request allow if { path,url_dec -m reg -i ^(/v[\d\.]+)?/containers/json$ } { env(CONTAINERS) -m bool }
 
     # Allowed endpoints
     http-request allow if { path,url_dec -m reg -i ^(/v[\d\.]+)?/containers/[a-zA-Z0-9_.-]+/((stop)|(restart)|(kill)) } { env(ALLOW_RESTARTS) -m bool }
@@ -64,7 +73,6 @@ frontend dockerfrontend
     http-request allow if { path,url_dec -m reg -i ^(/v[\d\.]+)?/build } { env(BUILD) -m bool }
     http-request allow if { path,url_dec -m reg -i ^(/v[\d\.]+)?/commit } { env(COMMIT) -m bool }
     http-request allow if { path,url_dec -m reg -i ^(/v[\d\.]+)?/configs } { env(CONFIGS) -m bool }
-    http-request allow if { path,url_dec -m reg -i ^(/v[\d\.]+)?/containers } { env(CONTAINERS) -m bool }
     http-request allow if { path,url_dec -m reg -i ^(/v[\d\.]+)?/distribution } { env(DISTRIBUTION) -m bool }
     http-request allow if { path,url_dec -m reg -i ^(/v[\d\.]+)?/events } { env(EVENTS) -m bool }
     http-request allow if { path,url_dec -m reg -i ^(/v[\d\.]+)?/exec } { env(EXEC) -m bool }
