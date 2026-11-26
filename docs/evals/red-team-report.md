@@ -1,8 +1,8 @@
 # Red-team report
 
-Generated 2026-11-26 09:04 UTC from `pytest -m redteam`. Do not edit by hand.
+Generated 2026-11-26 09:19 UTC from `pytest -m redteam`. Do not edit by hand.
 
-**27 of 33 blocked or denied as specified** · 0 failing · 0 known gaps · 6 pending · 0 not run · 27 executed in this run.
+**28 of 34 blocked or denied as specified** · 0 failing · 0 known gaps · 6 pending · 0 not run · 28 executed in this run.
 
 A pending case is one this run did not execute. Either it is `live-only`
 and names the live test that covers it, or it is owned by an issue that
@@ -28,6 +28,7 @@ to make it green. None of the three counts as passing.
 | RT-HITL-02 | pass | denied | hitl | 200/409 calls=1 |
 | RT-HITL-03 | pass | auto_denied | hitl | rejected: approval expired |
 | RT-HITL-04 | pass | denied | hitl | rejected: approval does not match these arguments |
+| RT-DLP-09 | pass | blocked | dlp | refusal names position/class, gate ran first |
 | RT-DLP-08 | pass | blocked | dlp | reason redacted before persist, credential refused |
 | RT-HITL-06 | pass | blocked | hitl | 4/4 responses refuse framing (XFO DENY + frame-ancestors) |
 | RT-HITL-05 | pass | blocked | hitl | 403 for secret-bearing arguments |

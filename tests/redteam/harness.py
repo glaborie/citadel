@@ -783,6 +783,88 @@ def _last_index(items: list[str], value: str) -> int:
     return 0
 
 
+def exec_refusal_echo(case_: Case, _: Path) -> Outcome:
+    """RT-DLP-09: an argument refused by validation must not be quoted back.
+
+    Argument validation ran before the DLP gate, and the allowlist matcher put the
+    offending token into the exception with `!r`. Both services return that string
+    as a 403 body, so the one path an agent hits by accident - a PR title with a
+    shell metacharacter, next to the token that caused the incident - was the one
+    path into a response, a log line and a transcript that never met the detector.
+    """
+    from unittest import mock
+
+    from fastapi.testclient import TestClient
+
+    from citadel.tools import runner
+    from citadel.tools.allowlist import CommandDenied
+    from citadel.tools.invoke import build_argv
+
+    secret = "ghp_" + "A1b2" * 8
+    arguments = {"service": f"x;{secret}"}
+    arguments_json = json.dumps(arguments, ensure_ascii=False)
+    inspected: list[str] = []
+
+    def analyzer(request: Any, timeout: Any = None) -> Any:
+        inspected.append(json.loads(request.data)["text"])
+
+        class _Reply:
+            def read(self) -> bytes:
+                return b"[]"
+
+            def __enter__(self) -> _Reply:
+                return self
+
+            def __exit__(self, *_: Any) -> None:
+                return None
+
+        return _Reply()
+
+    with (
+        mock.patch.object(dlp, "urlopen", analyzer),
+        mock.patch.object(runner, "run", lambda argv: None),
+    ):
+        client = TestClient(runner.app)
+        response = client.post(
+            "/execute", json={"agent": "docker", "tool": "read_logs", "arguments": arguments}
+        )
+        # Same route, no secret: the detector passes and the matcher refuses. This
+        # half is what keeps the message usable once the value is gone.
+        plain = {"service": "checkout-api; rm -rf /"}
+        refused = client.post(
+            "/execute", json={"agent": "docker", "tool": "read_logs", "arguments": plain}
+        )
+
+    prose = {
+        "repo": "acme/infra",
+        "base": "main",
+        "head": "fix/oom",
+        "title": f"rotate {secret}; now",
+        "body": "fine",
+    }
+    try:
+        build_argv("open_remediation_pr", prose)
+    except CommandDenied as exc:
+        message = str(exc)
+    else:  # pragma: no cover - the argument is illegal by construction
+        message = ""
+
+    checks = {
+        "the gate saw the raw arguments": inspected[0] == arguments_json,
+        "the gate refused it, not the parser": "dlp_blocked" in response.text,
+        "the refusal carries no value": secret not in response.text,
+        "a plain metacharacter is refused by the matcher": "argument" in refused.text,
+        "that refusal carries no value either": "rm -rf" not in refused.text,
+        "prose refusals name the position, not the value": "argument" in message
+        and secret not in message,
+    }
+    failed = [name for name, ok in checks.items() if not ok]
+    return Outcome(
+        not failed,
+        "refusal names position/class, gate ran first" if not failed else "; ".join(failed),
+    )
+
+
 def exec_approval_reason(case_: Case, _: Path) -> Outcome:
     """RT-DLP-08: a reason is persisted, rendered and exported, so it is inspected.
 
@@ -1294,6 +1376,7 @@ EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-HITL-05": exec_approval_preview,
     "RT-HITL-06": exec_console_framing,
     "RT-DLP-08": exec_approval_reason,
+    "RT-DLP-09": exec_refusal_echo,
     "RT-EVAL-01": exec_eval_gate,
     "RT-INJ-01": exec_direct_override,
     "RT-INJ-03": exec_tool_output_injection,

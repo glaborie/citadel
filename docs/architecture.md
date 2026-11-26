@@ -169,6 +169,7 @@ MLflow stores versioned eval datasets and `mlflow.genai.evaluate()` results. Sco
 | Tool authority escalation | OpenFGA chokepoint; skills cannot grant tools; deny by default |
 | Prompt injection via retrieved/web content | Untrusted labelling, guardrail checks, Researcher cannot call infra tools |
 | Secret exfiltration to hosted model | Local fail-closed DLP, credential masking, no secrets in sandboxes |
+| Secret in a refusal message | The raw arguments are inspected before `build_argv`, so a rejected argument still meets the detector; refusals name the position and the class, never the value |
 | Duplicate side effects on retry | Durable idempotency keys + Postgres unique constraint; documented crash window |
 | Sandbox escape | No socket, no egress, dropped caps, gVisor upgrade; no host credentials in runner |
 | Approval forgery | Keycloak RBAC, server-side authorisation, CSRF, TTL, signed reason, audit before resume, and `X-Frame-Options: DENY` plus CSP `frame-ancestors 'none'` on every console response - a framed decision form is a decoy click on a real approval |

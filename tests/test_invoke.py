@@ -219,3 +219,44 @@ def test_allowlist_marks_output_risk_for_documented_commands() -> None:
     assert risk["docker.compose.config"] == "definitive"
     assert risk["docker.logs"] == "possible"
     assert risk["docker.ps"] is None
+
+
+def _pr(title: str) -> dict[str, str]:
+    return {
+        "repo": "acme/infra",
+        "base": "main",
+        "head": "fix/oom",
+        "title": title,
+        "body": "fine",
+    }
+
+
+def test_a_refused_token_is_not_quoted_back() -> None:
+    """The 403 body is read by the caller, the logs and the transcript.
+
+    Prose arguments skip the value pattern that names an argument and stops there,
+    so they reach the allowlist matcher - which quoted the offending token with
+    `!r`. A `ghp_` in a PR title therefore came back verbatim, from a path that
+    runs before the DLP gate.
+    """
+    secret = "ghp_" + "A1b2" * 8
+    with pytest.raises(CommandDenied) as caught:
+        build_argv("open_remediation_pr", _pr(f"rotate {secret}; now"))
+
+    message = str(caught.value)
+    assert secret not in message
+    assert "shell metacharacter in argument" in message
+
+
+def test_a_refused_path_names_the_position() -> None:
+    """Position plus class is actionable; the value is not."""
+    with pytest.raises(CommandDenied, match=r"path traversal or absolute path in argument \d+"):
+        build_argv("open_remediation_pr", _pr("update ../../etc/passwd"))
+
+
+def test_the_position_is_the_argv_index() -> None:
+    """So a reader can map it back to the argument without seeing the value."""
+    with pytest.raises(CommandDenied) as caught:
+        build_argv("open_remediation_pr", _pr("a|b"))
+    index = int(str(caught.value).rsplit(" ", 1)[-1])
+    assert index >= 2

@@ -197,3 +197,30 @@ def test_detector_outage_refuses_the_operator_too(
     assert "argv" not in client.captured
     assert [event["event_type"] for event in client.ledger] == ["dlp.event"]
     assert client.ledger[0]["payload"]["error"]
+
+
+def test_a_secret_in_an_illegal_argument_is_refused_by_the_gate(
+    client: TestClient,
+) -> None:
+    """A PR title with a metacharacter and a token: the gate must answer, not the parser."""
+    secret = "ghp_" + "A1b2" * 8
+    arguments = {**PR_ARGS, "title": f"rotate {secret}; now"}
+    response = client.post("/execute", json=body("open_remediation_pr", arguments))
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["reason"] == "dlp_blocked"
+    assert secret not in response.text
+    # A refusal is also an event the auditor must see.
+    assert [event["event_type"] for event in client.ledger] == ["dlp.event"]
+
+
+def test_a_metacharacter_without_a_secret_names_the_position(client: TestClient) -> None:
+    """No value, no command: the caller learns where the problem is, not what it was."""
+    arguments = {**PR_ARGS, "title": "Restart; rm -rf /"}
+    response = client.post("/execute", json=body("open_remediation_pr", arguments))
+
+    assert response.status_code == 403
+    detail = response.json()["detail"]
+    assert "shell metacharacter in argument" in detail
+    assert "rm -rf" not in response.text
+    assert client.ledger == []

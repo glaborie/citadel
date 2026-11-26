@@ -56,15 +56,25 @@ def load_allowlist() -> tuple[AllowedCommand, ...]:
 
 
 def _check_tokens(tokens: Sequence[str]) -> None:
+    """Reject what cannot be a single argv token, without repeating it back.
+
+    The message used to quote the token with `!r`, and both callers return this
+    string in a 403 body. The realistic trigger is ordinary - an agent builds a PR
+    title or a restart reason that contains a shell metacharacter, often next to the
+    very secret that caused the incident - so the exception was the one path where an
+    argument reached the caller, the logs and the transcript without ever meeting the
+    DLP gate. The position and the class are what make the refusal actionable; the
+    value adds nothing an attacker did not already know.
+    """
     if not tokens:
         raise CommandDenied("empty command")
-    for token in tokens:
+    for index, token in enumerate(tokens):
         if not isinstance(token, str):
-            raise CommandDenied("non-string token")
+            raise CommandDenied(f"non-string token at position {index}")
         if _FORBIDDEN.search(token):
-            raise CommandDenied(f"illegal character in token {token!r}")
+            raise CommandDenied(f"shell metacharacter in argument {index}")
         if token.startswith("/") or ".." in token:
-            raise CommandDenied(f"path traversal or absolute path in {token!r}")
+            raise CommandDenied(f"path traversal or absolute path in argument {index}")
 
 
 def _matches(entry: AllowedCommand, tokens: Sequence[str]) -> bool:
