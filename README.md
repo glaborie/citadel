@@ -24,6 +24,7 @@ The table is the architecture; the **Status** column says which rows exist as co
 | 9 | Telemetry | OTel spans to MLflow; hash-chained security audit log in Postgres | built: spans carry the audit event id; audit chain built |
 | 10 | MCP support | Adapter seam only; consume external tools in a later milestone | seam only |
 | 11 | Permission-aware RAG | ACL-filtered Qdrant hybrid retrieval → rerank → structured citations | v0.2 |
+| 11a | Web research | SearXNG + bounded trafilatura fetcher; no internal reach; `untrusted_external` label | built |
 | 12 | Code mode | Deferred; only inside the sandbox, never in the worker | deferred |
 | 13 | Trajectory evaluation | MLflow 3.x offline + online grading of full traces | deterministic offline harness, live recorder and OTLP export built; judge rubrics are v0.2 |
 | 14 | A2A | Adapter seam only; ecosystem judged too thin to build against | seam only |
@@ -32,7 +33,7 @@ The table is the architecture; the **Status** column says which rows exist as co
 
 ## What runs today
 
-`make up` starts 17 services, unwrapping secrets through SOPS first into
+`make up` starts 23 services, unwrapping secrets through SOPS first into
 gitignored Docker-secret files under `secrets/` (never into a container
 environment). It builds the reranker image on first use, because the model is
 baked in at a pinned revision and never fetched at runtime. It does not build
@@ -114,7 +115,7 @@ docs/implementation-notes/    # what was executed and what it printed
 docs/security/tool-tiers.md
 docs/evals/trajectory-schema.md
 docs/adr/                     # 23 ADRs and an index
-compose.yaml                  # 17 services, images pinned by digest
+compose.yaml                  # 23 services, images pinned by digest
 Dockerfile                    # app / operator / sandbox, from one pinned base
 docker/reranker.Dockerfile    # TEI plus the model, pinned by revision
 Makefile                      # `make up` unwraps secrets through SOPS first

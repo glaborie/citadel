@@ -1,0 +1,23 @@
+# SearXNG for the Researcher. One instance, JSON only, no limiter and no image
+# proxy: there are no user accounts and no browser sessions to protect.
+#
+# `secret_key` signs internal state; it is not an account credential and no
+# service authenticates with it. Keeping it a fixed, non-secret value avoids
+# putting it in a container environment, which the Docker API exposes.
+use_default_settings: true
+
+general:
+  instance_name: "citadel"
+
+server:
+  bind_address: "0.0.0.0"
+  port: 8080
+  secret_key: "citadel-local-searxng-signing-key-not-a-credential"
+  limiter: false
+  image_proxy: false
+
+search:
+  safe_search: 1
+  formats:
+    - html
+    - json

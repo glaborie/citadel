@@ -48,21 +48,19 @@ def _outcome(result: ToolResult) -> str:
 
 
 def _safety_flags(result: ToolResult) -> list[str]:
-    flags: list[str] = []
+    flags = set(result.content_flags)
     if result.rule_id.startswith("dlp."):
-        flags.append("dlp_blocked")
+        flags.add("dlp_blocked")
     if result.rule_id.startswith("budget."):
-        flags.append("budget_exceeded")
-    return flags
+        flags.add("budget_exceeded")
+    return sorted(flags)
 
 
 @workflow.defn
 class RunWorkflow:
     @workflow.run
     async def run(self, item: RunInput) -> ToolResult:
-        result = (
-            await self._task_run(item) if item.task else await self._tool_run(item)
-        )
+        result = await self._task_run(item) if item.task else await self._tool_run(item)
 
         # run.end is written by an activity, never by the workflow itself, so a
         # retried finish cannot fork the trajectory.
@@ -109,6 +107,9 @@ class RunWorkflow:
         budget = Budget(max_steps=item.max_steps)
         usage = Usage.zero()
         history: list[dict[str, Any]] = []
+        # A label earned by one fetched page describes the run, not just that
+        # step: the answer that follows must still carry it to run.end.
+        flags: set[str] = set()
         tool_name = item.tool or "model"
 
         for step_no in range(1, item.max_steps + 1):
@@ -151,14 +152,23 @@ class RunWorkflow:
                         "cost_usd": usage.cost_usd,
                         "cost_source": usage.cost_source,
                     },
+                    content_flags=sorted(flags),
                 )
             if step.status in {"refused", "dlp_blocked"}:
                 return ToolResult(
-                    status="denied", tool=tool_name, rule_id=step.rule_id, detail=step.detail
+                    status="denied",
+                    tool=tool_name,
+                    rule_id=step.rule_id,
+                    detail=step.detail,
+                    content_flags=sorted(flags),
                 )
             if step.status != "tool_requested":
                 return ToolResult(
-                    status="failed", tool=tool_name, rule_id=step.rule_id, detail=step.detail
+                    status="failed",
+                    tool=tool_name,
+                    rule_id=step.rule_id,
+                    detail=step.detail,
+                    content_flags=sorted(flags),
                 )
 
             queue = TASK_QUEUES.get(item.agent_id)
@@ -168,6 +178,7 @@ class RunWorkflow:
                     tool=step.tool,
                     rule_id="delegation.unknown_agent",
                     detail=f"no specialist worker for agent {item.agent_id!r}",
+                    content_flags=sorted(flags),
                 )
 
             call = ToolCall(
@@ -185,6 +196,7 @@ class RunWorkflow:
                 id=child_workflow_id(item.run_id, step.tool, step_no),
                 task_queue=queue,
             )
+            flags.update(tool_result.content_flags)
 
             # The model needs the observation, not the rule that produced it.
             # Without the tool's own output the next step can only ask again,
@@ -194,13 +206,15 @@ class RunWorkflow:
                 or tool_result.output.get("stderr")
                 or tool_result.detail
             )
-            history.append(assistant_turn(step))
-            history.append(
-                tool_turn(
-                    {
-                        "detail": f"{tool_result.rule_id}: {observation}",
-                        "status": tool_result.status,
-                    }
+            history.extend(
+                (
+                    assistant_turn(step),
+                    tool_turn(
+                        {
+                            "detail": f"{tool_result.rule_id}: {observation}",
+                            "status": tool_result.status,
+                        }
+                    ),
                 )
             )
             exceeded = budget.exceeded(usage, step_no)
@@ -211,6 +225,7 @@ class RunWorkflow:
                     rule_id="budget.exceeded",
                     detail=f"stopped after {step_no} steps: {exceeded}",
                     output={"steps": step_no, "tokens": usage.total, "cost_usd": usage.cost_usd},
+                    content_flags=sorted(flags),
                 )
 
         return ToolResult(
@@ -219,4 +234,5 @@ class RunWorkflow:
             rule_id="budget.exceeded",
             detail=f"no answer within {item.max_steps} steps",
             output={"steps": item.max_steps, "tokens": usage.total, "cost_usd": usage.cost_usd},
+            content_flags=sorted(flags),
         )

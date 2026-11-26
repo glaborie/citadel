@@ -30,6 +30,10 @@ class ToolSpec:
     # and are not reachable from a tool call, so a tool whose command can disclose
     # secrets can fix the flag that decides how much it prints.
     args: tuple[str, ...] = ()
+    # "command" runs an allowlisted CLI; "http" calls one internal service
+    # (`service` names it) through the worker, never through the sandbox.
+    transport: str = "command"
+    service: str = ""
 
 
 def _param(raw: dict[str, Any]) -> Param:
@@ -54,6 +58,8 @@ def load_catalog() -> dict[str, ToolSpec]:
             command=spec.get("command"),
             params=tuple(_param(p) for p in spec.get("params", [])),
             args=tuple(spec.get("args", [])),
+            transport=str(spec.get("transport", "command")),
+            service=str(spec.get("service", "")),
         )
         for name, spec in raw["tools"].items()
     }

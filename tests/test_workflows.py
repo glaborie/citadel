@@ -15,6 +15,7 @@ from temporalio import activity
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from citadel.workflows import orchestrator
 from citadel.workflows.activities import idempotency_key
 from citadel.workflows.specialist import SpecialistWorkflow
 from citadel.workflows.types import ApprovalDecision, PolicyOutcome, ToolCall, ToolResult
@@ -142,3 +143,25 @@ def test_idempotency_key_differs_per_tool_and_run() -> None:
         idempotency_key(ToolCall("run-2", "lab-a", "u", "docker", "read_logs", base)),
     }
     assert len(keys) == 3
+
+
+def test_a_fetched_page_label_survives_into_run_end_flags() -> None:
+    result = ToolResult(
+        status="executed",
+        tool="fetch_page",
+        rule_id="research.fetch",
+        detail="stub",
+        content_flags=["untrusted_external", "prompt_injection"],
+    )
+    assert orchestrator._safety_flags(result) == ["prompt_injection", "untrusted_external"]
+
+
+def test_a_dlp_refusal_still_adds_its_own_flag() -> None:
+    result = ToolResult(
+        status="denied",
+        tool="fetch_page",
+        rule_id="dlp.blocked",
+        detail="stub",
+        content_flags=["untrusted_external"],
+    )
+    assert orchestrator._safety_flags(result) == ["dlp_blocked", "untrusted_external"]

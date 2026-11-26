@@ -10,7 +10,12 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
-TASK_QUEUES = {"orchestrator": "orchestrator", "docker": "docker", "github": "github"}
+TASK_QUEUES = {
+    "orchestrator": "orchestrator",
+    "docker": "docker",
+    "github": "github",
+    "researcher": "researcher",
+}
 
 # Seconds. Deployment-wide: the console, the API and the workflow must agree.
 APPROVAL_TTL = int(os.environ.get("CITADEL_APPROVAL_TTL_SECONDS", "300"))
@@ -67,6 +72,10 @@ class ToolResult:
     # tool_outputs when output_stored is true.
     output_ref: str = ""
     output_stored: bool = False
+    # Content labels the payload itself carries (untrusted_external,
+    # prompt_injection). `run.end.safety_flags` copies them, so the label is in
+    # the trajectory and not only in the text the model read.
+    content_flags: list[str] = field(default_factory=list)
 
 
 @dataclass

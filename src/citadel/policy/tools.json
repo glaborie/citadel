@@ -50,6 +50,38 @@
       "command": null,
       "params": []
     },
+    "search_web": {
+      "tier": "T0",
+      "agent": "researcher",
+      "command": null,
+      "transport": "http",
+      "service": "searxng",
+      "params": [
+        {
+          "name": "query",
+          "in": "text",
+          "max_length": 200,
+          "required": true
+        }
+      ],
+      "note": "SearXNG returns titles, URLs and snippets. The result text is labelled untrusted_external and an instruction aimed at the model adds prompt_injection to the trajectory; nothing in it is executed."
+    },
+    "fetch_page": {
+      "tier": "T0",
+      "agent": "researcher",
+      "command": null,
+      "transport": "http",
+      "service": "fetcher",
+      "params": [
+        {
+          "name": "url",
+          "in": "text",
+          "max_length": 2048,
+          "required": true
+        }
+      ],
+      "note": "The fetcher refuses non-public addresses, non-80/443 ports, redirects to internal targets, non-allowlisted MIME types and pages over the byte cap (truncated and marked). The text is labelled untrusted_external before it reaches a model."
+    },
     "get_pr_status": {
       "tier": "T0",
       "agent": "github",

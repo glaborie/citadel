@@ -27,7 +27,8 @@ from citadel.model.types import (
     Trajectory,
     Usage,
 )
-from citadel.policy import Decision
+from citadel.policy import Decision, load_catalog
+from citadel.research.labels import external_flags
 
 Authorize = Callable[[str], Decision]
 Execute = Callable[[str, Mapping[str, Any]], str]
@@ -54,9 +55,7 @@ def run_agent(
 
     for step_index in range(1, plan.max_steps + 1):
         try:
-            reply = complete(
-                messages=conversation, tools=tools, alias=alias, run_id=run_id
-            )
+            reply = complete(messages=conversation, tools=tools, alias=alias, run_id=run_id)
         except dlp.DlpBlocked as exc:
             steps.append(Step("dlp.blocked", f"surface=input reason={exc.reason}"))
             steps.append(Step("run.end", "no model call: prompt blocked"))
@@ -108,9 +107,7 @@ def run_agent(
             )
             if decision.outcome != "allow":
                 outcome: Outcome = "policy_denied" if decision.outcome == "deny" else "refused"
-                steps.append(
-                    Step("run.end", f"{requested.name} not executed: {decision.outcome}")
-                )
+                steps.append(Step("run.end", f"{requested.name} not executed: {decision.outcome}"))
                 return Trajectory(outcome, tuple(steps), usage)
 
             output = execute(requested.name, requested.arguments)
@@ -130,7 +127,10 @@ def run_agent(
                     tool=requested.name,
                 )
             )
-            steps.append(Step("tool.result", f"{len(gated)} chars", tool=requested.name))
+            flags = _content_flags(requested.name, gated)
+            steps.append(
+                Step("tool.result", f"{len(gated)} chars", tool=requested.name, flags=flags)
+            )
             conversation.append(
                 {
                     "role": "tool",
@@ -170,6 +170,18 @@ def _assistant_turn(reply: Reply) -> dict[str, Any]:
 
 def _json(arguments: Mapping[str, Any]) -> str:
     return json.dumps(dict(arguments), sort_keys=True)
+
+
+def _content_flags(tool: str, text: str) -> tuple[str, ...]:
+    """Label web content in the loop exactly as the researcher activity does.
+
+    A CLI tool's output is not `untrusted_external`: it came from the tenant's
+    own infrastructure. The catalog decides, so the loop and the runtime agree.
+    """
+    spec = load_catalog().get(tool)
+    if spec is None or spec.transport != "http":
+        return ()
+    return tuple(external_flags(text))
 
 
 def _cost(usage: Usage) -> str:
