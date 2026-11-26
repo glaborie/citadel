@@ -91,6 +91,7 @@ EXPECTATION_KEYS = frozenset(
     {
         "allowed_tools",
         "forbidden_tools",
+        "expected_arguments",
         "required_tool_sequence",
         "min_citations",
         "required_citation_sources",
@@ -287,6 +288,21 @@ def _check_expectation_values(expectations: dict[str, Any], case_id: str, source
     ):
         if key in expectations and not _all_strings(expectations[key]):
             fail(f"{key} must be an array of strings")
+
+    if "expected_arguments" in expectations:
+        assertions = expectations["expected_arguments"]
+        if not isinstance(assertions, list):
+            fail("expected_arguments must be an array")
+        for assertion in assertions:
+            if not isinstance(assertion, dict):
+                fail("each expected_arguments item must be an object")
+            unknown = sorted(set(assertion) - {"tool", "arguments"})
+            if unknown:
+                fail(f"unknown expected_arguments keys {unknown}")
+            if not isinstance(assertion.get("tool"), str):
+                fail("each expected_arguments item needs a string tool")
+            if not isinstance(assertion.get("arguments"), dict) or not assertion["arguments"]:
+                fail("each expected_arguments item needs a non-empty arguments object")
 
     if "min_citations" in expectations:
         value = expectations["min_citations"]

@@ -13,7 +13,7 @@ Citadel grades **agent trajectories**, not just final text. The unit of evaluati
 | `policy.decision` | run_id, subject, tool, args_hash, decision, rule_id, audit_id | Allow, deny, or requires_approval |
 | `dlp.event` | run_id, surface, categories, action, detector_version, audit_id | Redact, block, or pass; `surface` is `input`, `output` or `record` (an approval reason: persisted and rendered, never executed) |
 | `approval.decision` | run_id, approver, decision, reason, reason_sha256, reason_chars, dlp_redactions, dlp_categories, ttl, rule_id, audit_id | Signed; before tool execution. `reason` is the redacted text, never the raw one |
-| `tool.call` | run_id, tool, tier, args_hash, idempotency_key, status, duration, audit_id | Effects described, secrets excluded |
+| `tool.call` | run_id, tool, tier, args_hash, idempotency_key, status, duration, audit_id | Effects described, secrets excluded. `arguments` carries the canonical values after the `record` DLP surface: PII redacted in place, a credential blocks the field, and `args_hash` still identifies what policy authorised |
 | `recovery` | run_id, failed_step, strategy, outcome | Retry, fallback, escalate, abort |
 | `run.end` | run_id, outcome, citation_ids, safety_flags | Final span |
 
@@ -66,6 +66,7 @@ Expectation keys beyond the example above:
 
 | Key | Asserts |
 |---|---|
+| `expected_arguments` | named argument values on a `tool.call`, listed as `[{"tool": …, "arguments": {…}}]`; extra keys are allowed, a mismatch reports both the expectation and the values the record carries |
 | `required_policy_rules` | tool → rule id on an allowing policy decision |
 | `required_dlp` | a DLP event with matching tool, action and categories |
 | `recovery` | a recovery event with the expected `failed_step` and `strategy` |
@@ -96,4 +97,4 @@ Sample real runs into the same MLflow dataset/experiment; run a lightweight scor
 
 ## Privacy rules
 
-No raw prompt text, retrieved chunk body, secret, token, approval reason or tool result payload is stored in eval datasets without redaction. Hashes, IDs and synthetic fixtures are the default. Trace retention 90 days; audit ledger never auto-expires.
+No raw prompt text, retrieved chunk body, secret, token, approval reason or tool result payload is stored in eval datasets without redaction. Hashes, IDs and synthetic fixtures are the default. Tool arguments reach the record only after the `record` DLP surface: PII is redacted before the ledger keeps it, and a credential leaves `args_hash` alone with no values - so a case that asserts an argument fails rather than passing on an absent field. Trace retention 90 days; audit ledger never auto-expires.

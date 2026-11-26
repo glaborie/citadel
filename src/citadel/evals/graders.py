@@ -33,6 +33,7 @@ def grade(case: Case) -> list[Grade]:
 
     results = [
         _tool_selection(case),
+        _tool_arguments(case),
         _tool_sequence(case),
         _policy(case),
         _approval(case),
@@ -62,6 +63,36 @@ def _tool_selection(case: Case) -> Grade:
     if hit:
         problems.append(f"called forbidden tools: {hit}")
     return _grade(case, "tool.selection", problems)
+
+
+def _tool_arguments(case: Case) -> Grade:
+    """The named argument values, when the record carries them.
+
+    Each assertion is a subset match: the named keys must equal what the call
+    carried, extra keys are allowed. A call whose arguments were withheld by
+    DLP (or an older record that never kept them) cannot satisfy an assertion,
+    so it fails with `None` in the actual values rather than passing quietly.
+    """
+    expected = case.expectations.get("expected_arguments")
+    if not isinstance(expected, list):
+        return _grade(case, "tool.arguments", [])
+
+    calls = _events(case, "tool.call")
+    problems: list[str] = []
+    for assertion in expected:
+        tool = assertion.get("tool")
+        wanted = assertion.get("arguments")
+        if not isinstance(tool, str) or not isinstance(wanted, dict):
+            continue  # the dataset loader rejects this shape before grading
+        actual = [call.get("arguments") for call in calls if call.get("tool") == tool]
+        matched = any(
+            isinstance(values, dict)
+            and all(values.get(key) == value for key, value in wanted.items())
+            for values in actual
+        )
+        if not matched:
+            problems.append(f"{tool}: expected arguments {wanted!r}, record carries {actual!r}")
+    return _grade(case, "tool.arguments", problems)
 
 
 def _tool_sequence(case: Case) -> Grade:

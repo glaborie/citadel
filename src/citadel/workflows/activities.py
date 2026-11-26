@@ -126,6 +126,7 @@ def _offload_pointer(stored: dict[str, Any]) -> tuple[str, bool]:
     kept = any(bool(item.get("stored")) for item in offloaded.values() if isinstance(item, dict))
     return digest, kept
 
+
 def _replayed(call: ToolCall, key: str, stored: dict[str, Any]) -> ToolResult:
     """The result of a repeated attempt, describing the output it hands back.
 
@@ -149,7 +150,6 @@ def _replayed(call: ToolCall, key: str, stored: dict[str, Any]) -> ToolResult:
         output_ref=output_ref,
         output_stored=stored_any,
     )
-
 
 
 def idempotency_key(call: ToolCall) -> str:
@@ -315,30 +315,34 @@ class ToolActivities:
         tier: str,
         duration: int = 0,
     ) -> None:
+        arguments, gated = self._recorded_arguments(call)
+        payload: dict[str, Any] = {
+            "run_id": call.run_id,
+            "tool": call.tool,
+            "tier": tier,
+            "args_hash": args_hash,
+            "idempotency_key": result.idempotency_key or key,
+            "status": result.status,
+            "duration": duration,
+            "rule_id": result.rule_id,
+            "detail": result.detail,
+            "replayed": result.replayed,
+            # Evidence that a cap was applied, and of what it hid.
+            "output_sha256": result.output_sha256,
+            "output_bytes": result.output_bytes,
+            "output_truncated": result.output_truncated,
+            # Where the bytes the cap removed can be read back, when they were kept.
+            "output_ref": result.output_ref,
+            "output_stored": result.output_stored,
+        }
+        if arguments is not None:
+            payload["arguments"] = arguments
         ref = self._audit.append(
             tenant_id=call.tenant_id,
             event_type="tool.call",
             actor_type="agent",
             actor_id=call.agent_id,
-            payload={
-                "run_id": call.run_id,
-                "tool": call.tool,
-                "tier": tier,
-                "args_hash": args_hash,
-                "idempotency_key": result.idempotency_key or key,
-                "status": result.status,
-                "duration": duration,
-                "rule_id": result.rule_id,
-                "detail": result.detail,
-                "replayed": result.replayed,
-                # Evidence that a cap was applied, and of what it hid.
-                "output_sha256": result.output_sha256,
-                "output_bytes": result.output_bytes,
-                "output_truncated": result.output_truncated,
-                # Where the bytes the cap removed can be read back, when they were kept.
-                "output_ref": result.output_ref,
-                "output_stored": result.output_stored,
-            },
+            payload=payload,
         )
         record_span(
             "tool.call",
@@ -351,6 +355,39 @@ class ToolActivities:
             duration=duration,
             replayed=result.replayed,
         )
+        # After the call it explains, so the record reads call then reason.
+        if gated is not None:
+            self._audit_dlp(call, [gated])
+
+    def _recorded_arguments(
+        self, call: ToolCall
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        """The canonical values a trajectory may assert on: gated, or absent.
+
+        The ledger is append-only and never expires, so the copy is taken on the
+        `record` surface - PII redacted in place, a credential blocks. A digest
+        alone tells a grader a 60-second timeout happened, not whether it was 60.
+        When the detector cannot answer, `args_hash` stays the only evidence: a
+        value parked in the record unchecked is the leak this gate prevents.
+        """
+        try:
+            text, report = dlp.gate(
+                json.dumps(call.arguments, ensure_ascii=False),
+                surface="record",
+                analyzer_url=DLP_URL,
+            )
+        except dlp.DlpBlocked as exc:
+            return None, exc.report
+
+        try:
+            values = json.loads(text)
+        except ValueError:
+            # A redaction broke the JSON: keep no values rather than a fragment.
+            return None, {**report, "action": "block"}
+        if not isinstance(values, dict):
+            return None, {**report, "action": "block"}
+        noted = report if report.get("action") != "pass" else None
+        return values, noted
 
     def _settled(
         self, call: ToolCall, key: str, status: str, result: Any, tier: str
