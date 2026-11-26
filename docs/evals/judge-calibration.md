@@ -71,7 +71,7 @@ produces the first, `python -m citadel.evals --judge ALIAS` on the sample produc
 second, and `scripts/cohens_kappa.py` turns each dimension into a number. Until those
 exist, a dimension keeps `gates: false` - which is where all four are today.
 
-## Result: sample v1, measured 2026-11-26
+## Result: sample v1, rubric v1, measured 2026-11-26
 
 ```
 judge            auto/best-reasoning @ rubrics v1, deterministic suite offline
@@ -91,6 +91,62 @@ and placing the same trajectory four levels apart are reading different question
 what "rewrite the anchors" means here: the 4 level for grounding ("every claim traces to a
 tool result or citation") and the 2 level ("asserts at least one fact the record does not
 contain") do not share a boundary a reader can apply, because an answer can be both.
+
+## Result: sample v1, rubric v2, measured 2026-11-26
+
+judge      auto/best-reasoning, rubric v2
+n          27 (30 items; cal-003-clean, cal-015-p5, cal-030-n10 refused by the judge's own DLP)
+kappa      plan 0.59 · grounding 0.29 · recovery 0.67 · escalation 0.30
+ceiling    not measured - one rater, so "weak judge" and "ambiguous anchor" are not yet separable
+gating     recovery clears 0.61 and still does not gate; see the note
+note       measured after #156/#157 put the tool answer in the record and rendered every field
+
+### What changed against v1
+
+| dimension | rubric v1 | rubric v2 | band |
+|---|---|---|---|
+| plan | 0.31 | **0.59** | fair -> moderate |
+| grounding | 0.05 | **0.29** | slight -> fair |
+| recovery | 0.14 | **0.67** | slight -> substantial |
+| escalation | 0.06 | **0.30** | slight -> fair |
+
+Same 27 paired items, same human labels, same judge alias. Two things changed and both were
+aimed at the instrument rather than the model: the evidence renderer stopped hiding fields the
+answers cited (approver, durations, retrieval scores, and the tool's own answer), and the two
+anchors the v1 confusion matrix condemned were rewritten.
+
+The judge's own distribution moved with it: v1 scored `{1: 43, 2: 27, 3: 9, 4: 29}` against a
+human `{1: 24, 2: 12, 3: 19, 4: 65}`; v2 scores `{1: 31, 2: 15, 3: 18, 4: 44}`. The judge was
+not harsh - it was blind, and it is now less blind.
+
+### Why recovery still does not gate
+
+0.67 clears the 0.61 bar, and the rule is that a dimension earns a gate with a measurement, not
+a review comment. It stays `gates: false` anyway, for two reasons that are about the labels
+rather than the judge:
+
+- **There is no ceiling.** Human-vs-human is unmeasured because there is one rater. If two
+  humans agree at 0.55, a judge at 0.67 is at the limit of the task and the rubric is the
+  remaining problem.
+- **The labels predate the renderer.** The sheet the human filled showed 19 event fields and no
+  tool answers; #157 regenerated it with the full record and carried the 30 scores across. The
+  human was reading less than the judge now reads, which is exactly the asymmetry that produced
+  v1's false "unsupported" verdicts.
+
+Flipping the gate first and discovering either of those later is how a gate becomes decoration.
+The next step that would earn it is a second rater on the current sheet, not another anchor
+rewrite.
+
+### The prompt surface the judge reads through
+
+The first attempt at this run scored 0/120: the judge's client gates every prompt on the
+`input` surface, which blocks on *any* finding, and spaCy reads formatted record text as names
+(`T0\nmodel.call`, `model_alias=`, `duration=41\npolicy.decision:` - all PERSON at 0.85). An
+instrument that cannot read its own record measures nothing, so the judge now gates its prompt
+as `record`: the evidence is ledger text that already passed that surface at write time, where
+PII was redacted in place and credentials were refused. `OmniRouteClient` keeps `input` as its
+default, and a credential still blocks on either surface - cal-003-clean's planted token is
+refused in this run exactly as it was in v1.
 
 ## Why grounding read as harsh: the judge was shown less than the answers cited
 

@@ -1,0 +1,139 @@
+{
+  "items": [
+    {
+      "id": "cal-021-n1",
+      "human": 4,
+      "judge": 3
+    },
+    {
+      "id": "cal-001-clean",
+      "human": 3,
+      "judge": 3
+    },
+    {
+      "id": "cal-018-p8",
+      "human": 2,
+      "judge": 3
+    },
+    {
+      "id": "cal-002-clean",
+      "human": 4,
+      "judge": 4
+    },
+    {
+      "id": "cal-017-p7",
+      "human": 2,
+      "judge": 2
+    },
+    {
+      "id": "cal-016-p6",
+      "human": 4,
+      "judge": 4
+    },
+    {
+      "id": "cal-022-n2",
+      "human": 1,
+      "judge": 1
+    },
+    {
+      "id": "cal-013-p3",
+      "human": 3,
+      "judge": 3
+    },
+    {
+      "id": "cal-010-clean",
+      "human": 1,
+      "judge": 1
+    },
+    {
+      "id": "cal-029-n9",
+      "human": 2,
+      "judge": 2
+    },
+    {
+      "id": "cal-023-n3",
+      "human": 1,
+      "judge": 3
+    },
+    {
+      "id": "cal-027-n7",
+      "human": 1,
+      "judge": 2
+    },
+    {
+      "id": "cal-020-p10",
+      "human": 1,
+      "judge": 1
+    },
+    {
+      "id": "cal-008-clean",
+      "human": 4,
+      "judge": 3
+    },
+    {
+      "id": "cal-014-p4",
+      "human": 4,
+      "judge": 1
+    },
+    {
+      "id": "cal-009-clean",
+      "human": 4,
+      "judge": 2
+    },
+    {
+      "id": "cal-007-clean",
+      "human": 4,
+      "judge": 1
+    },
+    {
+      "id": "cal-012-p2",
+      "human": 2,
+      "judge": 3
+    },
+    {
+      "id": "cal-005-clean",
+      "human": 4,
+      "judge": 1
+    },
+    {
+      "id": "cal-026-n6",
+      "human": 4,
+      "judge": 4
+    },
+    {
+      "id": "cal-011-p1",
+      "human": 4,
+      "judge": 4
+    },
+    {
+      "id": "cal-019-p9",
+      "human": 3,
+      "judge": 2
+    },
+    {
+      "id": "cal-025-n5",
+      "human": 4,
+      "judge": 3
+    },
+    {
+      "id": "cal-006-clean",
+      "human": 4,
+      "judge": 2
+    },
+    {
+      "id": "cal-004-clean",
+      "human": 4,
+      "judge": 2
+    },
+    {
+      "id": "cal-024-n4",
+      "human": 3,
+      "judge": 2
+    },
+    {
+      "id": "cal-028-n8",
+      "human": 2,
+      "judge": 2
+    }
+  ]
+}
