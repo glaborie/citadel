@@ -136,6 +136,8 @@ Failure policy: DLP detector unavailable, a detector answer the reader cannot pa
 
 Each specialist is a child workflow with its own versioned `SKILL.md` pack. Skills are documentation with progressive disclosure — an index first, full text on demand. They cannot declare tools, widen allowlists or override policy. Tool permissions live in OpenFGA and manifests.
 
+The same holds for tool *metadata* from outside the catalog. A registry entry - an MCP server's `tools/list`, today the only such source - is data, not instruction: the name must already exist in the catalog, every field must be one this codebase knows, and the description's digest must match a reviewed pin in `description_pins.json`. A refusal is written to the ledger with the digest and never with the description, because an append-only log is not a place to copy attacker prose into. And the manifest the model sees carries no description field at all, so a description that passes review is still never obeyed - `citadel.tools.registration`, pinned by RT-INJ-06.
+
 ## 6. Retrieval path
 
 1. Ingest filesystem runbooks/inventory and selected GitHub Markdown with content hashes and ACL metadata.
