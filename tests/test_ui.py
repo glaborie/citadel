@@ -7,15 +7,17 @@ signed directly so the tests drive the same routes a logged-in browser would.
 from __future__ import annotations
 
 import time
+import urllib.error
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, cast
 
 import jwt
 import pytest
 from fastapi.testclient import TestClient
 
 from citadel import net
+from citadel.identity import IdentityError, KeycloakVerifier, Principal
 from citadel.ui import app as ui_app
 
 KEY = "test-session-key-0123456789abcdef"
@@ -90,10 +92,12 @@ class FakeConn:
 def session(**overrides: Any) -> str:
     claims: dict[str, Any] = {
         "access_token": "user-access-token",
+        "refresh_token": "user-refresh-token",
         "sub": "user-carol",
         "tenant": "lab-a",
         "roles": ["approver"],
         "csrf": "csrf-value",
+        "access_exp": int(time.time()) + 3600,
         "exp": int(time.time()) + 60,
     }
     claims.update(overrides)
@@ -170,9 +174,7 @@ def _assert_refuses_framing(response: Any) -> None:
     "path",
     ["/", "/runs", "/approvals", f"/approvals/{REQUEST}", "/audit"],
 )
-def test_every_console_view_refuses_framing(
-    env: tuple[TestClient, FakeDB], path: str
-) -> None:
+def test_every_console_view_refuses_framing(env: tuple[TestClient, FakeDB], path: str) -> None:
     """A framed approval page is a T1 write decided by a decoy click."""
     client, _ = env
     _login(client)
@@ -346,3 +348,107 @@ def test_login_redirects_with_pkce(env: tuple[TestClient, FakeDB]) -> None:
     assert "client_id=citadel-console" in location
     assert "code_challenge_method=S256" in location
     assert ui_app.LOGIN_COOKIE in response.cookies
+
+
+class FakeVerifier:
+    """The fake verifier: the old token is expired, only the rotated one verifies."""
+
+    def verify(self, token: str) -> Principal:
+        if token != "refreshed-access-token":
+            raise IdentityError("token rejected: expired")
+        return Principal("user-carol", "lab-a", frozenset({"approver"}))
+
+
+class Reply:
+    def __init__(self, status: int, body: bytes) -> None:
+        self.status = status
+        self._body = body
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> Reply:
+        return self
+
+    def __exit__(self, *_: Any) -> None:
+        return None
+
+
+def _keycloak(
+    monkeypatch: pytest.MonkeyPatch,
+    db: FakeDB,
+    *,
+    refreshed: bool,
+    calls: list[str],
+) -> TestClient:
+    """A console whose Keycloak and API both answer through one fake transport."""
+
+    monkeypatch.setattr(ui_app, "tenant_connection", db.connect)
+
+    def fake(request: Any, timeout: Any = None) -> Reply:
+        calls.append(request.full_url)
+        if "openid-connect/token" in request.full_url:
+            if not refreshed:
+                raise urllib.error.HTTPError(request.full_url, 400, "revoked", {}, None)  # type: ignore[arg-type]
+            return Reply(
+                200,
+                b'{"access_token":"refreshed-access-token",'
+                b'"refresh_token":"rotated-refresh-token","expires_in":300}',
+            )
+        return Reply(200, b'{"approved": true}')
+
+    monkeypatch.setattr(net, "urlopen", fake)
+    app = ui_app.create_app(
+        dsn="postgres://fake",
+        api_url="http://api.test",
+        session_key=KEY,
+        verifier=cast(KeycloakVerifier, FakeVerifier()),
+    )
+    client = TestClient(app)
+    client.cookies.set(
+        ui_app.COOKIE,
+        session(access_token="user-access-token", access_exp=int(time.time()) - 1),
+    )
+    return client
+
+
+def test_an_expired_access_token_is_refreshed_at_submit(
+    env: tuple[TestClient, FakeDB], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The reviewer sat past the token lifetime; the submit still goes through."""
+    _, db = env
+    calls: list[str] = []
+    client = _keycloak(monkeypatch, db, refreshed=True, calls=calls)
+
+    response = client.post(
+        f"/approvals/{REQUEST}/decide",
+        data={"csrf": "csrf-value", "decision": "approve", "reason": "looks fine"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert any("openid-connect/token" in url for url in calls)
+    assert ui_app.COOKIE in response.cookies
+    claims = jwt.decode(response.cookies[ui_app.COOKIE], KEY, algorithms=["HS256"])
+    assert claims["access_token"] == "refreshed-access-token"
+    assert claims["refresh_token"] == "rotated-refresh-token"
+    assert claims["access_exp"] > time.time()
+
+
+def test_a_revoked_sso_session_ends_the_console_session(
+    env: tuple[TestClient, FakeDB], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Refresh must not outlive revocation: a refused grant is a re-login."""
+    _, db = env
+    calls: list[str] = []
+    client = _keycloak(monkeypatch, db, refreshed=False, calls=calls)
+
+    response = client.post(
+        f"/approvals/{REQUEST}/decide",
+        data={"csrf": "csrf-value", "decision": "approve", "reason": "looks fine"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+    assert not any(url.endswith("/approvals") for url in calls)
