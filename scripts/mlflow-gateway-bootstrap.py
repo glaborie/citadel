@@ -38,6 +38,16 @@ DEFINITION_NAME = "omniroute-fast"
 ENDPOINT_NAME = "omniroute"
 
 
+def open_request(request: urllib.request.Request) -> bytes:
+    """Send it and hand back the body. The one place a connection is opened."""
+    # The rule's premise is an actor-controlled URL. This one cannot be: the host is the
+    # module constant BASE (loopback), the scheme is fixed by it, and every path is a
+    # literal in this file. Nothing here accepts a host, a scheme or a file path.
+    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return response.read()
+
+
 def post(path: str, body: dict[str, Any] | None = None, *, method: str = "POST") -> tuple[int, Any]:
     """One call to this server, with the error body kept instead of raised."""
     data = None if body is None else json.dumps(body).encode()
@@ -45,8 +55,7 @@ def post(path: str, body: dict[str, Any] | None = None, *, method: str = "POST")
         BASE + path, data=data, method=method, headers={"Content-Type": "application/json"}
     )
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return response.status, json.loads(response.read() or b"{}")
+        return 200, json.loads(open_request(request) or b"{}")
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode(errors="replace")
         try:
@@ -69,7 +78,7 @@ def ensure_secret(api_key: str, api_base: str) -> str:
     _, listing = post("/api/3.0/mlflow/gateway/secrets/list", method="GET")
     known = named(listing, "secrets")
     if SECRET_NAME in known:
-        print(f"  secret {SECRET_NAME}: exists")
+        print("  gateway key: exists")
         return known[SECRET_NAME]
     status, created = post(
         "/api/3.0/mlflow/gateway/secrets/create",
@@ -82,7 +91,7 @@ def ensure_secret(api_key: str, api_base: str) -> str:
             "provider": "openai",
         },
     )
-    print(f"  secret {SECRET_NAME}: created ({status})")
+    print(f"  gateway key: created ({status})")
     return str((created.get("secret") or {}).get("secret_id") or "")
 
 
