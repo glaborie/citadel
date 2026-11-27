@@ -2710,6 +2710,20 @@
       "pattern": "SC102",
       "line": 21,
       "name": "Convert Variables to Constants"
+    },
+    {
+      "fingerprint": "c9333c68722f",
+      "file": "src/citadel/workflows/orchestrator.py",
+      "pattern": "SC508",
+      "line": 1,
+      "name": "Unstable Dependency"
+    },
+    {
+      "fingerprint": "3fb9efa17997",
+      "file": "src/citadel/workflows/model_step.py",
+      "pattern": "SC307",
+      "line": 90,
+      "name": "Remove Temporary Field"
     }
   ]
 }

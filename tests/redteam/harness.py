@@ -14,10 +14,10 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -1580,6 +1580,221 @@ def exec_mcp_registration(case_: Case, root: Path) -> Outcome:
     )
 
 
+def _cache_key(
+    tenant: str,
+    *,
+    entitlements: tuple[str, ...] = ("operator",),
+    policy: str = "sha256:policy-1",
+    tools: str = "sha256:tools-1",
+) -> Any:
+    from citadel.cache import CacheKey, entitlement_hash
+
+    return CacheKey(
+        tenant_id=tenant,
+        entitlement_hash=entitlement_hash(entitlements),
+        agent_id="docker",
+        prompt_pack_version="docker-1.0.0",
+        model="auto/best-fast",
+        tool_context_version=tools,
+        policy_version=policy,
+    )
+
+
+class _SameVector:
+    """One vector for every text: a semantic hit can only be stopped by the key."""
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        return [[1.0, 0.0] for _ in texts]
+
+
+class _DeadStore:
+    """The cache is down. A lookup must miss rather than serve anything."""
+
+    def get_exact(self, **_: Any) -> Any:
+        from citadel.cache import CacheUnavailable
+
+        raise CacheUnavailable("cache down")
+
+    def candidates(self, **_: Any) -> Any:
+        from citadel.cache import CacheUnavailable
+
+        raise CacheUnavailable("cache down")
+
+    def put(self, _entry: Any) -> None:
+        from citadel.cache import CacheUnavailable
+
+        raise CacheUnavailable("cache down")
+
+    def delete_tenant(self, _tenant: str) -> int:
+        return 0
+
+
+def exec_cache_cross_tenant(case_: Case, _: Path) -> Outcome:
+    """RT-CACHE-01: tenant B cannot read tenant A's answer, exact or semantic.
+
+    The probe embedder returns the same vector for every text, so a semantic
+    lookup would hit if the partition key omitted the tenant or entitlement.
+    """
+    from citadel.cache import AnswerCache, InMemoryCacheStore
+
+    try:
+        store = InMemoryCacheStore()
+        cache = AnswerCache(
+            backend=store, embedder=_SameVector(), embedding_model="probe", similarity=0.5
+        )
+        cache.store(
+            _cache_key("lab-a"),
+            prompt_digest="sha256:q",
+            task="restart checkout-api",
+            answer="lab-a-only-answer",
+            model="probe",
+        )
+        exact = cache.lookup(
+            _cache_key("lab-b"),
+            prompt_digest="sha256:q",
+            task="restart checkout-api",
+            semantic=False,
+        )
+        semantic = cache.lookup(
+            _cache_key("lab-b"), prompt_digest="sha256:other", task="restart checkout-api"
+        )
+        entitlements = cache.lookup(
+            _cache_key("lab-a", entitlements=("operator", "approver")),
+            prompt_digest="sha256:q",
+            task="restart checkout-api",
+            semantic=False,
+        )
+        down = AnswerCache(backend=_DeadStore()).lookup(
+            _cache_key("lab-a"), prompt_digest="sha256:q", task="restart checkout-api"
+        )
+        expired_cache = AnswerCache(backend=store, ttl_seconds=-1)
+        expired_cache.store(
+            _cache_key("lab-a"),
+            prompt_digest="sha256:expired",
+            task="restart checkout-api",
+            answer="stale",
+            model="probe",
+        )
+        expired = expired_cache.lookup(
+            _cache_key("lab-a"), prompt_digest="sha256:expired", task="restart checkout-api"
+        )
+        leaked = any(
+            hit is not None and "lab-a-only" in hit.answer
+            for hit in (exact, semantic, entitlements, down, expired)
+        )
+        partitions = {
+            _cache_key("lab-a").partition(),
+            _cache_key("lab-b").partition(),
+            _cache_key("lab-a", entitlements=("operator", "approver")).partition(),
+        }
+        ok = (
+            exact is None
+            and semantic is None
+            and entitlements is None
+            and down is None
+            and expired is None
+            and not leaked
+            and len(partitions) == 3
+        )
+        detail = (
+            f"exact={exact is None} semantic={semantic is None} "
+            f"entitlement={entitlements is None} down={down is None} "
+            f"expired={expired is None} partitions={len(partitions)}/3 leaked={leaked}"
+        )
+        return Outcome(ok, detail)
+    except Exception as exc:  # noqa: BLE001 - an unavailable cache must fail the case
+        return Outcome(False, f"cache unavailable: {str(exc)[:80]}")
+
+
+def exec_cache_policy_change(case_: Case, _: Path) -> Outcome:
+    """RT-CACHE-02: a newer policy model or tool catalog must not reuse an answer.
+
+    The old key still hits, which proves the miss comes from the changed
+    version and not from a broken store.
+    """
+    from citadel.cache import AnswerCache, InMemoryCacheStore
+
+    try:
+        cache = AnswerCache(backend=InMemoryCacheStore())
+        before = _cache_key("lab-a")
+        cache.store(
+            before,
+            prompt_digest="sha256:q",
+            task="restart checkout-api",
+            answer="old-policy-answer",
+            model="probe",
+        )
+        policy = cache.lookup(
+            _cache_key("lab-a", policy="sha256:policy-2"),
+            prompt_digest="sha256:q",
+            task="restart checkout-api",
+            semantic=False,
+        )
+        tools = cache.lookup(
+            _cache_key("lab-a", tools="sha256:tools-2"),
+            prompt_digest="sha256:q",
+            task="restart checkout-api",
+            semantic=False,
+        )
+        old = cache.lookup(before, prompt_digest="sha256:q", task="restart checkout-api")
+        # A T1 write request is not an answer: it must leave the cache empty, so
+        # an approval or a side effect can never be replayed from this table.
+        from citadel.model import Reply, RequestedTool, ScriptedClient, Usage
+        from citadel.workflows.model_step import ModelActivities, ModelStepRequest
+        from tests.redteam import support
+
+        tool_store = InMemoryCacheStore()
+        activities = ModelActivities(
+            dsn="postgres://unused",
+            audit=cast(Any, support.FakeAudit()),
+            client_factory=lambda alias: ScriptedClient(
+                [
+                    Reply(
+                        content="restarting",
+                        tools=(
+                            RequestedTool(
+                                name="restart_service",
+                                arguments={"service": "checkout-api"},
+                                call_id="call-1",
+                            ),
+                        ),
+                        usage=Usage(),
+                        model="probe",
+                        latency_ms=1,
+                    )
+                ]
+            ),
+            analyzer=detector([]),
+            cache=AnswerCache(backend=tool_store),
+        )
+        activities.next_step(
+            ModelStepRequest(
+                run_id="run-1",
+                tenant_id="lab-a",
+                user_id="alice",
+                agent_id="docker",
+                task="restart checkout-api",
+            )
+        )
+        no_t1 = not tool_store.entries
+        ok = (
+            policy is None
+            and tools is None
+            and old is not None
+            and no_t1
+            and before.partition() != _cache_key("lab-a", policy="sha256:policy-2").partition()
+            and before.partition() != _cache_key("lab-a", tools="sha256:tools-2").partition()
+        )
+        detail = (
+            f"policy={'miss' if policy is None else 'hit'} "
+            f"tools={'miss' if tools is None else 'hit'} "
+            f"old={'hit' if old is not None else 'miss'} t1_cached={not no_t1}"
+        )
+        return Outcome(ok, detail)
+    except Exception as exc:  # noqa: BLE001 - an unavailable cache must fail the case
+        return Outcome(False, f"cache unavailable: {str(exc)[:80]}")
+
+
 EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-AUTHZ-02": exec_cross_specialist,
     "RT-AUTHZ-03": exec_unknown_tool,
@@ -1612,6 +1827,8 @@ EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-HITL-01": exec_self_approval,
     "RT-HITL-02": exec_approval_replay,
     "RT-HITL-07": exec_agent_self_approval,
+    "RT-CACHE-01": exec_cache_cross_tenant,
+    "RT-CACHE-02": exec_cache_policy_change,
 }
 
 

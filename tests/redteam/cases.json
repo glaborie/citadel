@@ -526,7 +526,6 @@
       "controls": [
         "cache_partition_key_complete"
       ],
-      "owner": "ADR-018 - no Citadel-owned cache before v0.3",
       "milestone": "v0.3"
     },
     {
@@ -544,7 +543,6 @@
       "controls": [
         "policy_version_in_cache_key"
       ],
-      "owner": "ADR-018 - no Citadel-owned cache before v0.3",
       "milestone": "v0.3"
     },
     {

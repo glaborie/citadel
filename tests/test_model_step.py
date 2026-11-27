@@ -8,6 +8,7 @@ import pytest
 
 from citadel import dlp
 from citadel.audit import AuditLedger
+from citadel.cache import AnswerCache, InMemoryCacheStore
 from citadel.model import ModelUnavailable, Reply, RequestedTool, ScriptedClient, Usage
 from citadel.model.client import parse_reply
 from citadel.workflows.model_step import ModelActivities, ModelStepRequest
@@ -65,7 +66,7 @@ def request(**overrides: Any) -> ModelStepRequest:
 
 
 def build(
-    replies: list[Reply], *, detector: Detector | None = None
+    replies: list[Reply], *, detector: Detector | None = None, cache: AnswerCache | None = None
 ) -> tuple[ModelActivities, FakeAudit]:
     audit = FakeAudit()
     activities = ModelActivities(
@@ -73,6 +74,7 @@ def build(
         audit=audit,
         client_factory=lambda alias: ScriptedClient(replies),
         analyzer=detector or Detector(),
+        cache=cache,
     )
     return activities, audit
 
@@ -284,3 +286,88 @@ def test_history_is_appended_after_the_task() -> None:
 
     assert [turn["role"] for turn in turns] == ["system", "user", "assistant", "user"]
     assert turns[1]["content"] == "why is checkout-api restarting?"
+
+
+def cached_build(
+    replies: list[Reply], *, detector: Detector | None = None
+) -> tuple[ModelActivities, FakeAudit, InMemoryCacheStore, list[int]]:
+    """A model step with a cache, counting how often the gateway is asked."""
+    calls: list[int] = []
+    audit = FakeAudit()
+    remaining = iter(replies)
+
+    def factory(alias: str) -> ScriptedClient:
+        calls.append(1)
+        return ScriptedClient([next(remaining)])
+
+    store = InMemoryCacheStore()
+    activities = ModelActivities(
+        dsn="postgres://unused",
+        audit=audit,
+        client_factory=factory,
+        analyzer=detector or Detector(),
+        cache=AnswerCache(backend=store),
+    )
+    return activities, audit, store, calls
+
+
+def test_a_cached_answer_skips_the_second_model_call() -> None:
+    activities, audit, _, calls = cached_build([answered(), answered()])
+
+    first = activities.next_step(request())
+    second = activities.next_step(request())
+
+    assert (first.status, first.rule_id) == ("answered", "model.answered")
+    assert (second.status, second.rule_id) == ("answered", "cache.hit")
+    assert second.content == first.content
+    assert (second.cost_usd, second.cost_source) == (0.0, "reported")
+    assert len(calls) == 1, "a hit must not spend a model call"
+    decisions = [
+        event["payload"]["decision"]
+        for event in audit.events
+        if event["event_type"] == "cache.lookup"
+    ]
+    assert decisions == ["miss", "exact"]
+
+
+def test_a_tool_request_is_never_cached() -> None:
+    """Only a plain answer is cacheable, so no tool result can be replayed."""
+    activities, audit, _, calls = cached_build(
+        [wants("read_logs", {"service": "checkout-api"}), answered()]
+    )
+
+    first = activities.next_step(request())
+    second = activities.next_step(request())
+
+    assert first.rule_id == "model.tool_requested"
+    assert second.rule_id == "model.answered"
+    assert len(calls) == 2
+    decisions = [
+        event["payload"]["decision"]
+        for event in audit.events
+        if event["event_type"] == "cache.lookup"
+    ]
+    assert decisions == ["miss", "miss"]
+
+
+def test_an_output_blocked_answer_is_not_stored() -> None:
+    secret = "here it is: ghp_" + "A" * 36
+    activities, _, store, _ = cached_build([answered(secret), answered("clean")])
+
+    blocked = activities.next_step(request())
+    assert blocked.status == "dlp_blocked"
+    assert not store.entries, "a refused answer must not be cached"
+
+    again = activities.next_step(request())
+    assert again.rule_id == "model.answered"
+
+
+def test_a_later_step_does_not_read_the_cache() -> None:
+    """A conversation with tool output cannot be answered by a first-step entry."""
+    activities, _, _, calls = cached_build([answered(), answered()])
+
+    activities.next_step(request())
+    later = activities.next_step(request(history=[{"role": "user", "content": "[tool result] ok"}]))
+
+    assert later.rule_id == "model.answered"
+    assert len(calls) == 2

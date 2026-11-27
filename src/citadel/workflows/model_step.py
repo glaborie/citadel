@@ -20,9 +20,15 @@ from temporalio import activity
 
 from citadel import dlp
 from citadel.audit import AuditLedger
+from citadel.cache import AnswerCache, CacheHit, CacheKey, entitlement_hash
 from citadel.env import optional_secret
 from citadel.model import ModelUnavailable, OmniRouteClient, contains_tool_markup
-from citadel.prompts import assemble
+from citadel.policy.version import (
+    VersionUnavailable,
+    policy_version,
+    tool_context_version,
+)
+from citadel.prompts import Prompt, assemble
 from citadel.telemetry import record_span
 
 DLP_URL = os.environ.get("CITADEL_DLP_URL", "http://presidio:3000")
@@ -49,6 +55,9 @@ class ModelStepRequest:
     task: str
     model_alias: str = ""
     pack_version: str = ""
+    # The subject's entitlement set at the time the run was submitted. It is
+    # part of the cache partition, so a permission change cannot reuse an answer.
+    entitlements: list[str] = field(default_factory=list)
     history: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -86,11 +95,13 @@ class ModelActivities:
         audit: AuditLedger,
         client_factory: ClientFactory | None = None,
         analyzer: Any = None,
+        cache: AnswerCache | None = None,
     ) -> None:
         self._dsn = dsn
         self._audit = audit
         self._client_factory = client_factory or _client
         self._analyzer = analyzer
+        self._cache = cache
 
     def _gate(self, text: str, *, surface: str) -> dict[str, Any] | None:
         """Returns the refusal report, or None when the text may proceed."""
@@ -128,6 +139,121 @@ class ModelActivities:
         self._record(request, {"status": status, "rule_id": rule_id, "detail": detail[:200]})
         return ModelStepResult(status=status, rule_id=rule_id, detail=detail)
 
+    def _cache_key(self, request: ModelStepRequest, prompt: Prompt, alias: str) -> CacheKey | None:
+        """No cache, or no trustworthy version, means no lookup: never a hit."""
+        if self._cache is None:
+            return None
+        try:
+            return CacheKey(
+                tenant_id=request.tenant_id,
+                entitlement_hash=entitlement_hash(request.entitlements),
+                agent_id=request.agent_id,
+                prompt_pack_version=prompt.pack_id,
+                model=alias,
+                tool_context_version=tool_context_version(),
+                policy_version=policy_version(),
+            )
+        except (OSError, ValueError, VersionUnavailable):
+            return None
+
+    def _record_cache(self, request: ModelStepRequest, payload: dict[str, Any]) -> None:
+        self._audit.append(
+            tenant_id=request.tenant_id,
+            event_type="cache.lookup",
+            actor_type="agent",
+            actor_id=request.agent_id,
+            payload={"run_id": request.run_id, **payload},
+        )
+
+    def _cached(
+        self,
+        request: ModelStepRequest,
+        prompt: Prompt,
+        prompt_digest: str,
+        cache_key: CacheKey,
+    ) -> ModelStepResult | None:
+        """The cached answer, or None after recording why the lookup missed."""
+        if self._cache is None:
+            return None
+        hit = self._cache.lookup(cache_key, prompt_digest=prompt_digest, task=request.task)
+        if hit is None:
+            self._record_cache(
+                request,
+                {
+                    "decision": "miss",
+                    "partition_key": cache_key.partition(),
+                    "prompt_digest": prompt_digest,
+                    "score": 0.0,
+                    "model": "",
+                },
+            )
+            return None
+        self._record_hit(request, hit)
+        return self._from_cache(request, hit, prompt)
+
+    def _record_hit(self, request: ModelStepRequest, hit: CacheHit) -> None:
+        self._record_cache(
+            request,
+            {
+                "decision": hit.match,
+                "partition_key": hit.partition_key,
+                "prompt_digest": hit.prompt_digest,
+                "score": round(hit.score, 6),
+                "model": hit.model,
+            },
+        )
+
+    def _from_cache(
+        self, request: ModelStepRequest, hit: CacheHit, prompt: Prompt
+    ) -> ModelStepResult:
+        # Re-gate on serve: the entry passed when it was stored, but the table is
+        # writable by the app role, so a poisoned row must not skip the detector.
+        blocked = self._gate(hit.answer, surface="output")
+        if blocked is not None:
+            return self._refuse_cached(request, blocked, prompt)
+        return ModelStepResult(
+            status="answered",
+            rule_id="cache.hit",
+            detail=f"{hit.match} hit score={hit.score:.3f}",
+            content=hit.answer,
+            prompt_digest=prompt.digest,
+            prompt_pack=prompt.pack_id,
+            # A hit spent nothing, and that is known: `Usage.zero()` semantics,
+            # not "unreported".
+            cost_usd=0.0,
+            cost_source="reported",
+        )
+
+    def _refuse_cached(
+        self, request: ModelStepRequest, blocked: dict[str, Any], prompt: Prompt
+    ) -> ModelStepResult:
+        self._record(
+            request,
+            {"status": "dlp_blocked", "surface": "output", "source": "cache", **blocked},
+        )
+        return ModelStepResult(
+            status="dlp_blocked",
+            rule_id="dlp.blocked",
+            detail="the cached reply was refused at the output surface",
+            prompt_digest=prompt.digest,
+            prompt_pack=prompt.pack_id,
+        )
+
+    def _store_cache(
+        self,
+        cache_key: CacheKey | None,
+        *,
+        prompt_digest: str,
+        task: str,
+        answer: str,
+        model: str,
+    ) -> None:
+        if cache_key is None or self._cache is None:
+            return
+        self._cache.store(
+            cache_key, prompt_digest=prompt_digest, task=task, answer=answer, model=model
+        )
+
     @activity.defn
     def next_step(self, request: ModelStepRequest) -> ModelStepResult:
         try:
@@ -162,8 +288,16 @@ class ModelActivities:
             )
 
         alias = request.model_alias or DEFAULT_ALIAS
-        client = self._client_factory(alias)
         messages = _messages(request, prompt.system)
+        prompt_digest = _hash(messages)
+        # Only the first step is cacheable: with no history the answer cannot
+        # contain a tool result, so no T1/T2 effect can be replayed from here.
+        cache_key = self._cache_key(request, prompt, alias) if not request.history else None
+        if cache_key is not None:
+            cached = self._cached(request, prompt, prompt_digest, cache_key)
+            if cached is not None:
+                return cached
+        client = self._client_factory(alias)
         try:
             reply = client.complete(messages=messages, tools=prompt.tools)
         except dlp.DlpBlocked as exc:
@@ -249,6 +383,16 @@ class ModelActivities:
                 "requested_tool": tool.name if tool is not None else "",
             },
         )
+        # `answered` already excludes a tool request and markup, and the output
+        # gate above refused a blocked answer. Only DLP-passed text reaches here.
+        if status == "answered" and reply.content:
+            self._store_cache(
+                cache_key,
+                prompt_digest=prompt_digest,
+                task=request.task,
+                answer=reply.content,
+                model=reply.model or alias,
+            )
         record_span(
             "model.call",
             run_id=request.run_id,
