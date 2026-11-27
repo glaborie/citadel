@@ -114,6 +114,28 @@ def test_every_service_restricts_new_privileges_and_its_pid_count() -> None:
         )
 
 
+def _docker_runs(text: str) -> list[str]:
+    """Every `docker run` in a file, with its line continuations joined back."""
+    joined = re.sub(r"\\\n\s*", " ", text)
+    return [line.strip() for line in joined.splitlines() if "docker run" in line]
+
+
+def test_the_loopback_sidecars_get_the_same_baseline() -> None:
+    """`make grafana-ui` and `make mlflow-ui` create their own citadel-* containers.
+
+    They live outside compose.yaml, so no anchor reaches them, but the bench lists
+    them like any other container and a fork bomb in one still hits the host.
+    """
+    for path in (ROOT / "scripts/mlflow-ui.sh", ROOT / "Makefile"):
+        runs = [run for run in _docker_runs(path.read_text(encoding="utf-8")) if "--name" in run]
+        assert len(runs) == 1, f"{path.name}: expected one sidecar launch, found {len(runs)}"
+        run = runs[0]
+        assert "--pids-limit" in run, f"{path.name} starts a sidecar with no pid ceiling"
+        assert "--security-opt no-new-privileges" in run, (
+            f"{path.name} starts a sidecar that can gain privileges"
+        )
+
+
 def test_the_baseline_is_documented_as_stack_wide() -> None:
     doc = ARCHITECTURE_DOC.read_text(encoding="utf-8")
     assert "pids_limit" in doc, "an operator reading §7 would not know this exists"

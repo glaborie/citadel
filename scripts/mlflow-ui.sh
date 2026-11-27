@@ -75,7 +75,10 @@ turn_on() {
     return 0
   fi
   docker rm -f "$NAME" >/dev/null 2>&1 || true
+  # Same baseline as compose.yaml (#228): a helper container is still a container,
+  # and a fork bomb in it would hit this host's pid table.
   docker run -d --name "$NAME" --restart unless-stopped \
+    --pids-limit 64 --security-opt no-new-privileges \
     --network bridge -p "127.0.0.1:${PORT}:${PORT}" "$IMAGE" \
     "tcp-listen:${PORT},fork,reuseaddr" "tcp-connect:${UPSTREAM}" >/dev/null
   docker network connect "$NETWORK" "$NAME"
