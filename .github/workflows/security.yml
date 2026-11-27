@@ -125,6 +125,13 @@ jobs:
             --config=p/security-audit \
             --sarif --output=semgrep.sarif \
             --error
+      # Semgrep honours `# nosemgrep` and still writes the suppressed result into the SARIF,
+      # flagged `suppressions: [{kind: inSource}]`. Code scanning does not read that field,
+      # so a justified exception arrives as an open alert (#42) that no code change can
+      # close. Upload what the scan stands behind - the CLI reported 0 findings for it.
+      - name: Drop the results Semgrep suppressed in source
+        if: always()
+        run: python3 scripts/strip-suppressed-sarif.py semgrep.sarif
       - name: Upload Semgrep SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
