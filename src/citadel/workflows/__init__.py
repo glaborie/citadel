@@ -5,10 +5,16 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from citadel.audit import AuditLedger
-from citadel.policy import RelationChecker, RunStore
-from citadel.workflows.activities import RunActivities, ToolActivities
-from citadel.workflows.model_step import ModelActivities
+from temporalio import workflow
+
+# Activity modules import clients that the workflow sandbox must not load
+# (prometheus_client pulls restricted urllib names in at import time). Workflows
+# only reach them through Temporal, so their imports stay unsandboxed.
+with workflow.unsafe.imports_passed_through():
+    from citadel.audit import AuditLedger
+    from citadel.policy import RelationChecker, RunStore
+    from citadel.workflows.activities import RunActivities, ToolActivities
+    from citadel.workflows.model_step import ModelActivities
 from citadel.workflows.orchestrator import RunWorkflow
 from citadel.workflows.specialist import SpecialistWorkflow
 

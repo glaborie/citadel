@@ -488,6 +488,7 @@ services:
     command: ["python", "-m", "citadel.worker"]
     environment:
       CITADEL_WORKER_ROLE: orchestrator
+      CITADEL_METRICS_PORT: "9100"
       TEMPORAL_ADDRESS: temporal:7233
       OPENFGA_API_URL: http://openfga:8080
       CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
@@ -535,6 +536,7 @@ services:
     command: ["python", "-m", "citadel.worker"]
     environment:
       CITADEL_WORKER_ROLE: docker
+      CITADEL_METRICS_PORT: "9100"
       TEMPORAL_ADDRESS: temporal:7233
       OPENFGA_API_URL: http://openfga:8080
       CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
@@ -562,6 +564,7 @@ services:
     command: ["python", "-m", "citadel.worker"]
     environment:
       CITADEL_WORKER_ROLE: github
+      CITADEL_METRICS_PORT: "9100"
       TEMPORAL_ADDRESS: temporal:7233
       OPENFGA_API_URL: http://openfga:8080
       CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
@@ -589,6 +592,7 @@ services:
     command: ["python", "-m", "citadel.worker"]
     environment:
       CITADEL_WORKER_ROLE: researcher
+      CITADEL_METRICS_PORT: "9100"
       TEMPORAL_ADDRESS: temporal:7233
       OPENFGA_API_URL: http://openfga:8080
       CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020

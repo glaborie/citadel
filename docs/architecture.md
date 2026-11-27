@@ -159,6 +159,7 @@ Three distinct records, cross-referenced but never conflated:
 - **Security audit** — append-only Postgres table, SHA-256 hash chain per tenant, every policy decision, DLP hit, redaction, retrieval, tool call, approval and model call.
 - **Traces** — OTel spans exported to MLflow's OTLP/HTTP endpoint `/v1/traces` with `x-mlflow-experiment-id`. Each span carries the audit event ID.
 - **Temporal history** — internal durable state; not an external audit source.
+- **Metrics** — Prometheus exposition from the API and each worker, with bounded labels and aggregate values only ([metrics.md](architecture/metrics.md)); not a control.
 
 MLflow stores versioned eval datasets and `mlflow.genai.evaluate()` results. Scorers see full traces: tool selection, argument accuracy, recovery, safety compliance and citation grounding. Offline CI grading uses recorded fixtures; online grading samples real runs into the same store.
 
@@ -189,7 +190,7 @@ Ingestion is a one-shot `ingest` service behind the `tools` profile: `make inges
 
 The query half is `RetrievalActivities.retrieve` on the orchestrator worker: it builds the ACL filter from the subject's entitlement tags, sends the dense and sparse prefetches in one Qdrant request, fuses with RRF, redacts each candidate through DLP, reranks top 50 to top 8 with the in-stack TEI service, and writes `retrieval.query` / `retrieval.result` with a filter-set digest and citation metadata. It is registered on the orchestrator worker but no workflow calls it yet (D1 in `docs/exit-review-v0.2.md`).
 
-The researcher services are in Compose: `worker-researcher` sits on an internal `research` network with `searxng` and `fetcher`, and on the `web` bridge for egress; none of the three publishes a port. Prometheus/Grafana remain optional (v0.3).
+The researcher services are in Compose: `worker-researcher` sits on an internal `research` network with `searxng` and `fetcher`, and on the `web` bridge for egress; none of the three publishes a port. Prometheus exposition is built in ([metrics.md](architecture/metrics.md)); a Grafana profile remains optional.
 
 ## 11. Verification items (all resolved)
 

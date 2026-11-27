@@ -38,6 +38,8 @@ from ipaddress import ip_address
 from typing import Any
 from urllib.request import Request, urlopen
 
+from citadel import metrics
+
 # Must match the pinned presidio-analyzer image in compose.yaml; a test enforces it.
 DETECTOR_VERSION = "presidio-analyzer:2.2.362"
 SCORE_THRESHOLD = 0.4
@@ -231,6 +233,7 @@ def gate(
     try:
         verdict = inspect(text, surface=surface, analyzer_url=analyzer_url, opener=opener)
     except DlpUnavailable as exc:
+        metrics.dlp_block(surface=surface, reason="dlp_unavailable")
         raise DlpBlocked(
             "dlp_unavailable",
             {
@@ -244,6 +247,7 @@ def gate(
         ) from exc
     report = {"surface": surface, **verdict.summary()}
     if verdict.action == "block":
+        metrics.dlp_block(surface=surface, reason="dlp_blocked")
         raise DlpBlocked("dlp_blocked", report)
     return verdict.text, report
 
