@@ -1,0 +1,12 @@
+# The smell gate's tool, pinned by version and by hash (#41).
+#
+# `pip install --require-hashes` in .github/workflows/smellcheck.yml refuses an artifact
+# whose digest is not listed here, so a compromised or revoked release cannot be served
+# under a familiar name. smellcheck has no runtime dependencies - both hashes below are
+# the wheel and the sdist of the same release, whichever pip chooses.
+#
+# `make check` reads the version from this file, so the local gate and CI cannot disagree
+# about which release judged the code. tests/test_workflow_hardening.py holds both facts.
+smellcheck==0.4.0 \
+    --hash=sha256:b1e7a778c6d650fa343c014af4d78006cd38910000e2ca2d6c26a173fe45db93 \
+    --hash=sha256:00ee80d3af5826c9bc7a2032cc298273d9678327c2bdd1f113d7f0fb6e6364ce

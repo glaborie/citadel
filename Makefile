@@ -22,6 +22,12 @@ rebuild:  ## Rebuild images from the checkout, then restart the stack
 	chmod +x scripts/provision-secrets.sh
 	sops exec-env secrets/citadel.env 'scripts/provision-secrets.sh && docker compose up -d --build'
 
+# The smell gate's version lives with its hashes, so `make check` and the smell-check
+# job cannot drift apart (#41). Blank if the requirements file is malformed, which is a
+# loud failure the first time the gate runs.
+SMELCHECK_VERSION := $(shell sed -n 's/^smellcheck==\([0-9][0-9.]*\).*/\1/p' \
+	.github/requirements-smellcheck.txt)
+
 # OpenFGA CLI pinned by digest; only needed to regenerate the model JSON.
 POLICY_CLI = openfga/cli:latest@sha256:7a7f9fb0a27a788a0fa7907eb5fc751c3134ca0776245578308e011606b61091
 
@@ -66,7 +72,8 @@ check:  ## Run the CI gates locally before a push
 	uv run ruff check .
 	uv run mypy
 	uv run pytest
-	uvx smellcheck src/ --min-severity info --baseline .smellcheck-baseline.json --fail-on info
+	uvx smellcheck==$(SMELCHECK_VERSION) src/ --min-severity info \
+		--baseline .smellcheck-baseline.json --fail-on info
 
 .PHONY: eval
 
