@@ -277,6 +277,14 @@ services:
       # allowlist is https-only. Paired with the private-IP allowance above, this lets
       # the gateway reach exactly one class of upstream: named services inside the stack.
       MLFLOW_GATEWAY_API_BASE_ALLOWED_SCHEMES: "https,http"
+      # The assistant API refuses any caller that is not loopback, and the UI reaches this
+      # server through a socat sidecar, so its requests arrive from the bridge. These two
+      # flags are what the server itself requires to accept that caller: remote mode, plus
+      # the sandbox flag (remote access is gated on a sandboxed tool environment). Without
+      # docker in this container a turn that calls Bash or the file tools fails at container
+      # start; answering turns work. See docs/observability-mlflow-assistant.md.
+      MLFLOW_ENABLE_REMOTE_ASSISTANT: "true"
+      MLFLOW_ENABLE_ASSISTANT_SANDBOX: "true"
       # The gateway needs the OmniRoute key to call it, and it arrives the way every
       # other credential does: as a file, never as an environment value (the custody
       # test enforces that). The bootstrap reads it once and turns it into a gateway
