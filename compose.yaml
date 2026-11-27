@@ -277,10 +277,13 @@ services:
       # allowlist is https-only. Paired with the private-IP allowance above, this lets
       # the gateway reach exactly one class of upstream: named services inside the stack.
       MLFLOW_GATEWAY_API_BASE_ALLOWED_SCHEMES: "https,http"
-      # The gateway needs the OmniRoute key to call it. It is passed here rather than
-      # baked into a secret because a fresh volume has no gateway secrets yet; the
-      # bootstrap turns it into one.
-      OMNIROUTE_API_KEY: "${OMNIROUTE_API_KEY:-}"
+      # The gateway needs the OmniRoute key to call it, and it arrives the way every
+      # other credential does: as a file, never as an environment value (the custody
+      # test enforces that). The bootstrap reads it once and turns it into a gateway
+      # secret, so the key is not needed again after that.
+      OMNIROUTE_API_KEY_FILE: /run/secrets/omniroute_api_key
+    secrets:
+      - omniroute_api_key
     volumes:
       - mlflow-data:/mlflow
     healthcheck:
