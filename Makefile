@@ -236,5 +236,9 @@ outputs-purge:  ## Delete stored tool output past its retention period (DAYS=90)
 # GitHub read token, and neither belongs to a long-running service.
 .PHONY: ingest
 
+.PHONY: knowledge-sync
+knowledge-sync:  ## Regenerate the host inventory, ingest, and prune what the corpus no longer has
+	@set -a; . ./.env; set +a; scripts/knowledge-sync.py --tenant $(or $(TENANT),lab-a) $(ARGS)
+
 ingest:  ## Ingest knowledge/ and CITADEL_INGEST_REPOS into a tenant's collection (TENANT=lab-a)
 	docker compose --profile tools run --rm ingest --tenant $(or $(TENANT),lab-a) $(ARGS)

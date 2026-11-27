@@ -21,6 +21,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
 SHEET = ROOT / "docs" / "evals" / "calibration-sheet-v1.md"
+
+
 def artifact_paths(version: int) -> tuple[Path, Path, Path, Path, Path]:
     """The five artifacts of one rubric version: sheet, key, judge, human, per-dimension.
 
@@ -36,6 +38,8 @@ def artifact_paths(version: int) -> tuple[Path, Path, Path, Path, Path]:
         calibration / f"labels-human-v{version}.json",
         labels,
     )
+
+
 HUMAN = ROOT / "evals" / "calibration" / "labels-human-v1.json"
 LABELS = ROOT / "evals" / "calibration" / "labels"
 DIMENSIONS = ("plan", "grounding", "recovery", "escalation")
@@ -87,9 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     key = json.loads(key_path.read_text(encoding="utf-8"))
     problems = _complete(sheet)
     if set(sheet) != set(key["items"]):
-        problems.append(
-            f"sheet covers {len(sheet)} items, the key covers {len(key['items'])}"
-        )
+        problems.append(f"sheet covers {len(sheet)} items, the key covers {len(key['items'])}")
     if problems:
         for problem in problems:
             print(f"labels: {problem}", file=sys.stderr)

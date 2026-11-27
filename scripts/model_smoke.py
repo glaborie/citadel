@@ -51,9 +51,7 @@ def main() -> int:
         return "citadel-api running, citadel-postgres healthy, checkout-api running"
 
     def gate(text: str, surface: str) -> str:
-        return dlp.gate(
-            text, surface=surface, analyzer_url=os.environ["CITADEL_DLP_URL"]
-        )[0]
+        return dlp.gate(text, surface=surface, analyzer_url=os.environ["CITADEL_DLP_URL"])[0]
 
     trajectory = run_agent(
         complete=client.complete,

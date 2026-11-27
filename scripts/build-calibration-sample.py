@@ -448,18 +448,14 @@ def _apply(base_case: dict[str, Any], edit: dict[str, Any]) -> list[dict[str, An
 
     if (tool := edit.get("fail_and_repeat")) is not None:
         calls = [
-            item
-            for item in events
-            if item.get("type") == "tool.call" and item.get("tool") == tool
+            item for item in events if item.get("type") == "tool.call" and item.get("tool") == tool
         ]
         for call in calls:
             call["status"] = "failed"
 
     if (tool := edit.get("repeat_tool")) is not None:
         calls = [
-            item
-            for item in events
-            if item.get("type") == "tool.call" and item.get("tool") == tool
+            item for item in events if item.get("type") == "tool.call" and item.get("tool") == tool
         ]
         if calls:
             events.append(_restamped(calls[-1], 2))
@@ -473,9 +469,7 @@ def _apply(base_case: dict[str, Any], edit: dict[str, Any]) -> list[dict[str, An
         if failed:
             last = failed[-1]
             at = events.index(last) + 1
-            events[at:at] = [
-                _restamped(last, attempt) for attempt in range(2, max(times, 2) + 1)
-            ]
+            events[at:at] = [_restamped(last, attempt) for attempt in range(2, max(times, 2) + 1)]
             # A retry with no new idea is not a recovery, so the recovery event goes -
             # and so does the later success, because this variant never gets one.
             events[:] = [
@@ -488,13 +482,19 @@ def _apply(base_case: dict[str, Any], edit: dict[str, Any]) -> list[dict[str, An
                     and item.get("status") == "executed"
                 )
             ]
-            end["outcome"] = "failed" 
+            end["outcome"] = "failed"
 
     return events
 
 
-def _item(base_case: dict[str, Any], case_id: str, band: str, mutation: str, answer: str,
-          edit: dict[str, Any]) -> dict[str, Any]:
+def _item(
+    base_case: dict[str, Any],
+    case_id: str,
+    band: str,
+    mutation: str,
+    answer: str,
+    edit: dict[str, Any],
+) -> dict[str, Any]:
     events = _apply(base_case, edit)
     run_id = next(item["run_id"] for item in events if item.get("type") == "run.start")
     end = next(item for item in events if item.get("type") == "run.end")
@@ -508,8 +508,13 @@ def _item(base_case: dict[str, Any], case_id: str, band: str, mutation: str, ans
         "answer": answer,
         "judge": list(DIMENSIONS),
         # Not read by the loader; kept so the sample can explain itself.
-        "provenance": {"band": band, "mutation": mutation, "derived_from": base_case["id"],
-                       "run_id": run_id, "outcome": end.get("outcome")},
+        "provenance": {
+            "band": band,
+            "mutation": mutation,
+            "derived_from": base_case["id"],
+            "run_id": run_id,
+            "outcome": end.get("outcome"),
+        },
     }
 
 

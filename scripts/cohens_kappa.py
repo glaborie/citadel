@@ -79,8 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     items = payload["items"]
     if len(items) < 20:
         print(
-            f"warning: {len(items)} items; kappa is unstable below 20 and "
-            "misleading below 10",
+            f"warning: {len(items)} items; kappa is unstable below 20 and misleading below 10",
             file=sys.stderr,
         )
     pairs = [(item["human"], item["judge"]) for item in items]

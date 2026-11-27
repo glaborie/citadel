@@ -55,6 +55,7 @@ DENSE: Final = "dense"
 # A runbook is text. Larger files are a binary the model should not be fed, and
 # a whole-repo tree can contain a lockfile larger than the whole value of the repo.
 MAX_FILE_BYTES: Final = 1_000_000
+FS_PREFIX: Final = "fs:"
 MAX_CHUNK_CHARS: Final = 2_000
 # One upsert per batch keeps a whole repository out of a single request.
 BATCH: Final = 256
@@ -346,6 +347,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--repo", action="append", default=[], help="owner/name (repeatable)")
     parser.add_argument("--ref", default="HEAD")
     parser.add_argument("--qdrant-url", default=DEFAULT_QDRANT_URL)
+    parser.add_argument(
+        "--prune",
+        action="store_true",
+        help="delete fs: chunks whose document is no longer in the corpus",
+    )
     return parser
 
 
@@ -379,6 +385,54 @@ def _embedder() -> Embedder:
     )
 
 
+def stale_sources(indexed: Iterable[str], corpus: Iterable[str]) -> list[str]:
+    """Sources in the index that this corpus no longer contains.
+
+    A corpus is a set; an index built by upsert alone is a union. `knowledge/live-run-183.md`
+    was ingested, deleted, and then served for two nights as evidence for a host that has no
+    `checkout-api` - idempotent upsert keeps content honest and membership wrong.
+
+    Only filesystem sources are considered. A repository-backed source is the responsibility of
+    the repository run that owns it, and deleting it because a directory walk did not see it
+    would turn a partial run into data loss.
+    """
+    present = set(corpus)
+    return sorted({uri for uri in indexed if uri.startswith(FS_PREFIX) and uri not in present})
+
+
+def indexed_sources(client: Any, collection: str) -> list[str]:  # noqa: ANN401 - QdrantClient
+    """Every `source_uri` in the collection, read without vectors."""
+    seen: set[str] = set()
+    offset: Any = None
+    while True:
+        points, offset = client.scroll(
+            collection_name=collection,
+            limit=256,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False,
+        )
+        for point in points:
+            uri = (point.payload or {}).get("source_uri")
+            if isinstance(uri, str) and uri:
+                seen.add(uri)
+        if offset is None:
+            return sorted(seen)
+
+
+def prune_sources(client: Any, collection: str, sources: Iterable[str]) -> int:  # noqa: ANN401
+    """Delete every chunk of the given sources. Returns the number of sources removed."""
+    removed = 0
+    for uri in sources:
+        selector = models.Filter(
+            must=[models.FieldCondition(key="source_uri", match=models.MatchValue(value=uri))]
+        )
+        client.delete(collection_name=collection, points_selector=selector, wait=True)
+        print(f"  pruned {uri}")
+        removed += 1
+    return removed
+
+
 def _redactor() -> Callable[[str], str]:
     """The embedding endpoint is hosted, so it sees the same DLP-cleaned text."""
 
@@ -395,11 +449,27 @@ def _run(sources: list[Iterable[Document]], args: argparse.Namespace) -> None:
     client = QdrantClient(url=args.qdrant_url)
     embedder = _embedder()
     redact = _redactor()
+    collections: set[str] = set()
+    corpus: set[str] = set()
     for source in sources:
+        # Materialised once: the corpus is what decides membership, and prune needs it whole.
+        documents = list(source)
+        corpus.update(document.source_uri for document in documents)
         report = ingest(
-            client, tenant=args.tenant, documents=source, embedder=embedder, redact=redact
+            client, tenant=args.tenant, documents=documents, embedder=embedder, redact=redact
         )
+        collections.add(report.collection)
         print(f"{report.collection}: {report.documents} documents, {report.chunks} chunks")
+
+    if not args.prune:
+        return
+    for collection in sorted(collections):
+        stale = stale_sources(indexed_sources(client, collection), corpus)
+        if not stale:
+            print(f"{collection}: nothing to prune")
+            continue
+        removed = prune_sources(client, collection, stale)
+        print(f"{collection}: pruned {removed} document(s) no longer in the corpus")
 
 
 def main(argv: list[str] | None = None) -> int:
