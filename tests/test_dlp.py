@@ -87,6 +87,30 @@ def test_a_credential_the_detector_misses_blocks() -> None:
     assert finding.detector_verdict == "missed"
 
 
+@pytest.mark.parametrize("surface", ["input", "output", "record"])
+def test_a_bare_jwt_is_blocked_on_every_surface(surface: str) -> None:
+    """A run or Keycloak token must not pass DLP merely without a Bearer prefix."""
+    text = (
+        "eyJhbGciOiJFZERTQSJ9."
+        "eyJpc3MiOiJjaXRhZGVsIiwic3ViIjoiYWxpY2UifQ."
+        "c2lnbmF0dXJlX3Rlc3RfdmFsdWVfZm9yX2RscA"
+    )
+    verdict = dlp.inspect(text, surface=surface, analyzer_url=URL, opener=detector([]))
+
+    assert verdict.action == "block"
+    (finding,) = verdict.findings
+    assert finding.category == "JWT"
+    assert finding.source == "hard_rule"
+    assert finding.detector_verdict == "missed"
+
+
+def test_a_short_jwt_like_string_is_not_a_credential() -> None:
+    text = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.invalid"
+    verdict = dlp.inspect(text, surface="output", analyzer_url=URL, opener=detector([]))
+
+    assert verdict.action == "pass"
+
+
 def test_the_override_records_that_the_detector_saw_it_too() -> None:
     text = f"token {token()}"
     verdict = dlp.inspect(
