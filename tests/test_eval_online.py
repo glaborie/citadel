@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
 from citadel.dlp import DlpBlocked
-from citadel.evals import online
+from citadel.evals import baseline, online
 from citadel.evals.schema import check_events
 
 TENANT = "lab-a"
@@ -220,6 +221,71 @@ def test_the_record_replays_through_the_offline_grader() -> None:
     assert grades, "the grader produced nothing"
     assert {item.grader for item in grades} >= {"tool.selection", "citation.supported"}
     assert all(item.passed for item in grades), [item.detail for item in grades if not item.passed]
+
+
+def _sample_for(alias: str, *, pack: str = "devops-3") -> online.Sample:
+    sample = _sample()
+    for event in sample.events:
+        if event["type"] == "run.start":
+            event["model_alias"] = alias
+            event["prompt_pack_version"] = pack
+    return replace(sample, meta=replace(sample.meta, model_alias=alias, prompt_pack_version=pack))
+
+
+def _row_for(sample: online.Sample) -> baseline.Row:
+    return online.row_for(online.build_record(sample, gate=_pass_through))
+
+
+def test_a_sampled_run_and_an_offline_run_share_the_key_and_the_summary() -> None:
+    record = online.build_record(_sample(), gate=_pass_through)
+    grades = online.replay(record)
+
+    row = online.row_for(record, grades=grades)
+
+    assert row.key == baseline.Key(
+        dataset="v4", prompts="devops-3", model="auto/best-fast", judge="groundedness"
+    )
+    assert row.scores == baseline.summarise(grades)
+
+
+def test_an_alias_change_is_a_diff_not_an_uncomparable_result() -> None:
+    accepted = _row_for(_sample_for("auto/best-fast"))
+    changed = _row_for(_sample_for("auto/best-reasoning"))
+
+    assert baseline.comparable(changed.key, [accepted]) == accepted
+    report = online.report(changed, [accepted])
+
+    assert "auto/best-fast" in report and "auto/best-reasoning" in report
+    assert "| tool.selection |" in report
+    assert "no regressions" in report
+
+
+def test_a_changed_prompt_pack_has_no_accepted_online_row() -> None:
+    accepted = _row_for(_sample_for("auto/best-fast"))
+    changed = _row_for(_sample_for("auto/best-fast", pack="devops-4"))
+
+    assert baseline.comparable(changed.key, [accepted]) is None
+    assert "no comparable accepted row" in online.report(changed, [accepted])
+
+
+def test_a_recorded_sample_can_be_read_back_for_the_next_comparison() -> None:
+    """The audit event is the online baseline file: same flat row shape, same reader."""
+    from citadel.workflows.activities import _previous_rows
+
+    row = _row_for(_sample())
+    payload = {
+        "key": row.key.as_dict(),
+        "scores": {
+            name: {"passed": score.passed, "total": score.total, "gating": score.gating}
+            for name, score in row.scores.items()
+        },
+        "day": "2026-11-27",
+    }
+
+    read = _previous_rows([(1, payload)])
+
+    assert [item.key for item in read] == [row.key]
+    assert [item.scores for item in read] == [row.scores]
 
 
 class _Reply:
