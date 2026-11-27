@@ -158,7 +158,7 @@ Explicitly not assumed:
 | AP8 | Credential in tool output reaches the hosted model | Medium | High | **High** | fail-closed DLP before egress; a credential blocks rather than redacts | `src/citadel/dlp.py`, `docs/security/secrets.md` surfaces table | a detector miss is a silent leak; ADR-025 accepts redacted-text retention |
 | AP9 | Sandbox escape via a tool argument | Low | High | Medium | argv list with `shell=False`, metacharacter rejection, read-only rootfs, `cap_drop: ALL`, no socket, socket proxy `POST=0` | ADR-023 items 3-5; `compose.yaml` `tool-runner` | gVisor unavailable on this host (ADR-012), so the container boundary is the kernel boundary |
 | AP10 | Local user escalates to root and reads the secret files | Medium | High | Medium | file custody only; `secrets/` is mode 0644 by design | #223; `docs/security/secrets.md` | #223 stays open as a host defect (passwordless `sudo`, `INPUT ACCEPT`); trusting the LAN lowers the likelihood, not the impact |
-| AP11 | Cost exhaustion through repeated runs | Medium | Low | Low | `max_steps` 6, `max_tokens` 8000, workflow timeouts, approval TTL | `src/citadel/model/types.py:68-69`, `src/citadel/workflows/orchestrator.py:177` | confirmed gap: no ingress rate limit, so a valid token can open runs in a loop. To be closed by #256 |
+| AP11 | Cost exhaustion through repeated runs | Medium | Low | Low | `max_steps` 6, `max_tokens` 8000, workflow timeouts, approval TTL | `src/citadel/model/types.py:68-69`, `src/citadel/workflows/orchestrator.py:177`, `src/citadel/ratelimit.py` | closed by #256: a per-credential token bucket charged before the request reaches the database. What remains is in-process state, so a second `api` replica would need a shared store |
 | AP12 | Compromised reranker process | Low | Medium | Low | internal-only, no published port | `compose.yaml` `reranker` | runs as root with default caps and no pid/memory limit; the owner confirmed this is an oversight to fix, not an accepted constraint (#227) |
 
 ## 6. Mitigations, in order
@@ -172,9 +172,10 @@ first two items are the ones that survive that decision unchanged.
 2. **AP4/AP5 — keep the description-digest pin as a review gate.** It is the
    only control that survives a compromised MCP server, and it is cheap to
    regress: add a case where a pinned description is edited.
-3. **AP11 — add an ingress limiter.** Confirmed as wanted by the owner. A
-   per-tenant request budget at `/runs` is the smallest change that turns "a
-   token can loop" into "a token can loop slowly". Filed as #256.
+3. **AP11 — the ingress limiter is in place (#256).** `RunBudget` charges one
+   run per `(tenant, user)` before the request reaches the database and refuses
+   with 429 plus `Retry-After`. The one thing to keep true: the bucket is
+   in-process, so it needs a shared store the day a second `api` replica exists.
 4. **AP12 — apply the ADR-012 flag set to the reranker image.** Non-root user,
    `cap_drop: ALL`, `no-new-privileges`, pid and memory limits. Confirmed as a
    fix rather than an accepted upstream constraint; filed as #227.
@@ -210,8 +211,8 @@ Answers from the owner (2026-11-27), and what each one changed:
    AP1 and AP10 drop from High to Medium and mitigation 5 is demoted to
    accepted risk rather than open exposure.
 2. **Should the API carry its own request budget?** Yes, it should. OmniRoute's
-   quota is not the intended control, so AP11 stays open and LLM10 stays
-   Partial until the limiter exists. Filed as #256.
+   quota is not the intended control, so the API got its own budget: #256,
+   which closes AP11 and moves LLM10 to Covered.
 3. **Is the reranker's root user deliberate?** No. It is an oversight, so #227
    is a fix to make rather than a constraint to record.
 
