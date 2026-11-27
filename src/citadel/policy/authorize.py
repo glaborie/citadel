@@ -21,6 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
+from citadel import metrics
 from citadel.policy.catalog import ToolSpec, load_catalog
 
 Outcome = Literal["allow", "requires_approval", "deny"]
@@ -79,6 +80,7 @@ class RunStore(Protocol):
 
 
 def _deny(rule_id: str, reason: str, tier: str = "unknown") -> Decision:
+    metrics.policy_denial(rule_id)
     return Decision(outcome="deny", rule_id=rule_id, reason=reason, tier=tier)
 
 
@@ -196,9 +198,7 @@ def _identity_denial(request: ApprovalAuthorization) -> Decision | None:
     return None
 
 
-def _catalog_denial(
-    request: ApprovalAuthorization, tools: dict[str, ToolSpec]
-) -> Decision | None:
+def _catalog_denial(request: ApprovalAuthorization, tools: dict[str, ToolSpec]) -> Decision | None:
     """The tool must exist and must be T1: T0 needs no approval, T2 is human-only."""
     spec = tools.get(request.tool)
     if spec is None:

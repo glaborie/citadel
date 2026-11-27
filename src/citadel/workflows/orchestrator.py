@@ -22,7 +22,10 @@ from typing import Any
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
-from citadel.model import Budget, Usage
+# Budget/Usage are pure, but the module also holds the gateway client, which
+# imports DLP and (through it) prometheus_client. Keep that chain unsandboxed.
+with workflow.unsafe.imports_passed_through():
+    from citadel.model import Budget, Usage
 from citadel.workflows import activities
 from citadel.workflows.model_step import (
     ModelActivities,

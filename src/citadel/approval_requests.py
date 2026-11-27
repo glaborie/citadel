@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+from citadel import metrics
 from citadel.db import tenant_connection
 
 if TYPE_CHECKING:
@@ -52,11 +53,18 @@ def close_request(
     approver: str,
     reason: str,
 ) -> None:
-    """Mirror the decision onto the row so the console stops listing it."""
+    """Mirror the decision onto the row so the console stops listing it.
+
+    The elapsed time comes back from the database, whose clock both timestamps
+    use: a worker with a skewed clock must not decide how long a human took.
+    """
     with tenant_connection(dsn, tenant_id) as conn:
-        conn.execute(
+        closed = conn.execute(
             "UPDATE approval_requests"
             " SET status = %s, decided_by = %s, reason = %s, decided_at = now()"
-            " WHERE run_id = %s::uuid AND tool = %s AND status = 'pending'",
+            " WHERE run_id = %s::uuid AND tool = %s AND status = 'pending'"
+            " RETURNING EXTRACT(EPOCH FROM (now() - created_at))",
             ("approved" if approved else "denied", approver, reason, run_id, tool),
-        )
+        ).fetchone()
+    if closed is not None:
+        metrics.approval_decision("approved" if approved else "denied", float(closed[0]))

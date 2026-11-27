@@ -16,11 +16,12 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Final
 
 from temporalio.client import Client
 from temporalio.worker import Worker
 
-from citadel import telemetry
+from citadel import metrics, telemetry
 from citadel.env import secret
 from citadel.policy import RelationChecker, RunStore
 from citadel.policy.openfga import build_checker
@@ -31,6 +32,20 @@ from citadel.workflows.types import TASK_QUEUES
 HEARTBEAT = Path(tempfile.gettempdir()) / "citadel-heartbeat"
 HEARTBEAT_INTERVAL = 5
 MAX_WORKERS = 8
+DEFAULT_METRICS_PORT: Final = 9100
+
+
+def _serve_metrics(role: str) -> None:
+    """Expose this worker's registry. A bind failure is a log line, never a crash."""
+    try:
+        port = int(os.environ.get("CITADEL_METRICS_PORT", str(DEFAULT_METRICS_PORT)))
+    except ValueError:
+        port = DEFAULT_METRICS_PORT
+    try:
+        metrics.serve(port)
+        print(f"worker {role} metrics on :{port}/metrics", flush=True)
+    except (OSError, ValueError) as exc:
+        print(f"worker {role} metrics unavailable on :{port}: {exc}", file=sys.stderr, flush=True)
 
 
 def _beat(stop: threading.Event) -> None:
@@ -94,6 +109,9 @@ def main() -> int:
     stopping = threading.Event()
     threading.Thread(target=_beat, args=(stopping,), daemon=True).start()
     HEARTBEAT.write_text(str(time.time()))
+
+    # A worker has no HTTP server of its own; the registry is exposed on its own port.
+    _serve_metrics(role)
 
     try:
         asyncio.run(serve(role))
