@@ -122,6 +122,7 @@ docs/exit-review-v0.1.md      # v0.1 exit review
 docs/exit-review-v0.2.md      # v0.2 exit review
 docs/implementation-notes/    # what was executed and what it printed
 docs/security/tool-tiers.md
+docs/operations/              # runbooks: start a run, CLI, host firewall
 docs/evals/trajectory-schema.md
 docs/adr/                     # 23 ADRs and an index
 .sops.yaml                    # age recipient for the tracked secret file

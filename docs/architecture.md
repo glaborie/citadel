@@ -192,6 +192,8 @@ The query half is `RetrievalActivities.retrieve` on the orchestrator worker: it 
 
 The researcher services are in Compose: `worker-researcher` sits on an internal `research` network with `searxng` and `fetcher`, and on the `web` bridge for egress; none of the three publishes a port. Prometheus and Grafana are in the stack ([metrics.md](architecture/metrics.md)); Prometheus is internal-only, Grafana is loopback-only and requires a login.
 
+Host exposure is two layers: the loopback binds above plus host `INPUT` drops on `eth0`/`tailscale0` for the four ports that were once published on `0.0.0.0`. The policy, its persistence across a reboot, and the drill that proves it are in [operations/host-firewall.md](operations/host-firewall.md).
+
 ## 11. Verification items (all resolved)
 
 1. **OmniRoute upstream and image** — resolved: pinned by digest in `compose.yaml`; the redirect and fork question is documented in `docs/implementation-notes/v0.1-verification.md` §1.
