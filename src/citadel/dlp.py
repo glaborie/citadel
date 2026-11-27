@@ -107,6 +107,10 @@ TECHNICAL_NOUNS: frozenset[str] = frozenset(
         "grafana",
         "prometheus",
         "otel",
+        "ps",
+        "filter",
+        "name",
+        "mlflow-ui",
     }
 )
 

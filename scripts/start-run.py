@@ -56,6 +56,19 @@ def setting(name: str, default: str = "") -> str:
     return default
 
 
+def default_pack(agent: str) -> str:
+    """Read the installed pack name: no run may guess a stale skill version."""
+    manifest = pathlib.Path(__file__).resolve().parent.parent / "skills" / agent / "manifest.json"
+    try:
+        raw = json.loads(manifest.read_text(encoding="utf-8"))
+        pack = raw["pack"]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise SystemExit(f"cannot read prompt pack manifest {manifest}: {exc}") from exc
+    if not isinstance(pack, str) or not pack:
+        raise SystemExit(f"prompt pack manifest {manifest} has no pack name")
+    return pack
+
+
 def open_request(request: urllib.request.Request) -> Any:
     """Send it and parse the answer. The one place a connection is opened."""
     # The rule's premise is an actor-controlled URL. These URLs are assembled from the
@@ -216,7 +229,7 @@ def main() -> int:
     body = run_body(
         agent=args.agent,
         risk_tier=args.risk_tier,
-        pack=args.pack or f"{args.agent}-1.0.0",
+        pack=args.pack or default_pack(args.agent),
         alias=args.alias,
         task=args.task,
         scopes=[scope.strip() for scope in args.scopes.split(",") if scope.strip()],
