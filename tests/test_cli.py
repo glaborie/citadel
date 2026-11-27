@@ -75,14 +75,11 @@ def test_json_is_one_parseable_document(
     assert payload["checks"][1]["hint"] == "make up"
 
 
-def test_the_text_report_names_the_hint(capsys: pytest.CaptureFixture[str]) -> None:
-    doctor.emit(
-        Report(checks=[_down("mlflow")]).as_dict(),
-        as_json=False,
-        text=doctor.render(Report(checks=[_down("mlflow")])),
-    )
-    out = capsys.readouterr().out
-    assert "mlflow" in out and "make up" in out
+def test_the_text_report_names_the_dependency_and_its_hint() -> None:
+    """`render` is pure: the hint travels with the failure, which is the whole point."""
+    out = doctor.render(Report(checks=[_down("mlflow")]))
+    assert "DOWN" in out and "mlflow" in out and "make up" in out
+    assert "not healthy" in out
 
 
 def test_the_cli_suppresses_exactly_one_rule_per_scanner() -> None:
