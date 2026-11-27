@@ -8,7 +8,7 @@ each id; the ledger keeps its own shape, which `evals/schema.py` pins.
 from __future__ import annotations
 
 from citadel.workflows.activities import _run_outputs
-from citadel.workflows.orchestrator import _sources
+from citadel.workflows.orchestrator import RunAnswer
 from citadel.workflows.types import RunEnd
 
 CITED = [
@@ -28,7 +28,7 @@ def test_the_root_output_names_the_document_next_to_the_id() -> None:
         outcome="completed",
         answer="citadel-api-1 is running",
         citation_ids=["8506d70c-59d5-5c43-baf3-3d7d895f7ff3"],
-        sources=_sources(CITED),
+        sources=list(RunAnswer.from_output({"citations": CITED}).sources),
     )
 
     outputs = _run_outputs(end)
@@ -50,8 +50,10 @@ def test_a_run_without_retrieval_says_so_with_an_empty_list() -> None:
 
 
 def test_the_orchestrator_normalises_whatever_the_activity_returned() -> None:
-    assert _sources("not a list") == []
-    assert _sources([{**CITED[0], "text": "secret prose"}])[0] == {
+    assert RunAnswer.from_output({"citations": "not a list"}).sources == ()
+    assert RunAnswer.from_output({"citations": [{**CITED[0], "text": "secret prose"}]}).sources[
+        0
+    ] == {
         "id": "8506d70c-59d5-5c43-baf3-3d7d895f7ff3",
         "source_uri": "fs:live-run-183.md",
         "revision": "082935f76dbf",

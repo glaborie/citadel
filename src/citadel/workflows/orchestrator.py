@@ -16,6 +16,8 @@ non-deterministically.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
@@ -63,20 +65,41 @@ def _safety_flags(result: ToolResult) -> list[str]:
     return sorted(flags)
 
 
-def _sources(citations: Any) -> list[dict[str, Any]]:  # noqa: ANN401 - the activity's JSON
-    """The citation rows a reader can act on: which document, which revision, how well it scored."""
-    if not isinstance(citations, list):
-        return []
-    return [
-        {
-            "id": str(item.get("chunk_id", "")),
-            "source_uri": str(item.get("source_uri", "")),
-            "revision": str(item.get("revision", ""))[:12],
-            "score": item.get("score"),
-        }
-        for item in citations
-        if isinstance(item, dict)
-    ]
+@dataclass(frozen=True)
+class RunAnswer:
+    """What a run produced: the text, and the documents behind it.
+
+    Three parallel parameters said one thing badly - `_finish` took the answer, the citation ids
+    and the sources separately, and every caller had to keep them in step. One object, built from
+    the activity's output, is the shape the trace and the ledger both read.
+    """
+
+    text: str = ""
+    citation_ids: tuple[str, ...] = ()
+    sources: tuple[dict[str, Any], ...] = ()
+
+    @classmethod
+    def from_output(cls, output: Mapping[str, Any] | None) -> RunAnswer:
+        payload = output or {}
+        citations = payload.get("citations")
+        rows = (
+            [item for item in citations if isinstance(item, dict)]
+            if isinstance(citations, list)
+            else []
+        )
+        return cls(
+            text=str(payload.get("answer", ""))[:4000],
+            citation_ids=tuple(str(citation) for citation in payload.get("citation_ids", [])),
+            sources=tuple(
+                {
+                    "id": str(row.get("chunk_id", "")),
+                    "source_uri": str(row.get("source_uri", "")),
+                    "revision": str(row.get("revision", ""))[:12],
+                    "score": row.get("score"),
+                }
+                for row in rows
+            ),
+        )
 
 
 @workflow.defn
@@ -97,9 +120,7 @@ class RunWorkflow:
             item,
             outcome=_outcome(result),
             safety_flags=_safety_flags(result),
-            answer=str(result.output.get("answer", ""))[:4000],
-            citation_ids=[str(citation) for citation in result.output.get("citation_ids", [])],
-            sources=_sources(result.output.get("citations", [])),
+            answer=RunAnswer.from_output(result.output),
         )
         return result
 
@@ -109,9 +130,7 @@ class RunWorkflow:
         *,
         outcome: str,
         safety_flags: list[str],
-        answer: str = "",
-        citation_ids: list[str] | None = None,
-        sources: list[dict[str, Any]] | None = None,
+        answer: RunAnswer | None = None,
     ) -> None:
         await workflow.execute_activity_method(
             activities.RunActivities.finish_run,
@@ -119,10 +138,10 @@ class RunWorkflow:
                 run_id=item.run_id,
                 tenant_id=item.tenant_id,
                 outcome=outcome,
-                citation_ids=citation_ids or [],
-                sources=sources or [],
+                citation_ids=list(answer.citation_ids) if answer else [],
+                sources=list(answer.sources) if answer else [],
                 safety_flags=safety_flags,
-                answer=answer,
+                answer=answer.text if answer else "",
                 task=item.task,
             ),
             start_to_close_timeout=timedelta(seconds=30),

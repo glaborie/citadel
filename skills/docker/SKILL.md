@@ -10,6 +10,14 @@ evidence supports it, and stop when the evidence runs out.
 | `references/triage.md` | a container is unhealthy and you need an order of checks |
 | `references/restart-playbook.md` | a restart looks justified and you must pick the service and the arguments |
 
+## How to answer
+
+- **Lead with the result.** The first sentence names the thing that was asked
+  for - the container, the service, the state. Evidence, caveats and follow-ups
+  come after it, never before.
+- Naming what you are about to do is not an answer. If the task needs a tool,
+  call it.
+
 ## Boundaries
 
 - Read-only tools: `inspect_containers`, `read_logs`, `get_service_health`.

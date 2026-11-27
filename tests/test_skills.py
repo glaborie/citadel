@@ -18,12 +18,16 @@ from citadel.policy import load_catalog
 ROOT = Path(skills.__file__).resolve().parents[2] / "skills"
 AGENTS = ("docker", "github", "researcher")
 
+# A pack version is bumped by hand when its text changes, so a test that read it from disk
+# would agree with itself. Named here, it fails until the bump is deliberate.
+PACK_VERSIONS = {"docker": "1.1.0", "github": "1.0.0", "researcher": "1.0.0"}
+
 
 @pytest.mark.parametrize("agent", AGENTS)
 def test_every_pack_loads_and_matches_its_manifest(agent: str) -> None:
     pack = skills.load_pack(agent, directory=ROOT)
     assert pack.agent == agent
-    assert pack.name == f"{agent}-1.0.0"
+    assert pack.name == f"{agent}-{PACK_VERSIONS[agent]}"
     assert pack.index.startswith("#")
     assert pack.references, "a pack with no reference cannot disclose progressively"
     assert pack.requires_tool is True, "every shipped agent acts; a plan is not a result"
@@ -115,7 +119,7 @@ def test_the_lock_round_trips(tmp_path: Path) -> None:
     after = {agent: (tmp_path / agent / "manifest.json").read_text() for agent in AGENTS}
     assert after == before, "the committed manifests are stale: run `make skills-lock`"
     for agent in AGENTS:
-        assert skills.load_pack(agent, directory=tmp_path).name == f"{agent}-1.0.0"
+        assert skills.load_pack(agent, directory=tmp_path).name == f"{agent}-{PACK_VERSIONS[agent]}"
 
 
 @pytest.mark.parametrize("agent", ("docker", "github"))
