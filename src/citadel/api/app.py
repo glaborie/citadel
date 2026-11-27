@@ -151,8 +151,15 @@ def create_app(
         return {"status": "ok", "version": __version__}
 
     @app.get("/metrics", include_in_schema=False)
-    def prometheus_metrics() -> Response:
-        """The scrape endpoint: aggregate counters only, never tenant or run labels."""
+    def prometheus_metrics(
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> Response:
+        """The scrape endpoint: a bearer token, aggregate counters, no tenant labels."""
+        try:
+            metrics.check_scrape_auth(authorization)
+        except metrics.ScrapeRefused as exc:
+            headers = {"WWW-Authenticate": "Bearer"} if exc.status == 401 else None
+            raise HTTPException(status_code=exc.status, detail=exc.reason, headers=headers) from exc
         return Response(content=metrics.render(), media_type=metrics.CONTENT_TYPE)
 
     def current_principal(

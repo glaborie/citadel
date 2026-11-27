@@ -14,11 +14,18 @@ alone, so "cost us nothing" and "we do not know" cannot become the same number.
 
 from __future__ import annotations
 
+import hmac
+import threading
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Final
+from urllib.parse import urlsplit
 
-from prometheus_client import Counter, Histogram, generate_latest, start_http_server
+from prometheus_client import Counter, Histogram, generate_latest
 from prometheus_client.core import CollectorRegistry
 from prometheus_client.exposition import CONTENT_TYPE_LATEST
+
+from citadel.env import optional_secret
 
 REGISTRY: Final = CollectorRegistry(auto_describe=True)
 CONTENT_TYPE: Final = CONTENT_TYPE_LATEST
@@ -154,7 +161,74 @@ def render() -> bytes:
     return generate_latest(REGISTRY)
 
 
+class ScrapeRefused(RuntimeError):
+    """The scrape endpoint will not answer: no token configured, or a bad one."""
+
+    def __init__(self, status: int, reason: str) -> None:
+        super().__init__(reason)
+        self.status = status
+        self.reason = reason
+
+
+def _scrape_token() -> str:
+    try:
+        return optional_secret("CITADEL_METRICS_TOKEN")
+    except (OSError, ValueError):
+        # An unreadable secret is no secret: refuse rather than serve openly.
+        return ""
+
+
+def check_scrape_auth(authorization: str | None) -> None:
+    """A configured bearer token, compared in constant time; fail closed when unset."""
+    token = _scrape_token()
+    if not token:
+        raise ScrapeRefused(
+            HTTPStatus.SERVICE_UNAVAILABLE,
+            "metrics are disabled until CITADEL_METRICS_TOKEN is set",
+        )
+    scheme, _, presented = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not hmac.compare_digest(
+        presented.strip().encode("utf-8"), token.encode("utf-8")
+    ):
+        raise ScrapeRefused(HTTPStatus.UNAUTHORIZED, "metrics require a bearer token")
+
+
+class _ScrapeHandler(BaseHTTPRequestHandler):
+    server_version = "CitadelMetrics/1"
+
+    def do_GET(self) -> None:
+        if urlsplit(self.path).path != "/metrics":
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        try:
+            check_scrape_auth(self.headers.get("Authorization"))
+        except ScrapeRefused as exc:
+            self._respond(
+                exc.status,
+                f"{exc.reason}\n".encode(),
+                www_authenticate=exc.status == HTTPStatus.UNAUTHORIZED,
+            )
+            return
+        self._respond(HTTPStatus.OK, render())
+
+    def _respond(self, status: int, body: bytes, *, www_authenticate: bool = False) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", CONTENT_TYPE)
+        self.send_header("Content-Length", str(len(body)))
+        if www_authenticate:
+            self.send_header("WWW-Authenticate", "Bearer")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format: str, *args: object) -> None:
+        # The default log line is harmless, but an access log on a scrape
+        # endpoint is noise. Never log the Authorization header anywhere here.
+        del format, args
+
+
 def serve(port: int) -> int:
     """Expose this process's registry on `port`, returning the bound port."""
-    server, _thread = start_http_server(port, registry=REGISTRY)
+    # The container-internal scrape port; no compose port publishes it.
+    server = ThreadingHTTPServer(("0.0.0.0", port), _ScrapeHandler)  # nosec B104
+    threading.Thread(target=server.serve_forever, daemon=True).start()
     return int(server.server_address[1])

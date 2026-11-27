@@ -40,6 +40,16 @@ write omniroute_storage_encryption_key OMNIROUTE_STORAGE_ENCRYPTION_KEY
 write omniroute_admin_password OMNIROUTE_ADMIN_PASSWORD
 write omniroute_api_key OMNIROUTE_API_KEY
 
+# The scrape token is infrastructure-local. SOPS may supply one; otherwise keep
+# the first generated value, so a `make up` does not rotate it away from a
+# running Prometheus. It never leaves secrets/ except as a Docker secret.
+if [ -n "${CITADEL_METRICS_TOKEN:-}" ]; then
+    printf '%s' "$CITADEL_METRICS_TOKEN" > "$dir/metrics_token"
+elif [ ! -s "$dir/metrics_token" ]; then
+    openssl rand -hex 32 > "$dir/metrics_token"
+fi
+chmod 0644 "$dir/metrics_token"
+
 # pgx (OpenFGA) reads this instead of taking the password in argv or env.
 # Format: host:port:database:user:password (libpq escapes `\` and `:`).
 pgpass_pw=${POSTGRES_PASSWORD//\\/\\\\}
