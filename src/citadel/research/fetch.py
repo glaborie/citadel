@@ -84,7 +84,8 @@ def _connect(
         context.minimum_version = ssl.TLSVersion.TLSv1_2
         # The context is create_default_context(): certificate and hostname
         # verification are on, which is the warning the rule exists to raise.
-        connection: http.client.HTTPConnection = http.client.HTTPSConnection(  # nosemgrep
+        # nosemgrep: python.lang.security.audit.httpsconnection-detected.httpsconnection-detected
+        connection: http.client.HTTPConnection = http.client.HTTPSConnection(
             host, port, timeout=timeout, context=context
         )
         sock = socket.create_connection((address, port), timeout)
