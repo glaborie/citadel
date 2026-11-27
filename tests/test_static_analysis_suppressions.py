@@ -123,3 +123,14 @@ def _script(path: Path) -> Any:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_every_bandit_suppression_names_its_check() -> None:
+    """A bare `# nosec` silences every bandit check on that line, not the one you meant."""
+    bare = [
+        f"{path.relative_to(ROOT)}:{number}"
+        for path in SOURCES
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if re.search(r"#\s*nosec\s*$", line)
+    ]
+    assert not bare, f"name the bandit check id: {bare}"

@@ -78,6 +78,15 @@ check:  ## Run the CI gates locally before a push
 .PHONY: eval
 
 # Deterministic grading of the committed trajectory fixtures.
+doctor:  ## Report whether each dependency answers (same as `citadel doctor`)
+	@uv run --quiet citadel doctor
+
+run:  ## Start a run: make run TASK="call inspect_containers, then name one container"
+	@set -a; . ./.env; set +a; scripts/start-run.py --task "$(TASK)" --wait
+
+token:  ## Print a bearer token for the API (curl / HTTP clients)
+	@set -a; . ./.env; set +a; scripts/start-run.py --token-only
+
 eval:  ## Grade the committed trajectory fixtures
 	uv run python -m citadel.evals
 
@@ -139,6 +148,22 @@ calibration-kappa:  ## Pair labels with scores and measure kappa per dimension
 	for dim in plan grounding recovery escalation; do \
 		uv run python scripts/cohens_kappa.py evals/calibration/labels/$$dim.json; \
 	done
+
+.PHONY: grafana-ui grafana-ui-off
+
+# Grafana is internal-only, and Docker binds no port on an internal network. This
+# is the loopback sidecar documented in docs/architecture/metrics.md, the same
+# pattern as scripts/mlflow-ui.sh: the UI never joins edge.
+grafana-ui:  ## Open Grafana on loopback:13000 through a socat sidecar
+	@docker rm -f citadel-grafana-ui >/dev/null 2>&1 || true
+	docker run -d --name citadel-grafana-ui --restart unless-stopped \
+		--network bridge -p 127.0.0.1:13000:13000 alpine/socat \
+		tcp-listen:13000,fork,reuseaddr tcp-connect:grafana:3000
+	docker network connect citadel_internal citadel-grafana-ui
+	@echo "open http://localhost:13000 (admin / secrets/grafana_admin_password)"
+
+grafana-ui-off:  ## Close the Grafana loopback sidecar
+	@docker rm -f citadel-grafana-ui >/dev/null && echo "closed" || echo "already down"
 
 .PHONY: mlflow-bootstrap
 

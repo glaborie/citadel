@@ -1,0 +1,136 @@
+{
+  "uid": "citadel-controls",
+  "title": "Citadel controls",
+  "tags": ["citadel"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Runs by outcome",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (increase(citadel_runs_total[$__rate_interval]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Model calls by outcome",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (increase(citadel_model_calls_total[$__rate_interval]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Tokens by kind",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (kind) (increase(citadel_model_tokens_total[$__rate_interval]))",
+          "legendFormat": "{{kind}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Model cost: reported USD vs unreported calls",
+      "description": "Reported cost and calls whose cost the gateway did not report. 'Free' and 'unknown' are different answers, so neither series may be dropped.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(citadel_model_cost_usd_total[$__rate_interval]))",
+          "legendFormat": "reported USD"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(increase(citadel_model_cost_unreported_total[$__rate_interval]))",
+          "legendFormat": "unreported calls"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "DLP blocks by surface and reason",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (surface, reason) (increase(citadel_dlp_blocks_total[$__rate_interval]))",
+          "legendFormat": "{{surface}} {{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Policy denials by rule",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (rule) (increase(citadel_policy_denials_total[$__rate_interval]))",
+          "legendFormat": "{{rule}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Cache lookups by result",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (result) (increase(citadel_cache_lookups_total[$__rate_interval]))",
+          "legendFormat": "{{result}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Approval wait, p95",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, decision) (rate(citadel_approval_wait_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p95 {{decision}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Scrape targets up",
+      "description": "Prometheus's own up metric. It is the only series that exists before a run produces a citadel_* sample, so an empty dashboard is distinguishable from a broken scrape.",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    }
+  ]
+}
