@@ -30,6 +30,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 BASE = "http://127.0.0.1:5000"
@@ -159,12 +160,31 @@ def report() -> int:
     return 0 if status == 200 else 1
 
 
+DEFAULT_KEY_FILE = "/run/secrets/omniroute_api_key"
+
+
+def secret_key() -> str:
+    """The OmniRoute key: an environment value if one was given, else the mounted file.
+
+    The stack hands credentials over as files (`<NAME>_FILE`), so the file is the normal
+    case; the environment branch exists for a one-off run with `docker exec -e`.
+    """
+    direct = os.environ.get("OMNIROUTE_API_KEY", "").strip()
+    if direct:
+        return direct
+    candidates = [os.environ.get("OMNIROUTE_API_KEY_FILE", ""), DEFAULT_KEY_FILE]
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            return Path(candidate).read_text(encoding="utf-8").strip()
+    return ""
+
+
 def main() -> int:
-    api_key = os.environ.get("OMNIROUTE_API_KEY", "")
+    api_key = secret_key()
     api_base = os.environ.get("OMNIROUTE_BASE_URL", "http://omniroute:20128/v1")
     model_name = os.environ.get("MODEL_ALIAS_FAST", "auto/best-fast")
     if not api_key:
-        print("OMNIROUTE_API_KEY is not set: cannot create the gateway secret", file=sys.stderr)
+        print(f"no OmniRoute key: set OMNIROUTE_API_KEY or mount {DEFAULT_KEY_FILE}", file=sys.stderr)
         return 2
     print(f"gateway setup: {api_base} model={model_name}")
     secret_id = ensure_secret(api_key, api_base)

@@ -38,7 +38,7 @@ internet.
 | `MLFLOW_ENABLE_AI_GATEWAY=true` | mounts `/gateway/...`; without it the assistant has no provider it can reach |
 | `MLFLOW_GATEWAY_API_BASE_ALLOW_PRIVATE_IPS=true` | the gateway refuses a private upstream by default (SSRF guard); OmniRoute is private on purpose |
 | `MLFLOW_GATEWAY_API_BASE_ALLOWED_SCHEMES=https,http` | the default allowlist is https-only, and a sibling service speaks http |
-| `OMNIROUTE_API_KEY` | the gateway's secret is created from it |
+| `OMNIROUTE_API_KEY_FILE` + the `omniroute_api_key` secret | the gateway's secret is created from it; a credential goes in a file, never in a service environment — the custody test enforces that |
 
 Then:
 
