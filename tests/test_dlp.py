@@ -207,6 +207,8 @@ def test_names_are_redacted(name: str) -> None:
         ("Docker daemon is not running", "Docker"),
         ("Keycloak realm citadel is down", "Keycloak"),
         ("Temporal workflow failed on Postgres", "Temporal"),
+        ("Count with docker ps --filter name=citadel-", "ps --filter name"),
+        ("operator scripts (scripts/mlflow-ui.sh)", "mlflow-ui.sh"),
     ],
 )
 def test_technical_nouns_are_not_redacted(text: str, name: str) -> None:

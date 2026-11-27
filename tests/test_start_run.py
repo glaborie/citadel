@@ -53,6 +53,11 @@ def test_the_tenant_and_user_are_never_in_the_body() -> None:
     assert "user_id" not in body
 
 
+def test_the_launcher_reads_the_current_docker_pack_name() -> None:
+    launcher = _launcher()
+    assert launcher.default_pack("docker") == "docker-1.1.0"
+
+
 def test_a_setting_prefers_the_environment_and_then_the_secret_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:

@@ -136,7 +136,7 @@ def test_cross_tenant_run_is_invisible() -> None:
         {
             "agent_id": "docker",
             "risk_tier": "T0",
-            "prompt_pack_version": "docker-1.0.0",
+            "prompt_pack_version": "docker-1.1.0",
             "model_alias": "auto/best-fast",
         },
     )

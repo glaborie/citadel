@@ -36,7 +36,7 @@ def test_a_submitted_task_runs_to_an_answer() -> None:
         {
             "agent_id": "docker",
             "risk_tier": "T0",
-            "prompt_pack_version": "docker-1.0.0",
+            "prompt_pack_version": "docker-1.1.0",
             "model_alias": "auto/best-fast",
             "task": "Call inspect_containers once, then name one running container.",
         },

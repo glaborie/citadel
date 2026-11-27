@@ -15,7 +15,7 @@ cd ~/projects/citadel
 set -a; . ./.env; set +a
 
 scripts/start-run.py --task "Call inspect_containers, then name one running container." --wait
-# run 4f61bb68-7044-4f24-ae22-0c6389690880 created for alice (docker, docker-1.0.0)
+# run 4f61bb68-7044-4f24-ae22-0c6389690880 created for alice (docker, docker-1.1.0)
 # run 4f61bb68-7044-4f24-ae22-0c6389690880: completed
 ```
 
