@@ -29,3 +29,6 @@ knowledge/*
 secrets/*
 !secrets/citadel.env
 .smellcheck-cache
+
+# `make eval-samples --html /out/...` writes here
+.eval-out/
