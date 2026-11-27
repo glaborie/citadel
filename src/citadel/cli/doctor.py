@@ -11,7 +11,7 @@ import os
 import subprocess
 import urllib.error
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from citadel.cli import EXIT_OK, EXIT_UNAVAILABLE, emit
 from citadel.cli.http import reachable
@@ -19,9 +19,9 @@ from citadel.cli.http import reachable
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-OK = "ok"
-DOWN = "down"
-SKIP = "skip"
+OK: Final = "ok"
+DOWN: Final = "down"
+SKIP: Final = "skip"
 
 
 @dataclass(frozen=True)
@@ -121,14 +121,14 @@ def run_checks(probes: Sequence[Callable[[], Check]] | None = None) -> Report:
     return Report(checks=[probe() for probe in (probes or PROBES)])
 
 
+def _line(check: Check) -> str:
+    mark = {OK: "ok  ", DOWN: "DOWN", SKIP: "skip"}[check.status]
+    line = f"  {mark}  {check.name:<12} {check.detail}"
+    return line + (f"\n        -> {check.hint}" if check.status == DOWN and check.hint else "")
+
+
 def render(report: Report) -> str:
-    lines = []
-    for check in report.checks:
-        mark = {OK: "ok  ", DOWN: "DOWN", SKIP: "skip"}[check.status]
-        line = f"  {mark}  {check.name:<12} {check.detail}"
-        if check.status == DOWN and check.hint:
-            line += f"\n        -> {check.hint}"
-        lines.append(line)
+    lines = [_line(check) for check in report.checks]
     verdict = "healthy" if report.healthy else "not healthy"
     return "\n".join([f"citadel doctor: {verdict}", *lines]) + "\n"
 
