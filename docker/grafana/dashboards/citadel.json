@@ -131,6 +131,69 @@
           "legendFormat": "{{instance}}"
         }
       ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Ingress refusals per minute",
+      "description": "The expression CitadelRunRefusalsSustained evaluates, in per-minute units. The dashed threshold at 5 runs/min is the alert line: crossing it is not the alert, staying above it for 10m is.",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 40},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "custom": {"drawStyle": "line", "lineWidth": 2, "thresholdsStyle": {"mode": "dashed"}},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 5}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(citadel_runs_refused_total[5m])) * 60",
+          "legendFormat": "refusals/min"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Firing alerts",
+      "description": "Prometheus' own ALERTS series for the rules it has loaded. Empty means nothing is firing; it carries the alert name only, never a tenant or a run.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 40},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ALERTS{alertstate=\"firing\"}",
+          "legendFormat": "{{alertname}}",
+          "instant": true
+        }
+      ]
     }
   ]
 }
