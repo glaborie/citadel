@@ -162,6 +162,7 @@ calibration-kappa:  ## Pair labels with scores and measure kappa per dimension
 grafana-ui:  ## Open Grafana on loopback:13000 through a socat sidecar
 	@docker rm -f citadel-grafana-ui >/dev/null 2>&1 || true
 	docker run -d --name citadel-grafana-ui --restart unless-stopped \
+		--pids-limit 64 --security-opt no-new-privileges \
 		--network bridge -p 127.0.0.1:13000:13000 alpine/socat \
 		tcp-listen:13000,fork,reuseaddr tcp-connect:grafana:3000
 	docker network connect citadel_internal citadel-grafana-ui
