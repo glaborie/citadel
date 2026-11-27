@@ -18,7 +18,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from citadel import dlp
-from citadel.model.client import ModelUnavailable
+from citadel.model.client import ModelUnavailable, contains_tool_markup
 from citadel.model.types import (
     Budget,
     Outcome,
@@ -88,6 +88,12 @@ def run_agent(
             )
             steps.append(Step("run.end", "aborted at budget"))
             return Trajectory("budget_exceeded", tuple(steps), usage)
+
+        if not reply.tools and contains_tool_markup(reply.content):
+            # A request in prose never reached `authorize`; completing here would
+            # report the task done with the markup as its answer.
+            steps.append(Step("run.end", "refused tool-call markup in content"))
+            return Trajectory("refused", tuple(steps), usage)
 
         if not reply.tools:
             steps.append(Step("run.end", "answered without tools"))
