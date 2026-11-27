@@ -82,10 +82,10 @@ doctor:  ## Report whether each dependency answers (same as `citadel doctor`)
 	@uv run --quiet citadel doctor
 
 run:  ## Start a run: make run TASK="call inspect_containers, then name one container"
-	@scripts/start-run.py --task "$(TASK)" --wait
+	@set -a; . ./.env; set +a; scripts/start-run.py --task "$(TASK)" --wait
 
 token:  ## Print a bearer token for the API (curl / HTTP clients)
-	@scripts/start-run.py --token-only
+	@set -a; . ./.env; set +a; scripts/start-run.py --token-only
 
 eval:  ## Grade the committed trajectory fixtures
 	uv run python -m citadel.evals
