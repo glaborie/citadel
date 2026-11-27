@@ -23,6 +23,9 @@ x-app: &app
   restart: unless-stopped
   security_opt:
     - no-new-privileges:true
+  # Threads count towards this, not just processes: uvicorn plus its pool is
+  # far below it, and a fork bomb stops here (#228).
+  pids_limit: 256
   logging: *logging
   networks:
     - internal
@@ -33,9 +36,25 @@ x-http-health: &http-health
   retries: 12
   start_period: 20s
 
+# Baseline for the third-party infrastructure that shares `internal`. These
+# images start as root inside their own container and write their own state, so
+# the sandbox set (read_only, cap_drop ALL, non-root user) would break them.
+# What they take without changing behaviour is the rest of the ADR-012 set: no
+# path to new privileges, so a setuid binary inside an exploited postgres
+# extension or Keycloak deserialisation bug cannot raise itself, and a pid
+# ceiling, so one compromised container cannot exhaust the host's pid table and
+# take every other service down with it (#228). The ceiling counts threads, so a
+# JVM or a database needs room; services whose role is known to be smaller
+# tighten it where they are defined.
+x-infra: &infra
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 512
+
 services:
   postgres:
     image: postgres:18-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71
+    <<: *infra
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
@@ -60,6 +79,7 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.8.2@sha256:7e66a96e4739239070aeaf72e4c5decf0f7f682cfc725b9f7ea2b336eaba38b3
+    <<: *infra
     # Keycloak has no *_FILE config source, so the entrypoint reads its two
     # passwords from the mounted files and exports them into the process env.
     # Exports are not part of Config.Env, which is what the proxy exposes.
@@ -115,6 +135,7 @@ services:
 
   temporal:
     image: temporalio/auto-setup:1.29.7@sha256:f14912b699cf73015ad5c4fc18d522d4b014db90e794039214dfb7c022c2644f
+    <<: *infra
     # auto-setup reads POSTGRES_PWD but has no file variant, so the entrypoint
     # reads the mounted secret and exports it before handing over.
     entrypoint:
@@ -150,6 +171,9 @@ services:
 
   temporal-ui:
     image: temporalio/ui:2.58.1@sha256:ac3c13eddb4547d830991bb5eee93a5d97140134522b7297fdb2be1fe25ef925
+    <<: *infra
+    # A web UI with no thread pool to speak of.
+    pids_limit: 256
     environment:
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_CORS_ORIGINS: http://localhost:18080
@@ -174,6 +198,8 @@ services:
 
   openfga-migrate:
     image: openfga/openfga:v1.23.0@sha256:2a1b4ef95f2f27e6d420f11cf14390b4f537e699de8d18b6a07d8b355e11cf02
+    <<: *infra
+    pids_limit: 256
     # One-shot schema migration; the distroless image has no shell to chain it.
     # The URI carries no password; pgx reads it from the mounted .pgpass file,
     # so neither Config.Cmd nor Config.Env holds the credential.
@@ -195,6 +221,8 @@ services:
 
   openfga:
     image: openfga/openfga:v1.23.0@sha256:2a1b4ef95f2f27e6d420f11cf14390b4f537e699de8d18b6a07d8b355e11cf02
+    <<: *infra
+    pids_limit: 256
     command:
       - run
       - --datastore-engine=postgres
@@ -214,6 +242,9 @@ services:
 
   omniroute:
     image: ghcr.io/cheaper-inference/omniroute:3.8.54@sha256:2c4c755a54f8ce5341bc1856580b71f47a0f16a9afab4a55f84d540810631f68
+    <<: *infra
+    # Node: one event loop, a small thread pool.
+    pids_limit: 256
     # The image has no *_FILE support for these values, so the entrypoint reads
     # them from mounted files. OPENROUTER_API_KEY is not used by this image at
     # all: provider credentials live in its SQLite store, configured through the
@@ -255,6 +286,7 @@ services:
     # may not publish a port or join edge before the ADR-017 Keycloak proxy
     # fronts it; tests/test_mlflow_exposure.py enforces that.
     image: ghcr.io/mlflow/mlflow:v3.18.0@sha256:257204c77980b0f3450a26eb6089e487603fcdd4509529eadaf88f90669f5c13
+    <<: *infra
     command:
       - mlflow
       - server
@@ -342,6 +374,7 @@ services:
       - prometheus-data:/prometheus
     security_opt:
       - no-new-privileges:true
+    pids_limit: 256
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9090/-/healthy"]
       interval: 15s
@@ -378,6 +411,7 @@ services:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
+    pids_limit: 256
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
       interval: 15s
@@ -390,6 +424,8 @@ services:
 
   presidio:
     image: mcr.microsoft.com/presidio-analyzer:2.2.362@sha256:286e3fa7f3a7426e775e8564fe1870f1ba8f999d3ab8bbb8cc46a44355d9d6e9
+    <<: *infra
+    pids_limit: 256
     environment:
       PORT: "3000"
     healthcheck:
@@ -407,6 +443,7 @@ services:
     # boundary, so a cross-tenant read is a collection that does not exist.
     # Internal only; no port, no credentials to leak or rotate.
     image: qdrant/qdrant:v1.20.0@sha256:9bfc89f9914fc14876a88c05270685921a55b8877b254a98bcc1cc2f0a424cd2
+    <<: *infra
     volumes:
       - qdrant-data:/qdrant/storage
     healthcheck:
@@ -472,6 +509,7 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    pids_limit: 256
     tmpfs:
       - /tmp
       - /var/cache/searxng:uid=977,gid=977,mode=0755
@@ -828,6 +866,7 @@ services:
     # proxy whose only reachable destination is api.github.com.
     security_opt:
       - no-new-privileges:true
+    pids_limit: 256
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/3128"]
       interval: 15s
@@ -868,6 +907,7 @@ services:
       - /run
     security_opt:
       - no-new-privileges:true
+    pids_limit: 128
     logging: *logging
     networks:
       - sandbox
