@@ -1417,6 +1417,13 @@
       "name": "Extract Constant"
     },
     {
+      "fingerprint": "39fb8c00ad86",
+      "file": "src/citadel/retrieval/corpus.py",
+      "pattern": "SC601",
+      "line": 40,
+      "name": "Extract Constant"
+    },
+    {
       "fingerprint": "a273da25353d",
       "file": "src/citadel/retrieval/embed.py",
       "pattern": "SC103",

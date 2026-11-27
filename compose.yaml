@@ -93,7 +93,7 @@ services:
     volumes:
       - ./docker/keycloak:/opt/keycloak/data/import:ro
     ports:
-      - "18081:8080"
+      - "127.0.0.1:18081:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -243,7 +243,7 @@ services:
     volumes:
       - omniroute-data:/app/data
     ports:
-      - "20128:20128"
+      - "127.0.0.1:20128:20128"
     # The image ships its own HEALTHCHECK on /healthz.
     logging: *logging
     networks:
@@ -529,7 +529,7 @@ services:
       - run_token_private_key
       - metrics_token
     ports:
-      - "18000:8000"
+      - "127.0.0.1:18000:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -565,7 +565,7 @@ services:
       - db_dsn
       - console_session_key
     ports:
-      - "18001:8001"
+      - "127.0.0.1:18001:8001"
     depends_on:
       keycloak:
         condition: service_healthy
