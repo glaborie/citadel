@@ -20,7 +20,7 @@ set -euo pipefail
 NAME="citadel-mlflow-ui"
 PORT="${PORT:-5000}"
 NETWORK="${NETWORK:-citadel_internal}"
-IMAGE="${IMAGE:-alpine/socat}"
+IMAGE="${IMAGE:-alpine/socat@sha256:5aa280c6fc5bee94dbd2bbdf2a58d30f50396eaa110be84b03636945b157ae68}"
 UPSTREAM="${UPSTREAM:-mlflow:5000}"
 
 usage() {
