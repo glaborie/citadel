@@ -23,7 +23,11 @@ import pytest
 from citadel.research import fetch
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCES = sorted((ROOT / "src").rglob("*.py"))
+SOURCES = sorted([*(ROOT / "src").rglob("*.py"), *(ROOT / "scripts").rglob("*.py")])
+DYNAMIC_URL = (
+    "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected"
+)
+READER = ROOT / "scripts" / "read-eval-samples.py"
 RULE = "python.lang.security.audit.httpsconnection-detected.httpsconnection-detected"
 
 
@@ -88,3 +92,34 @@ def test_the_exception_is_documented() -> None:
     guide = (ROOT / "docs" / "security" / "static-analysis.md").read_text(encoding="utf-8")
     assert RULE in guide
     assert "fetch.py" in guide
+
+
+def test_the_reader_suppresses_exactly_one_rule_and_names_it() -> None:
+    """scripts/ is code too: a bare suppression there would silence a whole line."""
+    text = READER.read_text(encoding="utf-8")
+    assert text.count("# nosemgrep") == 1
+    assert f"# nosemgrep: {DYNAMIC_URL}" in text
+
+
+def test_the_reader_cannot_be_pointed_at_the_filesystem() -> None:
+    """What justifies the suppression above: the URL is not actor-controlled.
+
+    `urllib` honours `file://`, which is the rule's premise. The base is the operator's
+    tracking URI and must be http(s); the dataset id comes from the ledger and is escaped
+    into the path.
+    """
+    module = _script(READER)
+    for bad in ("file:///etc/passwd", "ftp://mlflow:5000", "mlflow:5000"):
+        with pytest.raises(ValueError, match="must be http"):
+            module.base_url(bad)
+    assert module.base_url("http://mlflow:5000/../admin") == "http://mlflow:5000"
+
+
+def _script(path: Path) -> Any:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("script_under_test", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module

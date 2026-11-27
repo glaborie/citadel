@@ -60,6 +60,9 @@ def base_url(tracking_uri: str) -> str:
 def records(tracking_uri: str, dataset_id: str) -> list[dict[str, Any]]:
     path = f"/api/3.0/mlflow/datasets/{urllib.parse.quote(dataset_id, safe='')}/records"
     request = urllib.request.Request(f"{base_url(tracking_uri)}{path}")
+    # The rule's premise is an actor-controlled URL. This one is the operator's
+    # tracking URI, constrained to http(s) by base_url(), with an escaped dataset id.
+    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
     with urllib.request.urlopen(request, timeout=15) as response:
         payload = dict(json.loads(response.read()))
     body = payload.get("records", [])
