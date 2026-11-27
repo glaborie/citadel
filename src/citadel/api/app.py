@@ -17,10 +17,10 @@ from typing import Annotated, Any
 
 import jwt
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from citadel import __version__, dlp, telemetry, tool_outputs
+from citadel import __version__, dlp, metrics, telemetry, tool_outputs
 from citadel.approval_requests import close_request
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
@@ -149,6 +149,11 @@ def create_app(
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
         return {"status": "ok", "version": __version__}
+
+    @app.get("/metrics", include_in_schema=False)
+    def prometheus_metrics() -> Response:
+        """The scrape endpoint: aggregate counters only, never tenant or run labels."""
+        return Response(content=metrics.render(), media_type=metrics.CONTENT_TYPE)
 
     def current_principal(
         authorization: Annotated[str | None, Header()] = None,
