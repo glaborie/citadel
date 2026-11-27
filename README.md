@@ -23,7 +23,7 @@ The table is the architecture; the **Status** column says which rows exist as co
 | 8 | Idempotency | Durable hashed tool keys + Postgres unique constraint; effectively-once semantics | built |
 | 9 | Telemetry | OTel spans to MLflow; hash-chained security audit log in Postgres | built: spans carry the audit event id; audit chain built |
 | 10 | MCP support | Adapter seam only; consume external tools in a later milestone | seam only |
-| 11 | Permission-aware RAG | ACL-filtered Qdrant hybrid retrieval → rerank → structured citations | built; the retrieval activity is not yet called by a workflow (D1) |
+| 11 | Permission-aware RAG | ACL-filtered Qdrant hybrid retrieval → rerank → structured citations | built; the orchestrator's task run retrieves once and records citations in `run.end` |
 | 11a | Web research | SearXNG + bounded trafilatura fetcher; no internal reach; `untrusted_external` label | built |
 | 12 | Code mode | Deferred; only inside the sandbox, never in the worker | deferred |
 | 13 | Trajectory evaluation | MLflow 3.x offline + online grading of full traces | deterministic offline harness, live recorder and OTLP export built; judge rubrics built and report-only |
@@ -154,6 +154,6 @@ tests/                        # 765 hermetic tests + opt-in live suites
 
 ## Verification status
 
-Design reviewed and confirmed by the human owner on 2026-11-23. Implementation is verified against a real host: 22 long-running services, 20 with health checks and all 20 healthy; live Keycloak login, real OpenFGA decisions, real Postgres RLS, real GitHub reads, a draft-PR write that reached GitHub's `createPullRequest` mutation, and a DLP block that redacted a planted Swiss IBAN and refused a planted token. v0.2 adds the tenant-pairing retrieval tests, the citation validator, the recorded secret-surface sweep and a regenerated red-team report (31/35, 0 failing); retrieval is built and tested but not yet called by a workflow (D1).
+Design reviewed and confirmed by the human owner on 2026-11-23. Implementation is verified against a real host: 22 long-running services, 20 with health checks and all 20 healthy; live Keycloak login, real OpenFGA decisions, real Postgres RLS, real GitHub reads, a draft-PR write that reached GitHub's `createPullRequest` mutation, and a DLP block that redacted a planted Swiss IBAN and refused a planted token. v0.2 adds the tenant-pairing retrieval tests, the citation validator, the recorded secret-surface sweep and a regenerated red-team report (31/35, 0 failing); retrieval is built, tested and called by the orchestrator's task run (D1 closed by #183).
 
 Nothing in `docs/` is treated as done on paper: every control above has a recorded drill in `docs/implementation-notes/v0.1-verification.md` or `docs/exit-review-v0.2.md`, including the ones that failed first. The eval harness grades 14 cases (155/155 checks), and the T1 run's MLflow trace carries the policy, DLP, approval and tool spans with matching audit IDs. Open verification items inherited from the design (exact OmniRoute image commit, MLflow auth wiring, gVisor availability) are tracked in `AGENTS.md`; the OmniRoute and MLflow image questions are answered, MLflow's human-path auth remains open because the UI is not published, and `runsc` is documented as unavailable on this host with the Compose flags as the actual isolation boundary.

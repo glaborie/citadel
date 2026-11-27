@@ -28,8 +28,8 @@ a trajectory that claims it came from a run is wrong.
 |---|---|---|
 | `run.start` | the API's run-submit route | live |
 | `model.call` | `ModelActivities._record`, refusals included | live |
-| `retrieval.query` | `RetrievalActivities.retrieve` | live |
-| `retrieval.result` | `RetrievalActivities.retrieve` | live |
+| `retrieval.query` | `RetrievalActivities.retrieve`, called once by the orchestrator's task run | live |
+| `retrieval.result` | `RetrievalActivities.retrieve`, called once by the orchestrator's task run | live |
 | `policy.decision` | `ToolActivities.authorize_tool`; the API's `/policy/authorize` | live |
 | `dlp.event` | tool runner (input/output), `ToolActivities._audit_dlp` (record), `ModelActivities._gate`, operator and API approvals | live |
 | `approval.decision` | the API's approval route | live |
