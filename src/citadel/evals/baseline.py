@@ -45,6 +45,14 @@ class Key:
             "judge": self.judge,
         }
 
+    def comparable_to(self, other: Key) -> bool:
+        """Same dataset, pack and judge: the model alias is the variable under test."""
+        return (self.dataset, self.prompts, self.judge) == (
+            other.dataset,
+            other.prompts,
+            other.judge,
+        )
+
 
 @dataclass(frozen=True)
 class Score:
@@ -95,6 +103,35 @@ def key_for(cases: Iterable[Case], *, dataset: str, judge: str = OFFLINE) -> Key
     )
 
 
+def judge_label(judge: str | Iterable[str] | None) -> str:
+    """One stable name for the judge identity: `offline` when nothing judged.
+
+    An online sample carries its judge dimensions as a list; the key has to say the
+    same thing the offline row's `--judge` string does, or the two cannot meet.
+    """
+    if judge is None:
+        return OFFLINE
+    if isinstance(judge, str):
+        return judge or OFFLINE
+    names = sorted({str(name) for name in judge if str(name)})
+    return "+".join(names) or OFFLINE
+
+
+def row_for(
+    cases: Iterable[Case],
+    grades: Iterable[Grade],
+    *,
+    dataset: str,
+    judge: str | Iterable[str] | None = OFFLINE,
+) -> Row:
+    """This run as a row: the key from its trajectories and the grades it produced."""
+    return Row(
+        key=key_for(cases, dataset=dataset, judge=judge_label(judge)),
+        scores=summarise(grades),
+        recorded=today(),
+    )
+
+
 def summarise(grades: Iterable[Grade]) -> dict[str, Score]:
     """One line per grader: how many checks passed, and whether any of them gate."""
     counts: dict[str, list[int]] = {}
@@ -124,13 +161,43 @@ def load(path: Path = DEFAULT_BASELINE) -> list[Row]:
 def _row(raw: object, source: Path) -> Row:
     if not isinstance(raw, dict):
         raise DatasetError(f"{source}: every baseline must be an object")
-    key = Key(**{field: str(raw[field]) for field in ("dataset", "prompts", "model")},
-              judge=str(raw.get("judge", OFFLINE)))
+    key = Key(
+        **{field: str(raw[field]) for field in ("dataset", "prompts", "model")},
+        judge=str(raw.get("judge", OFFLINE)),
+    )
     scores = {
         name: Score(int(values["passed"]), int(values["total"]), bool(values.get("gating", True)))
         for name, values in dict(raw.get("scores", {})).items()
     }
     return Row(key=key, scores=scores, recorded=str(raw.get("recorded", "unknown")))
+
+
+def comparable(key: Key, rows: Iterable[Row]) -> Row | None:
+    """The row this run is judged against: its own key, else the same everything but model.
+
+    A model-alias change is the experiment, not a loss of comparability: dataset, prompt
+    packs and judge must match, and the nearest earlier alias is the accepted reference.
+    Rows are appended in recording order, so "nearest" is the last comparable one.
+    """
+    ordered = list(rows)
+    for row in ordered:
+        if row.key == key:
+            return row
+    for row in reversed(ordered):
+        if row.key.comparable_to(key):
+            return row
+    return None
+
+
+def row_from(
+    key: dict[str, str],
+    scores: dict[str, dict[str, object]],
+    *,
+    recorded: str = "unknown",
+    source: Path = DEFAULT_BASELINE,
+) -> Row:
+    """A row from the flat shape the file and an `eval.sample` audit event share."""
+    return _row({**key, "scores": scores, "recorded": recorded}, source)
 
 
 def compare(current: dict[str, Score], row: Row) -> list[str]:
@@ -206,7 +273,9 @@ def flush(path: Path, payload: dict[str, object]) -> None:
 
 def _columns(rows: list[Row], current: Row | None) -> list[tuple[str, dict[str, Score]]]:
     columns = [(f"baseline {item.key.label()}", item.scores) for item in rows]
-    return columns + ([("this run", current.scores)] if current is not None else [])
+    return columns + (
+        [(f"this run {current.key.label()}", current.scores)] if current is not None else []
+    )
 
 
 def render(rows: list[Row], current: Row | None = None) -> str:

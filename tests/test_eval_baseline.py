@@ -107,6 +107,69 @@ def test_a_new_key_adds_a_row_and_leaves_the_old_one_alone(tmp_path: Path) -> No
     assert rows[0].scores["tool.selection"] == score(14, 14)
 
 
+def test_a_model_alias_change_is_compared_with_the_accepted_row(tmp_path: Path) -> None:
+    """The alias is the experiment, not a break: the accepted row stays the reference."""
+    path = tmp_path / "baseline.json"
+    accepted = baseline.Row(
+        key=baseline.Key(dataset="v2", prompts="docker-1.0.0", model="auto/best-fast"),
+        scores={"tool.selection": score(14, 14)},
+        recorded="2026-11-26",
+    )
+    baseline.record(path, accepted)
+    changed = baseline.Row(
+        key=baseline.Key(dataset="v2", prompts="docker-1.0.0", model="auto/best-reasoning"),
+        scores={"tool.selection": score(13, 14)},
+        recorded="2026-11-27",
+    )
+
+    reference = baseline.comparable(changed.key, baseline.load(path))
+
+    assert reference == accepted
+    assert reference is not None
+    assert baseline.compare(changed.scores, reference) == [
+        "tool.selection: 13/14 (0.929) is below the baseline 14/14 (1.000) for "
+        "v2 · docker-1.0.0 · auto/best-fast · judge=offline"
+    ]
+
+    baseline.record(path, changed)
+    rows = baseline.load(path)
+    assert [item.key.model for item in rows] == ["auto/best-fast", "auto/best-reasoning"]
+    assert rows[0].scores == accepted.scores, "the accepted row was not overwritten"
+
+
+def test_a_changed_prompt_pack_is_not_comparable() -> None:
+    """A different pack is a different suite; comparing it would call a change a regression."""
+    accepted = baseline.Row(
+        key=baseline.Key(dataset="v2", prompts="docker-1.0.0", model="auto/best-fast"),
+        scores={"tool.selection": score(14, 14)},
+        recorded="2026-11-26",
+    )
+    changed = baseline.Row(
+        key=baseline.Key(dataset="v2", prompts="docker-1.0.1", model="auto/best-fast"),
+        scores={"tool.selection": score(13, 14)},
+        recorded="2026-11-27",
+    )
+
+    assert baseline.comparable(changed.key, [accepted]) is None
+
+
+def test_a_judge_change_is_not_comparable() -> None:
+    accepted = baseline.Row(
+        key=baseline.Key(dataset="v2", prompts="docker-1.0.0", model="auto/best-fast"),
+        scores={"judge.plan": score(2, 2, gating=False)},
+        recorded="2026-11-26",
+    )
+    changed = baseline.Row(
+        key=baseline.Key(
+            dataset="v2", prompts="docker-1.0.0", model="auto/best-fast", judge="plan"
+        ),
+        scores={"judge.plan": score(1, 2, gating=False)},
+        recorded="2026-11-27",
+    )
+
+    assert baseline.comparable(changed.key, [accepted]) is None
+
+
 def test_recording_the_same_run_twice_says_so(tmp_path: Path) -> None:
     path = tmp_path / "baseline.json"
     baseline.record(path, row({"tool.selection": score(14, 14)}))
@@ -174,3 +237,34 @@ def test_the_cli_table_is_markdown_on_stdout(capsys: pytest.CaptureFixture[str])
 
     assert out.startswith("| Grader |")
     assert "| tool.selection |" in out
+
+
+def _rewrite_dataset(tmp_path: Path, **run_start: str) -> Path:
+    raw = json.loads(DATASET.read_text(encoding="utf-8"))
+    for case in raw["cases"]:
+        for event in case["events"]:
+            if event["type"] == "run.start":
+                event.update(run_start)
+    path = tmp_path / "dataset.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    return path
+
+
+def test_the_cli_gate_compares_a_new_alias_against_the_accepted_row(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An alias bump is a diff against the accepted row, not a missing baseline."""
+    dataset = _rewrite_dataset(tmp_path, model_alias="auto/next")
+
+    assert main([str(dataset), "--gate"]) == 0
+    assert "gating graders at or above baseline" in capsys.readouterr().err
+
+
+def test_the_cli_gate_does_not_compare_across_prompt_packs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A new pack has no accepted row of its own; it must be recorded, not guessed."""
+    dataset = _rewrite_dataset(tmp_path, prompt_pack_version="docker-9.9.9")
+
+    assert main([str(dataset), "--gate"]) == 1
+    assert "no baseline row" in capsys.readouterr().err

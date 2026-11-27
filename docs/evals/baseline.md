@@ -20,11 +20,22 @@ A change to any part is a **new row**, not an edit: a model bump, a new prompt p
 new dataset version all add a row and leave the old one in place. That is the only way a
 later reader can see what the suite used to do.
 
+## What the gate compares against
+
+An exact key wins. When the run's alias has no row yet, the gate uses the nearest earlier
+row with the same `dataset`, `prompts` and `judge`: a model-alias change is the variable
+being measured, not a reason to call the run incomparable. A changed prompt pack, dataset
+version or judge is **not** comparable - no accepted row exists under it yet - so the gate
+refuses with "no baseline row" until one is recorded.
+
+Recording the new alias appends a row; the accepted row is never rewritten. The table
+shows both columns side by side, which is the per-grader diff a reviewer reads.
+
 ## Recording one
 
 ```bash
 make eval-record                       # append a row for this run
-make eval-gate                         # compare against the row with this exact key
+make eval-gate                         # compare against the accepted row
 make eval-table                        # markdown table: every row, plus this run
 ```
 
