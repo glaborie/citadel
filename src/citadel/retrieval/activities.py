@@ -8,7 +8,6 @@ like every other span.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any
 
 from temporalio import activity
@@ -19,8 +18,6 @@ from citadel.retrieval.embed import Embedder
 from citadel.retrieval.errors import QueryRefused, RetrievalUnavailable
 from citadel.retrieval.ingest import collection_name
 from citadel.retrieval.query import (
-    CANDIDATES,
-    TOP_K,
     Entitlements,
     Results,
     SearchRequest,
@@ -28,28 +25,15 @@ from citadel.retrieval.query import (
     search,
 )
 from citadel.retrieval.rerank import Reranker
+from citadel.retrieval.types import RetrievalOutcome, RetrievalRequest
 from citadel.telemetry import record_span
 
 
-@dataclass(frozen=True)
-class RetrievalRequest:
-    run_id: str
-    tenant_id: str
-    user_id: str
-    agent_id: str
-    query: str
-    top_k: int = TOP_K
-    candidates: int = CANDIDATES
-
-
-@dataclass(frozen=True)
-class RetrievalOutcome:
-    status: str  # answered | refused
-    rule_id: str
-    detail: str
-    filter_set_hash: str = ""
-    citations: list[dict[str, Any]] = field(default_factory=list)
-    chunks: list[dict[str, Any]] = field(default_factory=list)
+def _entitlements(request: RetrievalRequest) -> Entitlements:
+    """The caller's tag set when it named one, else the tenant's own set."""
+    if request.entitlements:
+        return Entitlements(tags=tuple(sorted(set(request.entitlements))))
+    return Entitlements.for_tenant(request.tenant_id)
 
 
 class RetrievalActivities:
@@ -176,7 +160,7 @@ class RetrievalActivities:
         if refused is not None:
             return refused
         try:
-            entitlements = Entitlements.for_tenant(request.tenant_id)
+            entitlements = _entitlements(request)
         except QueryRefused as exc:
             return RetrievalOutcome(
                 status="refused", rule_id="retrieval.invalid_tenant", detail=str(exc)

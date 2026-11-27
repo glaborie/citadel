@@ -24,10 +24,7 @@ from citadel.retrieval.embed import Embedder
 from citadel.retrieval.errors import QueryRefused, RetrievalUnavailable
 from citadel.retrieval.ingest import DENSE, SPARSE, collection_name, sparse
 from citadel.retrieval.rerank import Reranker
-
-# Architecture §6: rerank top 50 to top 8.
-CANDIDATES: int = 50
-TOP_K: int = 8
+from citadel.retrieval.types import CANDIDATES, TOP_K
 
 
 @dataclass(frozen=True)

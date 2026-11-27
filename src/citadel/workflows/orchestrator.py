@@ -26,6 +26,7 @@ from temporalio.common import RetryPolicy
 # imports DLP and (through it) prometheus_client. Keep that chain unsandboxed.
 with workflow.unsafe.imports_passed_through():
     from citadel.model import Budget, Usage
+from citadel.retrieval.types import RetrievalOutcome, RetrievalRequest
 from citadel.workflows import activities
 from citadel.workflows.model_step import (
     ModelActivities,
@@ -78,6 +79,7 @@ class RunWorkflow:
             outcome=_outcome(result),
             safety_flags=_safety_flags(result),
             answer=str(result.output.get("answer", ""))[:4000],
+            citation_ids=[str(citation) for citation in result.output.get("citation_ids", [])],
         )
         return result
 
@@ -88,6 +90,7 @@ class RunWorkflow:
         outcome: str,
         safety_flags: list[str],
         answer: str = "",
+        citation_ids: list[str] | None = None,
     ) -> None:
         await workflow.execute_activity_method(
             activities.RunActivities.finish_run,
@@ -95,6 +98,7 @@ class RunWorkflow:
                 run_id=item.run_id,
                 tenant_id=item.tenant_id,
                 outcome=outcome,
+                citation_ids=citation_ids or [],
                 safety_flags=safety_flags,
                 answer=answer,
             ),
@@ -135,6 +139,10 @@ class RunWorkflow:
         # step: the answer that follows must still carry it to run.end.
         flags: set[str] = set()
         tool_name = item.tool or "model"
+        # One search before the first step: the evidence joins the task, so every
+        # step of the run sees the same retrieved context.
+        evidence, citations = await _retrieve(item)
+        task = f"{item.task}\n\n{evidence}" if evidence else item.task
 
         for step_no in range(1, item.max_steps + 1):
             step = await workflow.execute_activity_method(
@@ -144,7 +152,7 @@ class RunWorkflow:
                     tenant_id=item.tenant_id,
                     user_id=item.user_id,
                     agent_id=item.agent_id,
-                    task=item.task,
+                    task=task,
                     model_alias=item.model_alias,
                     pack_version=item.prompt_pack_version,
                     entitlements=list(item.entitlements),
@@ -176,6 +184,7 @@ class RunWorkflow:
                         "tokens": usage.total,
                         "cost_usd": usage.cost_usd,
                         "cost_source": usage.cost_source,
+                        "citation_ids": citations,
                     },
                     content_flags=sorted(flags),
                 )
@@ -185,6 +194,7 @@ class RunWorkflow:
                     tool=tool_name,
                     rule_id=step.rule_id,
                     detail=step.detail,
+                    output={"citation_ids": citations},
                     content_flags=sorted(flags),
                 )
             if step.status != "tool_requested":
@@ -193,6 +203,7 @@ class RunWorkflow:
                     tool=tool_name,
                     rule_id=step.rule_id,
                     detail=step.detail,
+                    output={"citation_ids": citations},
                     content_flags=sorted(flags),
                 )
 
@@ -203,6 +214,7 @@ class RunWorkflow:
                     tool=step.tool,
                     rule_id="delegation.unknown_agent",
                     detail=f"no specialist worker for agent {item.agent_id!r}",
+                    output={"citation_ids": citations},
                     content_flags=sorted(flags),
                 )
 
@@ -249,7 +261,12 @@ class RunWorkflow:
                     tool=tool_name,
                     rule_id="budget.exceeded",
                     detail=f"stopped after {step_no} steps: {exceeded}",
-                    output={"steps": step_no, "tokens": usage.total, "cost_usd": usage.cost_usd},
+                    output={
+                        "steps": step_no,
+                        "tokens": usage.total,
+                        "cost_usd": usage.cost_usd,
+                        "citation_ids": citations,
+                    },
                     content_flags=sorted(flags),
                 )
 
@@ -258,6 +275,54 @@ class RunWorkflow:
             tool=tool_name,
             rule_id="budget.exceeded",
             detail=f"no answer within {item.max_steps} steps",
-            output={"steps": item.max_steps, "tokens": usage.total, "cost_usd": usage.cost_usd},
+            output={
+                "steps": item.max_steps,
+                "tokens": usage.total,
+                "cost_usd": usage.cost_usd,
+                "citation_ids": citations,
+            },
             content_flags=sorted(flags),
         )
+
+
+async def _retrieve(item: RunInput) -> tuple[str, list[str]]:
+    """The evidence block and citation ids for this run, or nothing on refusal.
+
+    Retrieval is not a security gate: a refusal leaves the run without evidence,
+    exactly the trajectory a run had before it had a caller.
+    """
+    outcome = await workflow.execute_activity(
+        "retrieve",
+        _retrieval_request(item),
+        result_type=RetrievalOutcome,
+        start_to_close_timeout=timedelta(minutes=2),
+        retry_policy=RetryPolicy(maximum_attempts=2),
+    )
+    if outcome.status != "answered" or not outcome.chunks:
+        return "", []
+    return _evidence(outcome), [str(chunk["chunk_id"]) for chunk in outcome.chunks]
+
+
+def _retrieval_request(item: RunInput) -> RetrievalRequest:
+    return RetrievalRequest(
+        run_id=item.run_id,
+        tenant_id=item.tenant_id,
+        user_id=item.user_id,
+        agent_id=item.agent_id,
+        query=item.task,
+        # The run's ACL tag set. Roles partition the answer cache; the corpus
+        # entitlement a run holds is its tenant, and the activity refuses a set
+        # that does not carry this tenant's tag.
+        entitlements=[f"tenant:{item.tenant_id}"],
+    )
+
+
+def _evidence(outcome: RetrievalOutcome) -> str:
+    """Retrieved chunks as one message the model can cite; text is DLP-cleaned."""
+    blocks = [
+        f"chunk_id={chunk['chunk_id']} source_uri={chunk['source_uri']}"
+        f" revision={chunk['revision']} score={float(chunk['score']):.3f}\n{chunk['text']}"
+        for chunk in outcome.chunks
+    ]
+    header = "[retrieved evidence - cite a chunk_id or source_uri you rely on]"
+    return "\n\n".join([header, *blocks])

@@ -114,12 +114,17 @@ authorization cases (`RT-DUR-02`, `RT-AUTHZ-01`) and the two v0.3 cache cases
 
 ## Deviations and deltas
 
-**D1 — retrieval has no workflow caller.** `RetrievalActivities.retrieve` is
-constructed and registered on the orchestrator worker, and its query, ingestion,
-rerank and citation behaviour is tested. No workflow or specialist calls it, so
-no live run has emitted `retrieval.query` or `retrieval.result`. The exit
-criterion is about retrieval behaviour and is met at the activity boundary; the
-run-level path is not. Documented in `docs/architecture.md` §10.
+**D1 — retrieval had no workflow caller (closed in v0.3 by #183).**
+`RetrievalActivities.retrieve` was constructed and registered on the orchestrator
+worker, and its query, ingestion, rerank and citation behaviour was tested, but
+no workflow called it, so no live run emitted `retrieval.query` or
+`retrieval.result`. #183 gave it a caller: the orchestrator's task run retrieves
+once before the first model step, passes the run's tenant ACL tag, and feeds the
+evidence and citation ids into the model context and `run.end.citation_ids`. The
+workflow-level test and the recorded trajectory are in
+`docs/implementation-notes/issue-183-retrieval-caller.md`. The v0.2 exit
+criterion was met at the activity boundary; the run-level path is now covered
+too.
 
 **D2 — judged rubrics are report-only.** The rubric client and calibration work
 are delivered, but no dimension earns a gate: no judge dimension has a measured
@@ -134,10 +139,11 @@ kappa that justifies failing a build. This is the documented decision in
 2. **Stale red-team report.** The committed report was generated before the
    retrieval surface landed, so it showed `RT-INJ-02` pending and 30/35. It is
    regenerated here from the current pack.
-3. **Retrieval producer without a run.** The trajectory schema marks
-   `retrieval.query` and `retrieval.result` as live because the activity exists.
-   Until D1 is closed, no produced run contains them; the producer table is
-   accurate about capability, not about invocation.
+3. **Retrieval producer without a run.** The trajectory schema marked
+   `retrieval.query` and `retrieval.result` as live because the activity existed.
+   Until D1 was closed, no produced run contained them; the producer table was
+   accurate about capability, not about invocation. Closed by #183: the
+   orchestrator's task run is the caller, so a produced run carries both events.
 
 ## Not proven
 
@@ -145,7 +151,8 @@ kappa that justifies failing a build. This is the documented decision in
   2026-11-26 measurement and the offline custody tests.
 - `RT-AUTHZ-01` and `RT-DUR-02` are live-only and were not part of the offline
   red-team run. Their live executors exist in `tests/redteam/live/`.
-- Retrieval has not been called by a workflow (D1).
+- Retrieval was not called by a workflow in this review (D1); #183 closed that
+  afterwards.
 - gVisor `runsc` remains unavailable on this host; the hardened Compose flags are
   the actual sandbox boundary.
 - The full browser OIDC round-trip remains an owner-run check, not a CI check.
@@ -153,7 +160,7 @@ kappa that justifies failing a build. This is the documented decision in
 ## What v0.3 inherits
 
 - Close D1 by giving retrieval a caller and recording the first run with
-  `retrieval.query` / `retrieval.result`.
+  `retrieval.query` / `retrieval.result`. **Closed by #183.**
 - Online sampling of real runs into MLflow eval datasets; MLflow dataset and
   scorer logging is still absent.
 - Exact + semantic cache under ADR-018, its TTL and invalidation rules, and the

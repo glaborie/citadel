@@ -255,9 +255,13 @@ _OPERATIONAL = re.compile(
     re.IGNORECASE,
 )
 
-# A source URI, a bare source path or a chunk id. Parentheses are not required:
-# the skill's examples cite inline, and a token is checked wherever it appears.
-_CITATION_TOKEN = re.compile(r"chunk-[A-Za-z0-9_-]+|(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.\-/]+")
+# A source URI, a bare source path or a chunk id. The scheme is optional because
+# ingested sources are `fs:...` and `gh:...` and a model copies them verbatim;
+# parentheses are not required because the skill's examples cite inline, and a
+# token is checked wherever it appears.
+_CITATION_TOKEN = re.compile(
+    r"chunk-[A-Za-z0-9_-]+|(?:[A-Za-z0-9_.-]+:)?(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.\-/]+"
+)
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
