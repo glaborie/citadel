@@ -138,6 +138,16 @@ sandbox call, so it takes the new file without a restart.
 `CITADEL_CONSOLE_SESSION_KEY` signs the approval console's cookie. Update it,
 `make up`, and restart `approval-ui`; every console session is logged out.
 
+### Metrics scrape token
+
+`CITADEL_METRICS_TOKEN` is the bearer token for `/metrics` on the API and every
+worker. It is optional in SOPS: if unset, `scripts/provision-secrets.sh` generates
+`secrets/metrics_token` once and keeps it. To rotate, set a new value in
+`secrets/citadel.env` (or delete `secrets/metrics_token`), `make up`, and restart
+Prometheus so it reloads the file. The API and workers read it per request. An
+unset or unreadable file makes the endpoint answer `503`; it never falls back to
+an open scrape.
+
 ### Keycloak admin and OmniRoute
 
 `KEYCLOAK_ADMIN_PASSWORD` is a bootstrap value

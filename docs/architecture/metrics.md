@@ -17,10 +17,47 @@ Prometheus scrape config needs every target; `CITADEL_METRICS_PORT` sets the
 worker port (default `9100`) and the worker logs a warning and keeps running if
 the port cannot be bound.
 
-`/metrics` is unauthenticated. It carries aggregate counters and histograms only
-- no tenant, user, run id, prompt, tool argument or approval reason is a label -
-so the exposure is operational, not customer data. Keep the scrape path on the
-internal network where possible.
+## Authentication
+
+Every `/metrics` endpoint requires `Authorization: Bearer <token>`, where the
+token is the value of the `metrics_token` Docker secret
+(`CITADEL_METRICS_TOKEN_FILE`). The API and each worker read it per request, so a
+rotated file takes effect without a restart.
+
+| Situation | Response |
+|---|---|
+| correct bearer token | `200` with the registry |
+| missing or wrong token | `401`, `WWW-Authenticate: Bearer` |
+| secret unset or unreadable | `503` - never an unauthenticated fallback |
+
+The comparison is constant time; the token is never logged or returned. The
+payload remains aggregate counters and histograms only: no tenant, user, run id,
+prompt, tool argument or approval reason is a label.
+
+Prometheus reads the same secret with `bearer_token_file`, not with a token
+inline in `prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: citadel-api
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/metrics_token
+    static_configs:
+      - targets: ["api:8000"]
+```
+
+The same block is needed for every worker target.
+
+## Provisioning and rotation
+
+`make up` runs `scripts/provision-secrets.sh`, which writes `secrets/metrics_token`.
+If SOPS defines `CITADEL_METRICS_TOKEN`, that value wins; otherwise the script
+generates one on first use and keeps it, so a later `make up` does not break a
+Prometheus that is already scraping. To rotate, set a new value in
+`secrets/citadel.env` (or delete `secrets/metrics_token`), run `make up`, and
+restart Prometheus so it reloads the file. The API and workers pick it up per
+request.
 
 ## Metrics
 
