@@ -784,6 +784,9 @@ services:
     environment:
       CITADEL_DB_DSN_FILE: /run/secrets/db_dsn
       DOCKER_HOST: unix:///var/run/docker.sock
+      # Verifies the run token every /execute call must present. Public key
+      # only: the operator can verify a run's identity but never mint one.
+      CITADEL_RUN_TOKEN_PUBLIC_KEY: ${CITADEL_RUN_TOKEN_PUBLIC_KEY}
       # The write token is injected into the gh child, never the service env.
       GH_TOKEN_FILE: /run/secrets/gh_write_token
       # DLP is the only reason this service is allowed to return command text.

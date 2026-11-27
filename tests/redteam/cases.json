@@ -1,7 +1,7 @@
 {
   "pack": "citadel-redteam",
-  "version": 8,
-  "updated": "2026-11-26",
+  "version": 9,
+  "updated": "2026-11-27",
   "notes": [
     "Every case runs against the compose stack or a fake, never a real external service.",
     "T1 and T2 cases run against the stub tool server so a failing test cannot restart a container or open a PR.",
@@ -613,6 +613,44 @@
       "controls": [
         "fail_closed_dlp",
         "unreadable_answer_is_a_refusal"
+      ],
+      "milestone": "v0.1"
+    },
+    {
+      "id": "RT-AUTHZ-08",
+      "title": "Workflow started with another tenant's fields and a foreign run token",
+      "category": "authorization",
+      "tier": "T0",
+      "surface": "workflow_input",
+      "fixture": null,
+      "expect": {
+        "verdict": "denied",
+        "evidence": "identity.token_mismatch deny with no ledger write for the claimed tenant",
+        "side_effects": "none"
+      },
+      "controls": [
+        "signed_run_token",
+        "claims_bound_to_payload",
+        "no_ledger_write_before_identity"
+      ],
+      "milestone": "v0.1"
+    },
+    {
+      "id": "RT-AUTHZ-09",
+      "title": "Operator /execute called with no credential at all",
+      "category": "authorization",
+      "tier": "T1",
+      "surface": "operator",
+      "fixture": null,
+      "expect": {
+        "verdict": "denied",
+        "evidence": "401 before any approval resolution or command",
+        "side_effects": "none"
+      },
+      "controls": [
+        "signed_run_token",
+        "no_unauthenticated_writer",
+        "tenant_from_claims"
       ],
       "milestone": "v0.1"
     },

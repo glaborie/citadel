@@ -14,13 +14,14 @@ import subprocess
 import tempfile
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from citadel import __version__, dlp
 from citadel.env import secret
 from citadel.identity import IdentityError
-from citadel.identity.run_token import RunContext, public_key_from_env, verify_run_token
+from citadel.identity.bearer import require_run_token
+from citadel.identity.run_token import RunContext, bind_identity
 from citadel.policy.catalog import load_catalog
 from citadel.tools import CommandDenied, build_argv
 from citadel.tools.bounds import DEFAULT_OUTPUT_LIMIT, bound
@@ -41,6 +42,10 @@ class ExecuteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     agent: str
+    # The tenant and run the caller claims to act for; both must equal the
+    # token's claims, so a leaked token for one run cannot be spent on another.
+    tenant_id: str
+    run_id: str
     tool: str
     arguments: dict[str, Any] = {}
 
@@ -105,22 +110,6 @@ def _guard(text: str, *, surface: str) -> tuple[str, dict[str, Any]]:
         ) from exc
 
 
-def _run_context(authorization: Annotated[str | None, Header()] = None) -> RunContext:
-    """The caller's identity, taken from a signed run token and nowhere else."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="run token required")
-    try:
-        key = public_key_from_env(os.environ["CITADEL_RUN_TOKEN_PUBLIC_KEY"])
-    except (KeyError, IdentityError, ValueError) as exc:
-        # A runner with no usable verification key is a broken deployment, not a
-        # bad caller: refuse rather than execute unauthenticated.
-        raise HTTPException(status_code=503, detail="runner cannot verify run tokens") from exc
-    try:
-        return verify_run_token(authorization.removeprefix("Bearer ").strip(), key)
-    except IdentityError as exc:
-        raise HTTPException(status_code=403, detail="invalid run token") from exc
-
-
 def _refuse_write(tool: str) -> None:
     """A T1 command is refused before its arguments are examined.
 
@@ -149,11 +138,16 @@ def _output_limit(command: Any) -> int:  # noqa: ANN401 - an allowlist entry
 
 @app.post("/execute")
 def execute(
-    request: ExecuteRequest, ctx: Annotated[RunContext, Depends(_run_context)]
+    request: ExecuteRequest,
+    ctx: Annotated[RunContext, Depends(require_run_token)],
 ) -> ExecuteResponse:
     # Identity comes from the verified token; the body only has to agree with it.
-    if ctx.agent_id != request.agent:
-        raise HTTPException(status_code=403, detail="agent does not match run token")
+    try:
+        bind_identity(
+            ctx, tenant_id=request.tenant_id, run_id=request.run_id, agent_id=request.agent
+        )
+    except IdentityError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     # The raw arguments are inspected before they are parsed. Validation rejects a
     # malformed argument with a 403, and a gate that only ran after validation would

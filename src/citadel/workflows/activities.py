@@ -28,6 +28,12 @@ from citadel.evals import baseline
 from citadel.evals import online as eval_online
 from citadel.evals.recorder import export_run
 from citadel.hashing import arguments_hash
+from citadel.identity import IdentityError
+from citadel.identity.run_token import (
+    bind_identity,
+    public_key_from_env,
+    verify_run_token,
+)
 from citadel.net import open_url
 from citadel.policy import AuthorizationRequest, RelationChecker, RunStore, authorize
 from citadel.policy.catalog import ToolSpec, load_catalog
@@ -70,6 +76,47 @@ def _web_payload(content: WebContent, flags: list[str]) -> dict[str, Any]:
         "source": content.source,
         "content_flags": flags,
     }
+
+
+def _identity_refusal(call: ToolCall) -> tuple[str, str]:
+    """The first reason the call's identity is unproven, or nothing.
+
+    A Temporal payload is unauthenticated data: anyone who can reach the
+    frontend can start a workflow whose fields name any tenant, user and run
+    (issue #237). The signed run token is the only identity, so it is verified
+    here and its claims must agree with the payload before anything - the
+    policy decision, the idempotency row, the pending approval, an audit
+    event - is written under the tenant it names.
+
+    The refusal is returned without a ledger write on purpose: the event this
+    code would otherwise append takes its tenant and subject from the payload,
+    so writing it would be the very forgery the check exists to stop. The deny
+    travels back to the workflow as its result instead, and the counter shows
+    it in the worker's metrics.
+    """
+    if not call.run_token:
+        return "identity.token_missing", "the call carries no run token"
+    try:
+        key = public_key_from_env(os.environ["CITADEL_RUN_TOKEN_PUBLIC_KEY"])
+    except (KeyError, IdentityError, ValueError):
+        # A worker with no usable verification key is a broken deployment, not
+        # a bad caller: refuse rather than trust the payload.
+        return "identity.token_unverifiable", "the worker cannot verify run tokens"
+    try:
+        context = verify_run_token(call.run_token, key)
+    except IdentityError as exc:
+        return "identity.token_invalid", f"the run token was rejected: {exc}"
+    try:
+        bind_identity(
+            context,
+            tenant_id=call.tenant_id,
+            user_id=call.user_id,
+            run_id=call.run_id,
+            agent_id=call.agent_id,
+        )
+    except IdentityError as exc:
+        return "identity.token_mismatch", str(exc)
+    return "", ""
 
 
 def bounded_payload(payload: dict[str, Any]) -> Bounded:
@@ -231,6 +278,10 @@ class ToolActivities:
 
     @activity.defn
     def authorize_tool(self, call: ToolCall) -> PolicyOutcome:
+        rule_id, reason = _identity_refusal(call)
+        if rule_id:
+            metrics.policy_denial(rule_id)
+            return PolicyOutcome(outcome="deny", rule_id=rule_id, reason=reason, tier="unknown")
         decision = authorize(
             AuthorizationRequest(
                 user_id=call.user_id,
@@ -302,6 +353,10 @@ class ToolActivities:
 
     @activity.defn
     def execute_tool(self, call: ToolCall) -> ToolResult:
+        rule_id, reason = _identity_refusal(call)
+        if rule_id:
+            metrics.policy_denial(rule_id)
+            return ToolResult(status="denied", tool=call.tool, rule_id=rule_id, detail=reason)
         key = idempotency_key(call)
         args_hash = arguments_hash(call.arguments)
         spec = load_catalog().get(call.tool)
@@ -626,22 +681,31 @@ class ToolActivities:
             )
         body = json.dumps(
             {
-                "tenant_id": call.tenant_id,
                 "run_id": call.run_id,
                 "tool": call.tool,
                 "arguments": call.arguments,
                 "approval_ref": call.approval_ref,
             }
         ).encode()
-        return self._post(f"{self._operator_url}/execute", body, call)
+        # The operator resolves the approval under the tenant the token claims;
+        # a body without the credential is refused with 401 before anything runs.
+        headers = {"Authorization": f"Bearer {call.run_token}"}
+        return self._post(f"{self._operator_url}/execute", body, call, headers=headers)
 
     def _invoke_sandbox(self, call: ToolCall) -> ToolResult:
+        # The runner verifies this token and refuses a body whose tenant, run or
+        # agent disagree with its claims; a run with no token was already denied
+        # by _identity_refusal, never executed unauthenticated.
         body = json.dumps(
-            {"agent": call.agent_id, "tool": call.tool, "arguments": call.arguments}
+            {
+                "agent": call.agent_id,
+                "tenant_id": call.tenant_id,
+                "run_id": call.run_id,
+                "tool": call.tool,
+                "arguments": call.arguments,
+            }
         ).encode()
-        # The runner verifies this token and takes the agent from its claims; a
-        # run with no token is refused there with 401, never executed unauthenticated.
-        headers = {"Authorization": f"Bearer {call.run_token}"} if call.run_token else None
+        headers = {"Authorization": f"Bearer {call.run_token}"}
         return self._post(f"{self._runner_url}/execute", body, call, headers=headers)
 
     def _post(

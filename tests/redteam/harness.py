@@ -56,30 +56,64 @@ COLLECTED: dict[str, tuple[str, str]] = {}
 # stronger evidence, and file execution order must not decide which one counts.
 LIVE: dict[str, tuple[str, str]] = {}
 
-# The runner verifies a run token on every call, so the cases that drive its
-# routes present one signed by this key and put the matching public half in the
-# environment the runner reads.
+# The runner and the operator verify a run token on every call, so the cases
+# that drive their routes present one signed by this key and put the matching
+# public half in the environment the services read. The token is minted for the
+# run id the executor bodies carry, because the services refuse a body whose
+# tenant, run or agent disagree with the token's claims.
 _RUNNER_KEY = Ed25519PrivateKey.generate()
+RUN_ID = "run-1"
 
 
-def runner_client() -> Any:
-    """A tool-runner client that is authenticated as the docker agent."""
+def _token_env() -> None:
     import os
 
-    from fastapi.testclient import TestClient
-
-    from citadel.tools import runner
     from tests.redteam import support
 
     os.environ["CITADEL_RUN_TOKEN_PUBLIC_KEY"] = support.public_key_env(_RUNNER_KEY)
+
+
+def _mint(risk_tier: str) -> str:
     token, _ = mint_run_token(
         Principal("user-alice", "lab-a", frozenset()),
         agent_id="docker",
         scopes=frozenset(),
-        risk_tier="T0",
+        risk_tier=risk_tier,
         private_key=_RUNNER_KEY,
+        run_id=RUN_ID,
     )
-    return TestClient(runner.app, headers={"Authorization": f"Bearer {token}"})
+    return token
+
+
+def runner_client() -> Any:
+    """A tool-runner client that is authenticated as the docker agent."""
+    from fastapi.testclient import TestClient
+
+    from citadel.tools import runner
+
+    _token_env()
+    return TestClient(runner.app, headers={"Authorization": f"Bearer {_mint('T0')}"})
+
+
+def operator_client() -> Any:
+    """An operator client presenting the run token the body must agree with."""
+    from fastapi.testclient import TestClient
+
+    from citadel.operator import app as operator
+
+    _token_env()
+    return TestClient(operator.app, headers={"Authorization": f"Bearer {_mint('T1')}"})
+
+
+def sandbox_body(arguments: dict[str, Any]) -> dict[str, Any]:
+    """A runner body that agrees with the token runner_client presents."""
+    return {
+        "agent": "docker",
+        "tenant_id": "lab-a",
+        "run_id": RUN_ID,
+        "tool": "read_logs",
+        "arguments": arguments,
+    }
 
 
 @dataclass(frozen=True)
@@ -547,13 +581,23 @@ def exec_duplicate_side_effect(case_: Case, _: Path) -> Outcome:
         operator_url="http://operator.test",
         audit=audit,  # type: ignore[arg-type]
     )
+    _token_env()
+    token, _ctx = mint_run_token(
+        Principal("alice", "lab-a", frozenset()),
+        agent_id="docker",
+        scopes=frozenset(),
+        risk_tier="T1",
+        private_key=_RUNNER_KEY,
+        run_id=RUN_ID,
+    )
     call = ToolCall(
-        run_id="run-1",
+        run_id=RUN_ID,
         tenant_id="lab-a",
         user_id="alice",
         agent_id="docker",
         tool="restart_service",
         arguments={"service": "checkout-api"},
+        run_token=token,
     )
     with (
         mock.patch.object(activities_module, "tenant_connection", db.connect),
@@ -573,6 +617,82 @@ def exec_duplicate_side_effect(case_: Case, _: Path) -> Outcome:
         and stub.count == 1
     )
     return Outcome(ok, f"{first.status}/{second.status}/{third.status} calls={stub.count}")
+
+
+def exec_payload_token_mismatch(case_: Case, _: Path) -> Outcome:
+    """RT-AUTHZ-08: a workflow started with another tenant's fields and a foreign
+    token is denied before anything enters that tenant's audit chain.
+
+    Temporal does not authenticate whoever starts a workflow, so the payload is
+    attacker-shaped data; the signed run token is the only identity, and its
+    claims must agree with the fields the ledger would otherwise take on faith.
+    """
+    from unittest import mock
+
+    from citadel.workflows.activities import ToolActivities
+    from tests.redteam import support
+
+    db = support.FakeDB()
+    audit = support.FakeAudit()
+    acts = ToolActivities(
+        checker=FakeChecker(),
+        run_store=FakeRunStore(),
+        dsn="postgres://fake",
+        runner_url="http://runner.test",
+        operator_url="http://operator.test",
+        audit=audit,  # type: ignore[arg-type]
+    )
+    _token_env()
+    foreign, _ctx = mint_run_token(
+        Principal("user-bob", "lab-b", frozenset()),
+        agent_id="docker",
+        scopes=frozenset(),
+        risk_tier="T0",
+        private_key=_RUNNER_KEY,
+        run_id=RUN_ID,
+    )
+    call = ToolCall(
+        run_id=RUN_ID,
+        tenant_id="lab-a",  # the forgery: the payload names lab-a's run
+        user_id="user-alice",  # and a lab-a subject,
+        agent_id="docker",
+        tool="read_logs",
+        arguments={"service": "checkout-api"},
+        run_token=foreign,  # but the only credential is lab-b's.
+    )
+    with mock.patch.object(activities_module, "tenant_connection", db.connect):
+        outcome = acts.authorize_tool(call)
+
+    events = [str(event.get("event_type")) for event in audit.events]
+    ok = (
+        outcome.outcome == "deny"
+        and outcome.rule_id == "identity.token_mismatch"
+        and not events
+        and not db.rows
+    )
+    return Outcome(ok, f"{outcome.outcome}/{outcome.rule_id} events={events or 'none'}")
+
+
+def exec_operator_requires_token(case_: Case, _: Path) -> Outcome:
+    """RT-AUTHZ-09: the operator drives nothing for a caller with no token.
+
+    Before #237 this route took a credential-free body, so any peer on the
+    internal network could write through the only component that performs a T1
+    action - the run token is now required on every call.
+    """
+    from fastapi.testclient import TestClient
+
+    from citadel.operator import app as operator
+
+    payload = {
+        "run_id": RUN_ID,
+        "tool": "restart_service",
+        "arguments": {"service": "checkout-api"},
+        "approval_ref": "2f0c1e2a-0000-4000-8000-000000000001",
+    }
+    response = TestClient(operator.app).post("/execute", json=payload)
+    ok = response.status_code == 401 and not str(response.json().get("detail")).startswith("409")
+    return Outcome(ok, f"{response.status_code} {str(response.json().get('detail'))[:40]}")
 
 
 def exec_self_approval(case_: Case, _: Path) -> Outcome:
@@ -670,8 +790,6 @@ def exec_approval_replay(case_: Case, _: Path) -> Outcome:
     import time
     from unittest import mock
 
-    from fastapi.testclient import TestClient
-
     from citadel.operator import app as operator
     from tests.redteam import support
 
@@ -706,8 +824,7 @@ def exec_approval_replay(case_: Case, _: Path) -> Outcome:
         return text, {"surface": surface, "action": "pass"}
 
     payload = {
-        "tenant_id": "lab-a",
-        "run_id": "run-1",
+        "run_id": RUN_ID,
         "tool": "restart_service",
         "arguments": arguments,
         "approval_ref": "2f0c1e2a-0000-4000-8000-000000000001",
@@ -720,7 +837,7 @@ def exec_approval_replay(case_: Case, _: Path) -> Outcome:
         mock.patch.object(operator, "_guard", passthrough),
         mock.patch("citadel.tools.runner.run", stub.run),
     ):
-        client = TestClient(operator.app)
+        client = operator_client()
         first = client.post("/execute", json=payload)
         second = client.post("/execute", json=payload)
 
@@ -761,7 +878,7 @@ def exec_output_cap(case_: Case, _: Path) -> Outcome:
         client = runner_client()
         response = client.post(
             "/execute",
-            json={"agent": "docker", "tool": "read_logs", "arguments": {"service": "checkout-api"}},
+            json=sandbox_body({"service": "checkout-api"}),
         )
 
     refused = response.status_code == 403 and "dlp_blocked" in response.text
@@ -785,8 +902,6 @@ def exec_secret_in_tool_args(case_: Case, _: Path) -> Outcome:
     import os
     import time
     from unittest import mock
-
-    from fastapi.testclient import TestClient
 
     from citadel.operator import app as operator
     from tests.redteam import support
@@ -821,8 +936,7 @@ def exec_secret_in_tool_args(case_: Case, _: Path) -> Outcome:
 
     stub = support.StubExecutor()
     payload = {
-        "tenant_id": "lab-a",
-        "run_id": "run-1",
+        "run_id": RUN_ID,
         "tool": "open_remediation_pr",
         "arguments": arguments,
         "approval_ref": "2f0c1e2a-0000-4000-8000-000000000001",
@@ -836,7 +950,7 @@ def exec_secret_in_tool_args(case_: Case, _: Path) -> Outcome:
         mock.patch.object(dlp, "urlopen", support.DetectorStub([])),
         mock.patch("citadel.tools.runner.run", stub.run),
     ):
-        response = TestClient(operator.app).post("/execute", json=payload)
+        response = operator_client().post("/execute", json=payload)
     detail = str(response.json().get("detail", ""))
     ok = response.status_code == 403 and "dlp_blocked" in detail and not stub.calls
     return Outcome(ok, f"{response.status_code} ran={len(stub.calls)} {detail[:40]}")
@@ -926,15 +1040,11 @@ def exec_refusal_echo(case_: Case, _: Path) -> Outcome:
         mock.patch.object(runner, "run", lambda argv: None),
     ):
         client = runner_client()
-        response = client.post(
-            "/execute", json={"agent": "docker", "tool": "read_logs", "arguments": arguments}
-        )
+        response = client.post("/execute", json=sandbox_body(arguments))
         # Same route, no secret: the detector passes and the matcher refuses. This
         # half is what keeps the message usable once the value is gone.
         plain = {"service": "checkout-api; rm -rf /"}
-        refused = client.post(
-            "/execute", json={"agent": "docker", "tool": "read_logs", "arguments": plain}
-        )
+        refused = client.post("/execute", json=sandbox_body(plain))
 
     prose = {
         "repo": "acme/infra",
@@ -1826,6 +1936,8 @@ EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-AUTHZ-04": exec_missing_identity,
     "RT-AUTHZ-05": exec_expired_run_token,
     "RT-AUTHZ-06": exec_policy_unavailable,
+    "RT-AUTHZ-08": exec_payload_token_mismatch,
+    "RT-AUTHZ-09": exec_operator_requires_token,
     "RT-HITL-03": exec_approval_ttl,
     "RT-HITL-04": exec_args_substitution,
     "RT-INJ-04": exec_skill_escalation,
