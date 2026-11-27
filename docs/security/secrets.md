@@ -23,7 +23,14 @@ Two values are derived rather than stored twice:
 - `db_dsn` comes from `CITADEL_DB_PASSWORD` and `POSTGRES_DB`.
 - `openfga_pgpass` comes from `POSTGRES_USER` and `POSTGRES_PASSWORD`.
 
-The files are mode 0644 because Compose mounts them as bind files and the
+`.env` is not part of that flow: it is the gitignored Compose variable file next
+to `compose.yaml`, unrelated to the SOPS ciphertext, and it holds non-secret
+host values. `DOCKER_GID` is the one that has no workable placeholder — it must
+be the host's docker group id (`getent group docker | cut -d: -f3`) because
+Compose passes it as `group_add` to `operator`, and an empty value fails the
+whole `up` with `unable to find group : no matching entries in group file`.
+
+Secrets files are mode 0644 because Compose mounts them as bind files and the
 container user is uid 10001. This is a single-user host; the `secrets/`
 directory stays out of git.
 
