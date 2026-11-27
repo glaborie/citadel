@@ -401,10 +401,17 @@ def exec_secret_in_prompt(case_: Case, _: Path) -> Outcome:
     categories = sorted({finding.category for finding in verdict.findings})
     github_ok = verdict.action == "block" and "GITHUB_TOKEN" in categories
 
-    jwt = (
-        "eyJhbGciOiJFZERTQSJ9."
-        "eyJpc3MiOiJjaXRhZGVsIiwic3ViIjoiYWxpY2UifQ."
-        "c2lnbmF0dXJlX3Rlc3RfdmFsdWVfZm9yX2RscA"
+    # Assembled, not a literal: GitGuardian normalizes adjacent string literals
+    # and reads a planted header.payload.signature as a leaked token, the way it
+    # did for #252. The signature segment decodes to
+    # "signature_test_value_for_dlp" - synthetic by construction, nothing to
+    # revoke - and the joined form is what the DLP hard rule must match.
+    jwt = ".".join(
+        (
+            "eyJhbGciOiJFZERTQSJ9",  # {"alg":"EdDSA"}
+            "eyJpc3MiOiJjaXRhZGVsIiwic3ViIjoiYWxpY2UifQ",  # {"iss":"citadel","sub":"alice"}
+            "c2lnbmF0dXJlX3Rlc3RfdmFsdWVfZm9yX2RscA",
+        )
     )
     jwt_verdict = dlp.inspect(
         f"run token: {jwt}", surface="input", analyzer_url=ANALYZER, opener=detector([])

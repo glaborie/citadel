@@ -90,10 +90,16 @@ def test_a_credential_the_detector_misses_blocks() -> None:
 @pytest.mark.parametrize("surface", ["input", "output", "record"])
 def test_a_bare_jwt_is_blocked_on_every_surface(surface: str) -> None:
     """A run or Keycloak token must not pass DLP merely without a Bearer prefix."""
-    text = (
-        "eyJhbGciOiJFZERTQSJ9."
-        "eyJpc3MiOiJjaXRhZGVsIiwic3ViIjoiYWxpY2UifQ."
-        "c2lnbmF0dXJlX3Rlc3RfdmFsdWVfZm9yX2RscA"
+    # Assembled at runtime, per tests/redteam/harness.py: a planted
+    # header.payload.signature reads as a leaked JWT to GitGuardian even when the
+    # segments are quoted on consecutive lines. The signature decodes to
+    # "signature_test_value_for_dlp" - synthetic, nothing to revoke.
+    text = ".".join(
+        (
+            "eyJhbGciOiJFZERTQSJ9",  # {"alg":"EdDSA"}
+            "eyJpc3MiOiJjaXRhZGVsIiwic3ViIjoiYWxpY2UifQ",  # {"iss":"citadel","sub":"alice"}
+            "c2lnbmF0dXJlX3Rlc3RfdmFsdWVfZm9yX2RscA",
+        )
     )
     verdict = dlp.inspect(text, surface=surface, analyzer_url=URL, opener=detector([]))
 

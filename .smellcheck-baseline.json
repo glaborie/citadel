@@ -2745,6 +2745,13 @@
       "pattern": "SC307",
       "line": 90,
       "name": "Remove Temporary Field"
+    },
+    {
+      "fingerprint": "55e03aa96760",
+      "file": "src/citadel/skills.py",
+      "pattern": "SC201",
+      "line": 67,
+      "name": "Extract Method"
     }
   ]
 }
