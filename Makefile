@@ -98,9 +98,18 @@ eval-record:  ## Record this run as a baseline row (fails rather than rewriting 
 # discoverable by name - MLflow answers {} to every dataset search - so the script reads
 # the id the sampler recorded on the eval.sample audit events, then the rows.
 .PHONY: eval-samples
+mlflow-ui:  ## Open the MLflow UI on loopback:5000 (inspection only, loopback bound)
+	scripts/mlflow-ui.sh --on
+
+mlflow-ui-off:  ## Close the MLflow UI sidecar
+	scripts/mlflow-ui.sh --off
+
 eval-samples:  ## Read the sampled runs back from the MLflow eval dataset
+	mkdir -p $(CURDIR)/.eval-out
 	cd $$HOME/projects/citadel && docker compose run --rm --no-deps \
-		-v $(CURDIR):/repo:ro -e PYTHONPATH=/repo/src \
+		--user $(shell id -u):$(shell id -g) \
+		-v $(CURDIR):/repo:ro -v $(CURDIR)/.eval-out:/out \
+		-e PYTHONPATH=/repo/src \
 		api python /repo/scripts/read-eval-samples.py $(ARGS)
 
 calibration-sample:  ## Rebuild the judge-calibration sample from the goldens
