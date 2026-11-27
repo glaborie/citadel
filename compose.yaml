@@ -520,6 +520,7 @@ services:
       KEYCLOAK_ADMIN_URL: http://keycloak:8080
       CITADEL_SKILLS_DIR: /app/skills
       CITADEL_APPROVAL_TTL_SECONDS: ${CITADEL_APPROVAL_TTL_SECONDS:-300}
+      CITADEL_EXPOSE_API_DOCS: "${CITADEL_EXPOSE_API_DOCS:-false}"  # dev: serve /docs and /openapi.json (unauthenticated)
       TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
       MLFLOW_EXPERIMENT_ID: ${MLFLOW_EXPERIMENT_ID:-1}

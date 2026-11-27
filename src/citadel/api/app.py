@@ -50,6 +50,15 @@ from citadel.workflows.types import APPROVAL_TTL, ApprovalDecision, RunInput
 
 DLP_URL = os.environ.get("CITADEL_DLP_URL", "http://presidio:3000")
 
+# Values that turn CITADEL_EXPOSE_API_DOCS on. Unset, empty or anything else is
+# off: a typo must not publish the schema, and these paths are served before
+# any auth exists to answer for them.
+_EXPOSE_DOCS_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def _expose_api_docs() -> bool:
+    return os.environ.get("CITADEL_EXPOSE_API_DOCS", "").strip().lower() in _EXPOSE_DOCS_TRUTHY
+
 
 class AuthorizeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -143,7 +152,18 @@ def create_app(
     private_key: Ed25519PrivateKey | None = None,
     checker: RelationChecker | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="Citadel API", version=__version__)
+    # The schema is a complete map of the attack surface, so it is served only
+    # when an environment opts in (#220). Redoc is never served; /docs and
+    # /openapi.json ride the same flag. Read per app, not at import, so tests
+    # can toggle it by rebuilding the app.
+    expose_docs = _expose_api_docs()
+    app = FastAPI(
+        title="Citadel API",
+        version=__version__,
+        docs_url="/docs" if expose_docs else None,
+        redoc_url=None,
+        openapi_url="/openapi.json" if expose_docs else None,
+    )
     telemetry.configure("citadel-api")
 
     @app.get("/healthz")
