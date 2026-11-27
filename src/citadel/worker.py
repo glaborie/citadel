@@ -21,7 +21,7 @@ from typing import Final
 from temporalio.client import Client
 from temporalio.worker import Worker
 
-from citadel import metrics, telemetry
+from citadel import dlp, metrics, telemetry
 from citadel.env import secret
 from citadel.policy import RelationChecker, RunStore
 from citadel.policy.openfga import build_checker
@@ -104,7 +104,9 @@ def main() -> int:
     role = os.environ.get("CITADEL_WORKER_ROLE", "")
     if not role:
         raise SystemExit("CITADEL_WORKER_ROLE is not set")
-    telemetry.configure(f"citadel-worker-{role}")
+    # Same rule as the API: the trace's free-text fields export only through the
+    # DLP gate, so the explicit `full` opt-in cannot bypass redaction here either.
+    telemetry.configure(f"citadel-worker-{role}", text_gate=dlp.trace_gate())
 
     stopping = threading.Event()
     threading.Thread(target=_beat, args=(stopping,), daemon=True).start()

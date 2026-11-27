@@ -5,11 +5,18 @@ Measured on 3.18.0: a trace whose spans are all parentless has `request=None` an
 `mlflow.spanInputs`/`mlflow.spanOutputs` fills both, and a second write with the same span id
 **replaces** the first - which is why the closing write carries the inputs again. These tests
 hold that shape without a server.
+
+They also hold the content policy (#236): the shipped compose default is `summary`, and even
+the explicit `full` opt-in exports free text only through a DLP gate - a refused or missing
+gate downgrades the field to its summary form, never to raw text.
 """
 
 from __future__ import annotations
 
 import datetime
+import hashlib
+import re
+from pathlib import Path
 
 import pytest
 from opentelemetry.sdk.trace import TracerProvider
@@ -20,6 +27,11 @@ from citadel import telemetry
 
 RUN = "4f61bb68-7044-4f24-ae22-0c6389690880"
 INPUTS: dict[str, object] = {"task_chars": 3, "tenant_id": "lab-a"}
+# The red-team prompt from docs/evals/calibration-sheet-v2.md: a credential pasted
+# into the task, the exact input #236 shipped to MLflow unredacted. Assembled, not
+# a literal, so a secret scanner sees a fixture rather than a token.
+CREDENTIAL_TASK = "Restart checkout-api using this token " + "ghp_" + "A1b2" * 8
+PASS_THROUGH: telemetry.TextGate = lambda text: text  # noqa: E731 - a gate is a one-line contract
 
 
 @pytest.fixture
@@ -51,8 +63,10 @@ def test_every_span_hangs_off_the_run_root(exporter: InMemorySpanExporter) -> No
 def test_the_closing_write_replaces_the_root_with_both_directions(
     exporter: InMemorySpanExporter, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # `full` on purpose: this test is about the payload's content, not the mode's default.
+    # `full` with a pass-through gate on purpose: this test is about the payload's
+    # replacement semantics, not the mode's default or the gate.
     monkeypatch.setenv(telemetry.MODE_ENV, "full")
+    monkeypatch.setattr(telemetry, "_text_gate", PASS_THROUGH)
     telemetry.record_root_span("run.start", run_id=RUN, audit_id="a1", inputs=INPUTS)
     telemetry.record_root_span(
         "run.start",
@@ -122,9 +136,130 @@ def test_the_default_mode_drops_the_text_and_keeps_the_shape(
     assert "lab-a" in encoded
 
 
-def test_full_mode_carries_the_text_a_reader_wants(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_compose_default_never_ships_a_credential_to_mlflow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#236: every compose service defaults to the mode a pasted credential cannot survive.
+
+    `full` used to be the shipped default, so `docker compose up` exported the raw task -
+    credentials included - to MLflow before any DLP gate ran. The default is now `summary`,
+    and this test reads compose.yaml rather than trusting it.
+    """
+    compose = (Path(__file__).resolve().parents[1] / "compose.yaml").read_text(encoding="utf-8")
+    defaults = re.findall(r'CITADEL_TRACE_CONTENT: "\$\{CITADEL_TRACE_CONTENT:-(\w+)\}"', compose)
+    assert defaults, "no service declares a trace content mode; this test is asleep"
+    assert set(defaults) == {"summary"}, (
+        f"compose defaults must be summary, found {sorted(set(defaults))}"
+    )
+
+    # The mode those services actually get, whatever an operator's shell says:
+    # only an explicit .env value can widen it.
+    monkeypatch.delenv(telemetry.MODE_ENV, raising=False)
+    encoded = str(telemetry._payload({"task": CREDENTIAL_TASK}))
+    assert "ghp_" not in encoded
+    assert CREDENTIAL_TASK not in encoded
+    assert '"task_sha256"' in encoded, "the digest still proves which text ran"
+
+
+def test_full_mode_still_carries_text_a_passing_gate_clears(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The dev opt-in keeps its point: a readable trace for text the gate clears."""
     monkeypatch.setenv(telemetry.MODE_ENV, "full")
+    monkeypatch.setattr(telemetry, "_text_gate", PASS_THROUGH)
     assert '"task": "hello"' in str(telemetry._payload({"task": "hello"}))
+
+
+def test_full_mode_exports_what_the_gate_redacts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PII redacted in place on the `record` surface may leave; the raw form may not.
+
+    The gate contract is "return the text that may leave", so a stand-in gate exercises
+    telemetry's side of it without a Presidio round trip.
+    """
+    monkeypatch.setenv(telemetry.MODE_ENV, "full")
+    redacting: telemetry.TextGate = lambda text: text.replace("secret-value", "REDACTED")  # noqa: E731
+    monkeypatch.setattr(telemetry, "_text_gate", redacting)
+    encoded = str(telemetry._payload({"task": "the password is secret-value"}))
+    assert "secret-value" not in encoded
+    assert "REDACTED" in encoded
+
+
+def test_full_mode_drops_to_the_summary_when_the_gate_refuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A credential, or a detector that cannot answer, must never widen what leaves."""
+    monkeypatch.setenv(telemetry.MODE_ENV, "full")
+
+    def refusing(text: str) -> str:
+        raise RuntimeError("credential_detected")
+
+    monkeypatch.setattr(telemetry, "_text_gate", refusing)
+    encoded = str(telemetry._payload({"task": CREDENTIAL_TASK}))
+    assert "ghp_" not in encoded
+    assert CREDENTIAL_TASK not in encoded
+    assert f'"task_chars": {len(CREDENTIAL_TASK)}' in encoded
+    assert f'"task_sha256": "{hashlib.sha256(CREDENTIAL_TASK.encode()).hexdigest()}"' in encoded, (
+        "the summary form names the refused text by digest"
+    )
+
+
+def test_full_mode_without_a_gate_ships_the_summary_form(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A process that configured no gate gets the same downgrade as a refused one."""
+    monkeypatch.setenv(telemetry.MODE_ENV, "full")
+    monkeypatch.setattr(telemetry, "_text_gate", None)
+    encoded = str(telemetry._payload({"task": CREDENTIAL_TASK}))
+    assert "ghp_" not in encoded
+    assert '"task_chars"' in encoded and '"task_sha256"' in encoded
+
+
+def test_the_root_span_export_never_carries_a_refused_task(
+    exporter: InMemorySpanExporter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End to end: the attribute MLflow reads has the summary, not the credential."""
+    monkeypatch.setenv(telemetry.MODE_ENV, "full")
+
+    def refusing(text: str) -> str:
+        raise RuntimeError("credential_detected")
+
+    monkeypatch.setattr(telemetry, "_text_gate", refusing)
+    telemetry.record_root_span(
+        "run.start",
+        run_id=RUN,
+        audit_id="a1",
+        inputs={"task": CREDENTIAL_TASK, "tenant_id": "lab-a"},
+    )
+
+    (span,) = exporter.get_finished_spans()
+    inputs = str(_attributes(span)[telemetry.SPAN_INPUTS])
+    assert "ghp_" not in inputs
+    assert '"tenant_id": "lab-a"' in inputs, "the fields around the text survive the downgrade"
+
+
+def test_an_answer_refused_by_the_gate_is_downgraded_too(
+    exporter: InMemorySpanExporter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The gate screens both directions: the answer the run produced is not an exemption."""
+    monkeypatch.setenv(telemetry.MODE_ENV, "full")
+
+    def refusing(text: str) -> str:
+        raise RuntimeError("credential_detected")
+
+    monkeypatch.setattr(telemetry, "_text_gate", refusing)
+    answer = "the key you pasted is live: " + "ghp_" + "Z9y8" * 8
+    telemetry.record_root_span(
+        "run.start",
+        run_id=RUN,
+        audit_id="a1",
+        inputs={},
+        outputs={"outcome": "answered", "answer": answer},
+    )
+
+    (span,) = exporter.get_finished_spans()
+    outputs = str(_attributes(span)[telemetry.SPAN_OUTPUTS])
+    assert "ghp_" not in outputs
+    assert '"answer_chars"' in outputs and '"answer_sha256"' in outputs
 
 
 def test_none_mode_sends_no_payload_at_all(monkeypatch: pytest.MonkeyPatch) -> None:
