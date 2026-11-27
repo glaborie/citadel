@@ -11,9 +11,10 @@ through the `record` DLP surface first: a credential refuses the whole sample, P
 redacted in place, and a tool answer that cannot be kept says so with `output_redacted`
 rather than disappearing.
 
-MLflow 3.18 answers `{}` to every `/datasets/search` filter, so the dataset id is
-remembered in the audit ledger (`eval.sample` events) instead of discovered by name: the
-first sample creates the dataset, and later ones reuse the id it recorded.
+The dataset is created by name on the first sample and its id recorded on the
+`eval.sample` audit event, so a later sample merges instead of creating a second dataset
+even though `/datasets/search` filtered by `experiment_ids` finds nothing (a name filter
+does resolve it; discovery by experiment id does not).
 """
 
 from __future__ import annotations
@@ -326,7 +327,11 @@ def _int_env(name: str, default: int) -> int:
 
 
 def dataset_id_from(ledger_rows: Sequence[tuple[Any, ...]]) -> str | None:
-    """The dataset id the most recent `eval.sample` event recorded, if any."""
+    """The dataset id the most recent `eval.sample` event recorded, if any.
+
+    Kept as the merge target: the ledger is authoritative for which dataset this tenant's
+    samples went to, including when someone renames it in MLflow.
+    """
     for row in ledger_rows:
         payload = row[1]
         body = payload if isinstance(payload, dict) else json.loads(str(payload))
