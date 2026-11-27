@@ -18,7 +18,7 @@ from typing import Any
 
 from temporalio import activity
 
-from citadel import dlp
+from citadel import dlp, metrics
 from citadel.audit import AuditLedger
 from citadel.cache import AnswerCache, CacheHit, CacheKey, entitlement_hash
 from citadel.env import optional_secret
@@ -44,6 +44,21 @@ def _client(alias: str) -> OmniRouteClient:
         analyzer_url=DLP_URL,
         alias=alias,
     )
+
+
+def _cache_metric(decision: str) -> None:
+    metrics.cache_lookup(decision)
+
+
+def _model_metric(outcome: str, usage: Any | None = None) -> None:
+    metrics.model_call(outcome)
+    if usage is not None:
+        metrics.model_usage(
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
+            cost_usd=usage.cost_usd,
+            cost_source=usage.cost_source,
+        )
 
 
 @dataclass
@@ -157,6 +172,7 @@ class ModelActivities:
             return None
 
     def _record_cache(self, request: ModelStepRequest, payload: dict[str, Any]) -> None:
+        _cache_metric(str(payload.get("decision", "other")))
         self._audit.append(
             tenant_id=request.tenant_id,
             event_type="cache.lookup",
@@ -301,6 +317,7 @@ class ModelActivities:
         try:
             reply = client.complete(messages=messages, tools=prompt.tools)
         except dlp.DlpBlocked as exc:
+            _model_metric("dlp_blocked")
             # `complete` re-gates the whole conversation, so a tool observation
             # that passed on arrival can still block here. That is a refusal to
             # this step, not an activity failure that kills the run.
@@ -316,6 +333,7 @@ class ModelActivities:
                 prompt_pack=prompt.pack_id,
             )
         except ModelUnavailable as exc:
+            _model_metric("unavailable")
             return self._refuse(
                 request,
                 status="unavailable",
@@ -323,6 +341,7 @@ class ModelActivities:
                 detail=f"the gateway did not answer: {exc}",
             )
 
+        _model_metric("ok", reply.usage)
         blocked = self._gate(reply.content, surface="output")
         if blocked is not None:
             self._record(

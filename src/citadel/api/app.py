@@ -17,10 +17,10 @@ from typing import Annotated, Any
 
 import jwt
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from citadel import __version__, dlp, telemetry, tool_outputs
+from citadel import __version__, dlp, metrics, telemetry, tool_outputs
 from citadel.approval_requests import close_request
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
@@ -149,6 +149,18 @@ def create_app(
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
         return {"status": "ok", "version": __version__}
+
+    @app.get("/metrics", include_in_schema=False)
+    def prometheus_metrics(
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> Response:
+        """The scrape endpoint: a bearer token, aggregate counters, no tenant labels."""
+        try:
+            metrics.check_scrape_auth(authorization)
+        except metrics.ScrapeRefused as exc:
+            headers = {"WWW-Authenticate": "Bearer"} if exc.status == 401 else None
+            raise HTTPException(status_code=exc.status, detail=exc.reason, headers=headers) from exc
+        return Response(content=metrics.render(), media_type=metrics.CONTENT_TYPE)
 
     def current_principal(
         authorization: Annotated[str | None, Header()] = None,

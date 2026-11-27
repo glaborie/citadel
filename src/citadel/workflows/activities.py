@@ -20,7 +20,7 @@ from urllib.request import Request
 
 from temporalio import activity
 
-from citadel import dlp, tool_outputs
+from citadel import dlp, metrics, tool_outputs
 from citadel.approval_requests import record_request
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
@@ -766,6 +766,7 @@ class RunActivities:
                 "answer": end.answer[:4000],
             },
         )
+        metrics.run_finished(end.outcome)
         record_span(
             "run.end",
             run_id=end.run_id,
