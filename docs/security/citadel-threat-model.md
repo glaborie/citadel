@@ -125,7 +125,9 @@ Assumed in scope:
 - **C1 — LAN peer.** Any host on `172.28.26.0/20` can reach every published
   port. Four of the five are bound to all interfaces (`compose.yaml` 96, 246,
   532, 568), so Keycloak, the API, the approval console and OmniRoute answer a
-  LAN peer directly (#219, #221, #222).
+  LAN peer directly (#219, #221, #222). The owner has since stated that the LAN
+  is trusted (A1, 2026-11-27): the capability stands, its abuse paths are
+  ranked as accepted risk rather than treated as open exposure.
 - **C2 — Anyone who reads a retrieved document, PR body or tool output.** The
   attacker controls text, never code paths: this is the injection surface.
 - **C3 — A compromised dependency or model artefact.** Supply-chain attacker.
@@ -146,7 +148,7 @@ Explicitly not assumed:
 
 | ID | Abuse path | L | I | Priority | Existing control | Evidence | Residual |
 |---|---|---|---|---|---|---|---|
-| AP1 | LAN peer reaches the Keycloak admin console or the OmniRoute dashboard and attacks a default or reused admin credential | High | High | **High** | distinct admin passwords in SOPS; no published port is intended | #221, #222; `compose.yaml` 96, 246 | open until the binds are loopback-only |
+| AP1 | LAN peer reaches the Keycloak admin console or the OmniRoute dashboard and attacks a default or reused admin credential | Low | High | Medium | trusted LAN by decision (A1); distinct admin passwords in SOPS | #221, #222; `compose.yaml` 96, 246 | accepted while the LAN is trusted; revisit if a peer stops being trusted or a port is forwarded |
 | AP2 | LAN peer calls `/runs` with a forged or stolen user token | Low | High | Medium | Keycloak verification, `tenant` claim required, fail closed | `src/citadel/api/app.py` `current_principal` | token theft is AP3 |
 | AP3 | Stolen user token replays a run | Medium | Medium | Medium | short-lived token, run ID, tenant-bound scope, audit | architecture §9; `src/citadel/identity/run_token.py` | no proof-of-possession beyond the bearer |
 | AP4 | Injected text in a retrieved chunk steers the agent into a T1 tool call | High | High | **High** | skills carry no authority, `authorize()` denies unknown tools, HITL on T1, DLP on tool output | `src/citadel/policy/authorize.py:104-107`, RT-INJ-02/03/04 | the model can still *propose* the call; a human must approve |
@@ -155,35 +157,43 @@ Explicitly not assumed:
 | AP7 | Cross-tenant retrieval: a query returns another tenant's chunk | Low | High | Medium | per-tenant collection name, ACL filter applied before search, filter-set digest, cache partition | `src/citadel/retrieval/activities.py` (`collection_name`, `filter_set_hash`), architecture §9 | entitlement mistakes in ingest are not detectable at query time |
 | AP8 | Credential in tool output reaches the hosted model | Medium | High | **High** | fail-closed DLP before egress; a credential blocks rather than redacts | `src/citadel/dlp.py`, `docs/security/secrets.md` surfaces table | a detector miss is a silent leak; ADR-025 accepts redacted-text retention |
 | AP9 | Sandbox escape via a tool argument | Low | High | Medium | argv list with `shell=False`, metacharacter rejection, read-only rootfs, `cap_drop: ALL`, no socket, socket proxy `POST=0` | ADR-023 items 3-5; `compose.yaml` `tool-runner` | gVisor unavailable on this host (ADR-012), so the container boundary is the kernel boundary |
-| AP10 | Local user escalates to root and reads the secret files | High | High | **High** | file custody only; `secrets/` is mode 0644 by design | #223; `docs/security/secrets.md` | no host-level control exists today |
-| AP11 | Cost exhaustion through repeated runs | Medium | Low | Low | `max_steps` 6, `max_tokens` 8000, workflow timeouts, approval TTL | `src/citadel/model/types.py:68-69`, `src/citadel/workflows/orchestrator.py:177` | no ingress rate limit; a valid token can open runs in a loop |
-| AP12 | Compromised reranker process | Low | Medium | Low | internal-only, no published port | `compose.yaml` `reranker` | runs as root with default caps and no pid/memory limit (see filed issue) |
+| AP10 | Local user escalates to root and reads the secret files | Medium | High | Medium | file custody only; `secrets/` is mode 0644 by design | #223; `docs/security/secrets.md` | #223 stays open as a host defect (passwordless `sudo`, `INPUT ACCEPT`); trusting the LAN lowers the likelihood, not the impact |
+| AP11 | Cost exhaustion through repeated runs | Medium | Low | Low | `max_steps` 6, `max_tokens` 8000, workflow timeouts, approval TTL | `src/citadel/model/types.py:68-69`, `src/citadel/workflows/orchestrator.py:177` | confirmed gap: no ingress rate limit, so a valid token can open runs in a loop. To be closed by #256 |
+| AP12 | Compromised reranker process | Low | Medium | Low | internal-only, no published port | `compose.yaml` `reranker` | runs as root with default caps and no pid/memory limit; the owner confirmed this is an oversight to fix, not an accepted constraint (#227) |
 
 ## 6. Mitigations, in order
 
-1. **AP1/AP10 — bind the four published ports to loopback and restore the host
-   firewall.** Loopback binds plus `tailscale serve` make the tailnet the only
-   remote path; `DOCKER-USER` rules are required because Docker DNAT bypasses
-   `ufw`. Tracked as #219 and #223.
-2. **AP8 — keep DLP in the fail-closed path and test detector failure, not just
+Ordered after the A1 answer: a trusted LAN moved AP1 and AP10 to Medium, so the
+first two items are the ones that survive that decision unchanged.
+
+1. **AP8 — keep DLP in the fail-closed path and test detector failure, not just
    detection.** The existing red-team cases cover the hit; make sure an
    unreachable Presidio blocks the run.
-3. **AP4/AP5 — keep the description-digest pin as a review gate.** It is the
+2. **AP4/AP5 — keep the description-digest pin as a review gate.** It is the
    only control that survives a compromised MCP server, and it is cheap to
    regress: add a case where a pinned description is edited.
-4. **AP11 — add an ingress limiter.** A per-tenant request budget at `/runs` is
-   the smallest change that turns "a token can loop" into "a token can loop
-   slowly".
-5. **AP12 — apply the ADR-012 flag set to the reranker image.** Non-root user,
-   `cap_drop: ALL`, `no-new-privileges`, pid and memory limits.
+3. **AP11 — add an ingress limiter.** Confirmed as wanted by the owner. A
+   per-tenant request budget at `/runs` is the smallest change that turns "a
+   token can loop" into "a token can loop slowly". Filed as #256.
+4. **AP12 — apply the ADR-012 flag set to the reranker image.** Non-root user,
+   `cap_drop: ALL`, `no-new-privileges`, pid and memory limits. Confirmed as a
+   fix rather than an accepted upstream constraint; filed as #227.
+5. **AP1/AP10 — bind the four published ports to loopback and fix the host.**
+   Accepted risk while the LAN is trusted, not dropped: this is the item that
+   becomes urgent the moment a peer is untrusted, a port is forwarded, or the
+   tailnet-only path is completed. Loopback binds plus `tailscale serve` make
+   the tailnet the only remote path; `DOCKER-USER` rules are required because
+   Docker DNAT bypasses `ufw`. Tracked as #219 and #223.
 
-## 7. Assumptions and open questions
+## 7. Assumptions and the owner's answers
 
 Assumptions that move the ranking:
 
-- **A1 — The LAN is not trusted.** AP1 and AP10 are High because of this. If
-  every host on `172.28.26.0/20` is trusted, both drop to Medium and the
-  ranking is dominated by AP4 and AP8 instead.
+- **A1 — The LAN is trusted** (owner decision, 2026-11-27). Every host on
+  `172.28.26.0/20` is treated as trusted, so AP1 and AP10 sit at Medium and the
+  ranking is dominated by AP4 and AP8. This is the assumption with the largest
+  effect on the document: reverse it and AP1 and AP10 return to High and
+  mitigation 5 moves to the top.
 - **A2 — No inbound internet exposure, and none is planned.** The Cloudflare
   Zero Trust path was decommissioned; the intended remote path is the tailnet.
   If a public hostname returns, a whole boundary reappears with no Access app,
@@ -194,14 +204,16 @@ Assumptions that move the ranking:
   (ADR-025). If that changes, AP8 splits into "credential leak" and "proprietary
   text leak", and the second has no control.
 
-Open questions for the owner:
+Answers from the owner (2026-11-27), and what each one changed:
 
-1. Is the LAN trusted for the four `0.0.0.0` services, or should they be
-   loopback-only today?
-2. Should the API carry its own request budget, or is OmniRoute's quota the
-   intended control for AP11?
-3. Is the reranker's root user deliberate (an upstream TEI constraint) or an
-   oversight?
+1. **Is the LAN trusted for the four `0.0.0.0` services?** Yes. Recorded as A1;
+   AP1 and AP10 drop from High to Medium and mitigation 5 is demoted to
+   accepted risk rather than open exposure.
+2. **Should the API carry its own request budget?** Yes, it should. OmniRoute's
+   quota is not the intended control, so AP11 stays open and LLM10 stays
+   Partial until the limiter exists. Filed as #256.
+3. **Is the reranker's root user deliberate?** No. It is an oversight, so #227
+   is a fix to make rather than a constraint to record.
 
 ## 8. Quality check
 
@@ -210,5 +222,6 @@ Open questions for the owner:
 - All eight boundaries in §2 appear in at least one abuse path except B6, which
   is covered by AP9.
 - CI, tests and docs are excluded from the model and cited only as evidence.
-- Assumptions and the three open questions are stated rather than resolved
-  silently.
+- The three questions this document raised were put to the owner and answered
+  on 2026-11-27; the answers are recorded verbatim in §7 and their consequences
+  are applied to §4, §5 and §6 rather than left as commentary.
