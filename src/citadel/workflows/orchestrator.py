@@ -60,6 +60,22 @@ def _safety_flags(result: ToolResult) -> list[str]:
     return sorted(flags)
 
 
+def _sources(citations: Any) -> list[dict[str, Any]]:  # noqa: ANN401 - the activity's JSON
+    """The citation rows a reader can act on: which document, which revision, how well it scored."""
+    if not isinstance(citations, list):
+        return []
+    return [
+        {
+            "id": str(item.get("chunk_id", "")),
+            "source_uri": str(item.get("source_uri", "")),
+            "revision": str(item.get("revision", ""))[:12],
+            "score": item.get("score"),
+        }
+        for item in citations
+        if isinstance(item, dict)
+    ]
+
+
 @workflow.defn
 class RunWorkflow:
     @workflow.run
@@ -80,6 +96,7 @@ class RunWorkflow:
             safety_flags=_safety_flags(result),
             answer=str(result.output.get("answer", ""))[:4000],
             citation_ids=[str(citation) for citation in result.output.get("citation_ids", [])],
+            sources=_sources(result.output.get("citations", [])),
         )
         return result
 
@@ -91,6 +108,7 @@ class RunWorkflow:
         safety_flags: list[str],
         answer: str = "",
         citation_ids: list[str] | None = None,
+        sources: list[dict[str, Any]] | None = None,
     ) -> None:
         await workflow.execute_activity_method(
             activities.RunActivities.finish_run,
@@ -99,6 +117,7 @@ class RunWorkflow:
                 tenant_id=item.tenant_id,
                 outcome=outcome,
                 citation_ids=citation_ids or [],
+                sources=sources or [],
                 safety_flags=safety_flags,
                 answer=answer,
                 task=item.task,

@@ -731,6 +731,23 @@ class ToolActivities:
             )
 
 
+def _run_outputs(end: RunEnd) -> dict[str, Any]:
+    """What the trace's root span answers with: the result, and the documents behind it.
+
+    `citation_ids` alone put three opaque point ids in front of a reader. The ledger keeps only
+    those ids - its `run.end` schema pins the payload - so the trace is the place to name the
+    document, the revision and the score next to each id.
+    """
+    return {
+        "outcome": end.outcome,
+        "answer": end.answer[:4000],
+        "answer_chars": len(end.answer),
+        "citation_ids": list(end.citation_ids),
+        "sources": list(end.sources),
+        "safety_flags": list(end.safety_flags),
+    }
+
+
 class RunActivities:
     """Run lifecycle writes. The orchestrator owns no tools, only this record."""
 
@@ -800,13 +817,7 @@ class RunActivities:
             audit_id=ref.audit_id,
             outcome=end.outcome,
             inputs={**self._trace_inputs(end), "task": end.task},
-            outputs={
-                "outcome": end.outcome,
-                "answer": end.answer[:4000],
-                "answer_chars": len(end.answer),
-                "citation_ids": list(end.citation_ids),
-                "safety_flags": list(end.safety_flags),
-            },
+            outputs=_run_outputs(end),
         )
         try:
             _offer_online_sample(end=end, dsn=self._dsn, audit=self._audit)
