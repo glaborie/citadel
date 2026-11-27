@@ -65,3 +65,20 @@ suppression is dead weight: delete it rather than leaving a comment that means n
 
 The suppression count is asserted, so a second one shows up in review as a change to a test
 rather than as a quiet comment.
+
+## Why the suppression is also stripped from the SARIF
+
+Suppressing the finding in source is half the job. Semgrep honours `# nosemgrep` - it
+reports `Ran 211 rules on 207 files: 0 findings` - and still writes the result it suppressed
+into the SARIF, marked `suppressions: [{"kind": "inSource"}]`. Code scanning does not read
+that field, so the justified exception arrived as an open alert (#42) whose line (88) is one
+below the comment that silences it. Two alerts came of it, one for each line the rule has
+been reported against.
+
+So `security.yml` runs `scripts/strip-suppressed-sarif.py` between the scan and
+`upload-sarif`. The filter removes only results carrying a `suppressions` entry, keeps the
+schema and the rule metadata, and does nothing when the scan failed before writing a file -
+the SARIF uploaded is the set of findings the scan stands behind.
+
+A green CLI count and a green Security tab are two different claims. The one that reaches
+code scanning is the file, not the exit code.
