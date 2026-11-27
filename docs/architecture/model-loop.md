@@ -101,6 +101,24 @@ every other refusal, not raised out of the activity. If an activity still fails
 unexpectedly, the orchestrator writes `run.end` with outcome `failed` before the
 workflow failure surfaces, so a run never stays at `created`.
 
+## An answer with no observation is a plan
+
+A pack whose job is to act declares `requires_tool: true` in its manifest
+(`docker`, `github`, `researcher`). For such a run, a reply with no tool call and
+no tool result in its history is refused with `model.no_tool_call`: the run
+recorded a plan, so it cannot record `completed`. The decision comes from the
+manifest, never from guessing whether a sentence sounds like a plan.
+
+Two consequences are deliberate. The gate only applies to a step with no tool
+observation behind it, so the answer that follows a tool result is still a
+result. And such a pack gets no answer-cache key at all: only a first-step answer
+is cacheable, and that answer has no tool behind it - including rows written
+before this rule existed.
+
+A pack without the flag keeps the chat behaviour: a reply with no tool call is the
+answer. The flag can only tighten a run; it grants nothing, so the pack stays
+documentation.
+
 Three properties are worth naming, because each one is a place the design could
 have gone wrong:
 

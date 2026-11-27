@@ -26,6 +26,7 @@ def test_every_pack_loads_and_matches_its_manifest(agent: str) -> None:
     assert pack.name == f"{agent}-1.0.0"
     assert pack.index.startswith("#")
     assert pack.references, "a pack with no reference cannot disclose progressively"
+    assert pack.requires_tool is True, "every shipped agent acts; a plan is not a result"
 
 
 def test_the_index_alone_is_the_default() -> None:
@@ -90,6 +91,17 @@ def test_a_pack_may_not_claim_another_agent(tmp_path: Path) -> None:
     (tmp_path / "docker" / "manifest.json").write_text(json.dumps(manifest))
 
     with pytest.raises(skills.SkillPackError, match="declares agent"):
+        skills.load_pack("docker", directory=tmp_path)
+
+
+def test_requires_tool_must_be_a_boolean(tmp_path: Path) -> None:
+    """`"false"` is a truthy string; a pack cannot smuggle a looser reading in."""
+    shutil.copytree(ROOT / "docker", tmp_path / "docker")
+    manifest = json.loads((tmp_path / "docker" / "manifest.json").read_text())
+    manifest["requires_tool"] = "false"
+    (tmp_path / "docker" / "manifest.json").write_text(json.dumps(manifest))
+
+    with pytest.raises(skills.SkillPackError, match="non-boolean"):
         skills.load_pack("docker", directory=tmp_path)
 
 

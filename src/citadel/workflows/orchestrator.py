@@ -57,6 +57,9 @@ def _safety_flags(result: ToolResult) -> list[str]:
         flags.add("dlp_blocked")
     if result.rule_id.startswith("budget."):
         flags.add("budget_exceeded")
+    if result.rule_id == "model.no_tool_call":
+        # The run refused the answer; the trace's root output says why too.
+        flags.add("model.no_tool_call")
     return sorted(flags)
 
 

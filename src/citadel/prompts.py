@@ -35,6 +35,9 @@ class Prompt:
     version: str
     tools: tuple[dict[str, Any], ...]
     digest: str
+    # Copied from the pack: an acting pack's first answer, with no tool
+    # observation behind it, is a plan and not a result.
+    requires_tool: bool = False
 
     @property
     def pack_id(self) -> str:
@@ -104,4 +107,5 @@ def assemble(
         version=loaded.version,
         tools=manifest,
         digest=_digest(system, task, loaded.name, loaded.version, list(manifest)),
+        requires_tool=loaded.requires_tool,
     )
