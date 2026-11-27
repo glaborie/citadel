@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from citadel import dlp
 from citadel.audit import AuditLedger
 from citadel.model import ModelUnavailable, Reply, RequestedTool, ScriptedClient, Usage
 from citadel.model.client import parse_reply
@@ -163,6 +164,31 @@ def test_a_poisoned_reply_never_enters_context() -> None:
     assert result.status == "dlp_blocked"
     assert result.content == "", "a blocked reply must not travel further"
     assert audit.events[-1]["payload"]["surface"] == "output"
+
+
+def test_a_dlp_refusal_on_the_conversation_is_a_denied_step() -> None:
+    """The input gate runs inside `complete`; its refusal must not kill the activity."""
+
+    class Blocked:
+        def complete(self, **kwargs: Any) -> Reply:  # noqa: ANN401
+            raise dlp.DlpBlocked(
+                "dlp_blocked", {"surface": "input", "action": "block", "categories": []}
+            )
+
+    audit = FakeAudit()
+    activities = ModelActivities(
+        dsn="postgres://unused",
+        audit=audit,
+        client_factory=lambda alias: Blocked(),
+        analyzer=Detector(),
+    )
+
+    result = activities.next_step(request())
+
+    assert (result.status, result.rule_id) == ("dlp_blocked", "dlp.blocked")
+    assert audit.events[-1]["payload"]["status"] == "dlp_blocked"
+    assert audit.events[-1]["payload"]["rule_id"] == "dlp.blocked"
+    assert audit.events[-1]["payload"]["surface"] == "input"
 
 
 def test_tool_call_markup_in_content_is_not_an_answer() -> None:

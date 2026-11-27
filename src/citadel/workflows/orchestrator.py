@@ -60,23 +60,44 @@ def _safety_flags(result: ToolResult) -> list[str]:
 class RunWorkflow:
     @workflow.run
     async def run(self, item: RunInput) -> ToolResult:
-        result = await self._task_run(item) if item.task else await self._tool_run(item)
+        try:
+            result = await self._task_run(item) if item.task else await self._tool_run(item)
+        except Exception:
+            # An activity that dies must not leave the row at `created` with no
+            # trajectory end. Close it, then keep the failure visible.
+            await self._finish(item, outcome="failed", safety_flags=["workflow_error"])
+            raise
 
         # run.end is written by an activity, never by the workflow itself, so a
         # retried finish cannot fork the trajectory.
+        await self._finish(
+            item,
+            outcome=_outcome(result),
+            safety_flags=_safety_flags(result),
+            answer=str(result.output.get("answer", ""))[:4000],
+        )
+        return result
+
+    async def _finish(
+        self,
+        item: RunInput,
+        *,
+        outcome: str,
+        safety_flags: list[str],
+        answer: str = "",
+    ) -> None:
         await workflow.execute_activity_method(
             activities.RunActivities.finish_run,
             RunEnd(
                 run_id=item.run_id,
                 tenant_id=item.tenant_id,
-                outcome=_outcome(result),
-                safety_flags=_safety_flags(result),
-                answer=str(result.output.get("answer", ""))[:4000],
+                outcome=outcome,
+                safety_flags=safety_flags,
+                answer=answer,
             ),
             start_to_close_timeout=timedelta(seconds=30),
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
-        return result
 
     async def _tool_run(self, item: RunInput) -> ToolResult:
         queue = TASK_QUEUES.get(item.agent_id)

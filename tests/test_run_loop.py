@@ -8,6 +8,7 @@ thing the workflow decides - without a gateway, a database or a policy server.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -15,13 +16,50 @@ from temporalio import activity
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from citadel.workflows.model_step import ModelStepRequest, ModelStepResult
+from citadel import dlp
+from citadel.audit import AuditLedger
+from citadel.workflows.model_step import (
+    ModelActivities,
+    ModelStepRequest,
+    ModelStepResult,
+)
 from citadel.workflows.orchestrator import RunWorkflow, child_workflow_id
 from citadel.workflows.specialist import SpecialistWorkflow
 from citadel.workflows.types import PolicyOutcome, RunEnd, RunInput, ToolCall, ToolResult
 
 QUEUE = "orchestrator"
 SPECIALIST_QUEUE = "docker"
+
+
+class _Audit(AuditLedger):
+    def append(self, **kwargs: Any) -> Any:  # noqa: ANN401 - test double
+        from types import SimpleNamespace
+
+        return SimpleNamespace(audit_id="audit-1")
+
+
+class _Detector:
+    """The DLP gate's opener: answers with no findings."""
+
+    def __call__(self, request: Any, timeout: Any = None) -> _Detector:  # noqa: ANN401
+        self._body = b"[]"
+        return self
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> _Detector:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+
+class _BlockedClient:
+    def complete(self, **kwargs: Any) -> Any:  # noqa: ANN401 - raises before a reply
+        raise dlp.DlpBlocked(
+            "dlp_blocked", {"surface": "input", "action": "block", "categories": []}
+        )
 
 
 def task_input(**overrides: Any) -> RunInput:
@@ -69,8 +107,9 @@ def wants(tool: str = "read_logs") -> ModelStepResult:
 
 
 async def run_task(
-    steps: list[ModelStepResult],
+    steps: list[ModelStepResult] | None = None,
     *,
+    next_step: Callable[[ModelStepRequest], ModelStepResult] | None = None,
     policy: PolicyOutcome | None = None,
     tool_status: str = "executed",
 ) -> tuple[ToolResult, list[ModelStepRequest], list[ToolCall], list[RunEnd]]:
@@ -78,7 +117,7 @@ async def run_task(
     seen_requests: list[ModelStepRequest] = []
     seen_calls: list[ToolCall] = []
     ends: list[RunEnd] = []
-    queue = list(steps)
+    queue = list(steps or [])
     decision = policy or PolicyOutcome(
         outcome="allow", rule_id="policy.allowed", reason="stub", tier="T0"
     )
@@ -86,6 +125,8 @@ async def run_task(
     @activity.defn(name="next_step")
     def stub_next_step(request: ModelStepRequest) -> ModelStepResult:
         seen_requests.append(request)
+        if next_step is not None:
+            return next_step(request)
         return queue.pop(0) if len(queue) > 1 else queue[0]
 
     @activity.defn(name="finish_run")
@@ -201,6 +242,68 @@ def test_a_dlp_blocked_step_denies_the_run() -> None:
     assert calls == []
     assert ends[0].outcome == "denied"
     assert "dlp_blocked" in ends[0].safety_flags
+
+
+def test_a_dlp_refusal_inside_complete_denies_the_run_and_writes_run_end() -> None:
+    """#169: the input gate raises from `complete`; that must be a step result."""
+    activities = ModelActivities(
+        dsn="postgres://unused",
+        audit=_Audit("postgres://unused"),
+        client_factory=lambda alias: _BlockedClient(),
+        analyzer=_Detector(),
+    )
+
+    result, requests, calls, ends = asyncio.run(run_task(next_step=activities.next_step))
+
+    assert (result.status, result.rule_id) == ("denied", "dlp.blocked")
+    assert len(requests) == 1, "the refusal is a result, not a retried activity failure"
+    assert calls == []
+    assert ends[0].outcome == "denied"
+    assert "dlp_blocked" in ends[0].safety_flags
+
+
+async def run_failing_task(error: Exception) -> list[RunEnd]:
+    ends: list[RunEnd] = []
+
+    @activity.defn(name="next_step")
+    def failing_next_step(_request: ModelStepRequest) -> ModelStepResult:
+        raise error
+
+    @activity.defn(name="finish_run")
+    def stub_finish_run(end: RunEnd) -> None:
+        ends.append(end)
+
+    env = await WorkflowEnvironment.start_time_skipping()
+    executor = ThreadPoolExecutor(max_workers=4)
+    try:
+        async with Worker(
+            env.client,
+            task_queue=QUEUE,
+            workflows=[RunWorkflow],
+            activities=[failing_next_step, stub_finish_run],
+            activity_executor=executor,
+        ):
+            handle = await env.client.start_workflow(
+                RunWorkflow.run, task_input(), id="run-failing-1", task_queue=QUEUE
+            )
+            try:
+                await handle.result()
+            except Exception:
+                pass
+            else:
+                raise AssertionError("a crashing activity must surface as a workflow failure")
+            return ends
+    finally:
+        executor.shutdown(wait=False)
+        await env.shutdown()
+
+
+def test_an_unexpected_activity_failure_still_writes_run_end() -> None:
+    ends = asyncio.run(run_failing_task(RuntimeError("boom")))
+
+    assert len(ends) == 1
+    assert ends[0].outcome == "failed"
+    assert ends[0].safety_flags == ["workflow_error"]
 
 
 def test_a_gateway_outage_fails_the_run() -> None:
