@@ -113,6 +113,10 @@ class RunEnd:
     # The model's gated answer, bounded. A submitted run has no other surface a
     # person can read, and `run.end` is already the event they look at.
     answer: str = ""
+    # What the retrieval cited, as a reader can use it: document, revision, score. The
+    # ledger keeps `citation_ids` only (its schema pins the run.end payload); the trace has
+    # room to say which document each id belongs to.
+    sources: list[dict[str, Any]] = field(default_factory=list)
     # The task as submitted. It exists so the closing write to the trace's root span can
     # re-send the request: a second write to a span id replaces the first. The ledger still
     # stores only its hash; this field is never persisted.

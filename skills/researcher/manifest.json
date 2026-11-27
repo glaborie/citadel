@@ -2,6 +2,7 @@
   "agent": "researcher",
   "pack": "researcher-1.0.0",
   "version": "1.0.0",
+  "requires_tool": true,
   "files": {
     "SKILL.md": "sha256:75b4cbe3f50ef11387e4845ce83c3dce800831e96c01e2fd192418c0c141d67a",
     "references/citations.md": "sha256:62fbfaf3c323c26b92385fee551c92f71ae24713d73dd2985ef6fbffbf572fa9",

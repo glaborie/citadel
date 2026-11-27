@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from citadel.api import app as api_app
 from citadel.api.app import create_app
 from citadel.identity import KeycloakVerifier
+from citadel.skills import load_pack
 from tests.conftest import AUDIENCE, ISSUER, StaticKeys, user_token
 
 
@@ -57,11 +58,15 @@ def client(
     )
 
 
+# Read from disk: a pack bump is one edit in one place, not four lines in this file.
+PACK = load_pack("docker").name
+
+
 def _body() -> dict[str, Any]:
     return {
         "agent_id": "docker",
         "risk_tier": "T0",
-        "prompt_pack_version": "docker-1.0.0",
+        "prompt_pack_version": PACK,
         "model_alias": "auto/best-fast",
     }
 
@@ -78,7 +83,7 @@ def test_run_start_records_pinned_provenance(
     assert len(ledger.events) == 1
     event = ledger.events[0]
     assert event["event_type"] == "run.start"
-    assert event["payload"]["prompt_pack_version"] == "docker-1.0.0"
+    assert event["payload"]["prompt_pack_version"] == PACK
     assert event["payload"]["model_alias"] == "auto/best-fast"
     assert event["payload"]["run_id"] == response.json()["run_id"]
 
@@ -94,7 +99,7 @@ def test_a_pack_version_the_deployment_does_not_have_is_rejected(
     response = http.post("/runs", json=body, headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 400
-    assert "docker-1.0.0" in response.json()["detail"]
+    assert PACK in response.json()["detail"]
     assert ledger.events == []
 
 
@@ -134,7 +139,7 @@ def test_a_task_submits_the_workflow_and_keeps_the_text_out_of_the_ledger(
     assert len(submitted) == 1
     assert submitted[0].task == "which containers are running?"
     assert submitted[0].agent_id == "docker"
-    assert submitted[0].prompt_pack_version == "docker-1.0.0"
+    assert submitted[0].prompt_pack_version == PACK
     assert submitted[0].run_id == response.json()["run_id"]
     payload = ledger.events[0]["payload"]
     assert payload["task_chars"] == len("which containers are running?")

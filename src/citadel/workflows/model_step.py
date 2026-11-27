@@ -155,8 +155,13 @@ class ModelActivities:
         return ModelStepResult(status=status, rule_id=rule_id, detail=detail)
 
     def _cache_key(self, request: ModelStepRequest, prompt: Prompt, alias: str) -> CacheKey | None:
-        """No cache, or no trustworthy version, means no lookup: never a hit."""
-        if self._cache is None:
+        """No cache, or no trustworthy version, means no lookup: never a hit.
+
+        An acting pack gets no key at all: only a first-step answer is cacheable,
+        and such an answer has no tool observation behind it, so serving one would
+        report a plan as a result - including rows stored before this rule existed.
+        """
+        if self._cache is None or prompt.requires_tool:
             return None
         try:
             return CacheKey(
@@ -370,10 +375,19 @@ class ModelActivities:
         markup = tool is None and contains_tool_markup(reply.content)
         if markup:
             status, rule_id = "refused", "model.tool_markup"
+            detail = "the reply carried tool-call markup in content instead of tool_calls"
         elif tool is not None:
             status, rule_id = "tool_requested", "model.tool_requested"
+            detail = f"{reply.model} answered in {reply.latency_ms} ms"
+        elif prompt.requires_tool and not request.history:
+            # The pack says its tasks are done by acting, and this reply acted on
+            # nothing: with no history there is no tool result behind it, so the
+            # text is a plan. "Pending is not passing", and neither is narrating.
+            status, rule_id = "refused", "model.no_tool_call"
+            detail = "the pack requires a tool call; this reply asked for none"
         else:
             status, rule_id = "answered", "model.answered"
+            detail = f"{reply.model} answered in {reply.latency_ms} ms"
         ref = self._record(
             request,
             {
@@ -427,12 +441,8 @@ class ModelActivities:
         return ModelStepResult(
             status=status,
             rule_id=rule_id,
-            detail=(
-                "the reply carried tool-call markup in content instead of tool_calls"
-                if markup
-                else f"{reply.model} answered in {reply.latency_ms} ms"
-            ),
-            content="" if markup else reply.content,
+            detail=detail,
+            content="" if status == "refused" else reply.content,
             tool=tool.name if tool is not None else "",
             arguments=dict(tool.arguments) if tool is not None else {},
             prompt_digest=prompt.digest,
