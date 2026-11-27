@@ -7,8 +7,8 @@ forgotten - it is a collection that does not hold the data.
 Every chunk carries the digest of the whole file it came from. Re-ingesting an
 unchanged file writes the same point ids, so it stores nothing new; a changed
 file adds one revision and leaves the old one retrievable. Old revisions are not
-pruned here (shortcut: re-index is idempotent, not a retention policy; add a
-prune when storage matters).
+pruned here by default: re-indexing is idempotent in content and additive in membership, so
+`--prune` is what makes the index equal the corpus. `make knowledge-sync` runs it.
 
 Two named vectors: server-side BM25 in `text`, and a dense vector in `dense`
 computed through the embedding endpoint. Without an embedder the point carries
@@ -43,6 +43,7 @@ from urllib.request import Request
 from qdrant_client import QdrantClient, models
 
 from citadel import dlp, env, net
+from citadel.retrieval.corpus import indexed_sources, prune_sources, stale_sources
 from citadel.retrieval.embed import Embedder, OmniRouteEmbedder
 from citadel.retrieval.errors import RetrievalUnavailable
 
@@ -55,6 +56,7 @@ DENSE: Final = "dense"
 # A runbook is text. Larger files are a binary the model should not be fed, and
 # a whole-repo tree can contain a lockfile larger than the whole value of the repo.
 MAX_FILE_BYTES: Final = 1_000_000
+FS_PREFIX: Final = "fs:"
 MAX_CHUNK_CHARS: Final = 2_000
 # One upsert per batch keeps a whole repository out of a single request.
 BATCH: Final = 256
@@ -346,6 +348,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--repo", action="append", default=[], help="owner/name (repeatable)")
     parser.add_argument("--ref", default="HEAD")
     parser.add_argument("--qdrant-url", default=DEFAULT_QDRANT_URL)
+    parser.add_argument(
+        "--prune",
+        action="store_true",
+        help="delete fs: chunks whose document is no longer in the corpus",
+    )
     return parser
 
 
@@ -395,11 +402,27 @@ def _run(sources: list[Iterable[Document]], args: argparse.Namespace) -> None:
     client = QdrantClient(url=args.qdrant_url)
     embedder = _embedder()
     redact = _redactor()
+    collections: set[str] = set()
+    corpus: set[str] = set()
     for source in sources:
+        # Materialised once: the corpus is what decides membership, and prune needs it whole.
+        documents = list(source)
+        corpus.update(document.source_uri for document in documents)
         report = ingest(
-            client, tenant=args.tenant, documents=source, embedder=embedder, redact=redact
+            client, tenant=args.tenant, documents=documents, embedder=embedder, redact=redact
         )
+        collections.add(report.collection)
         print(f"{report.collection}: {report.documents} documents, {report.chunks} chunks")
+
+    if not args.prune:
+        return
+    for collection in sorted(collections):
+        stale = stale_sources(indexed_sources(client, collection), corpus)
+        if not stale:
+            print(f"{collection}: nothing to prune")
+            continue
+        removed = prune_sources(client, collection, stale)
+        print(f"{collection}: pruned {removed} document(s) no longer in the corpus")
 
 
 def main(argv: list[str] | None = None) -> int:

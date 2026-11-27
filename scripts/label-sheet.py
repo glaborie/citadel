@@ -40,6 +40,7 @@ def sheet_path(version: int) -> Path:
 def key_path(version: int) -> Path:
     return ROOT / "evals" / "calibration" / f"label-key-v{version}.json"
 
+
 # No field list here on purpose: the sheet renders `render_evidence(case)`, the exact text
 # the judge is given. A rater cannot then be shown less than the judge, and a field added to
 # the record reaches both or neither.
@@ -47,6 +48,7 @@ def key_path(version: int) -> Path:
 
 def blind_ids(sample: dict[str, Any]) -> dict[str, str]:
     """A stable, non-alphabetical numbering, so an id cannot hint at the band."""
+
     def digest(case: dict[str, Any]) -> str:
         return hashlib.sha256(case["id"].encode()).hexdigest()
 
@@ -105,7 +107,7 @@ Write your numbers on the `score:` line under each item, like
 **Do not open `evals/calibration/label-key.json` before you finish.** It holds the band and
 the mutation for each item, and reading it would turn this into a test of the answer key.
 
-## Rubric v{rubrics['rubric_version']}
+## Rubric v{rubrics["rubric_version"]}
 
 {_anchors(rubrics)}
 """
@@ -158,6 +160,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.check:
         problems = []
+
         # The committed sheet is the one a human filled in, so the `score:` lines are
         # expected to differ. Everything else - items, order, requests, events, answers,
         # anchors - must be exactly what this script would write today.
