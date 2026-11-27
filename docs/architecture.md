@@ -70,7 +70,7 @@ flowchart TB
 
 ### Service responsibilities
 
-- **Citadel API** — authenticated ingress, token validation, tenant extraction, run creation, approval console backend.
+- **Citadel API** — authenticated ingress, token validation, tenant extraction, run creation, approval console backend. FastAPI's schema endpoints (`/docs`, `/openapi.json`) are served only when the API's environment sets `CITADEL_EXPOSE_API_DOCS` (truthy value); they answer without authentication, so the default is off and `/redoc` is never served.
 - **Temporal Server / UI** — durable state, retries, signals, child workflows, run history. UI is operator debugging only.
 - **Workers** — one orchestrator plus specialist child workflows. Each specialist has its own tool manifest, OpenFGA relations, prompt/skill pack and model tier.
 - **OpenFGA** — the single authorisation store. Answers tool-permission questions and supplies the filter set for retrieval.
