@@ -90,10 +90,10 @@ textarea{min-height:5rem}
 th a{color:#06c;text-decoration:none;white-space:nowrap}
 tr.filters th{padding-top:0}
 tr.filters input{width:100%;box-sizing:border-box}
-dl.payload{margin:0}
-dl.payload dt{font-size:.75em;text-transform:uppercase;color:#555;letter-spacing:.03em}
-dl.payload dd{margin:0 0 .4rem}
-dl.payload dl{margin:.2rem 0 0 .5rem}
+table.payload{border-collapse:collapse;width:100%}
+table.payload td{border-bottom:none;padding:.1rem .5rem .1rem 0;vertical-align:top}
+table.payload td:first-child{color:#555;white-space:nowrap}
+table.payload table{margin:.1rem 0}
 .markdown h1,.markdown h2,.markdown h3{font-size:1.05em;margin:.6rem 0 .3rem}
 .markdown p,.markdown ul,.markdown ol{margin:.3rem 0}
 .markdown pre{padding:.5rem}
@@ -159,15 +159,15 @@ def _payload_value(key: str, value: Any) -> str:
 
 
 def _payload(payload: Any) -> str:
-    """One audit payload as a definition list; prose fields render as markdown."""
+    """One audit payload as a two-column table: label, value, no header."""
     if not isinstance(payload, dict):
         return f"<pre>{_esc(payload)}</pre>"
-    rows = [
-        f"<dt>{_esc(key)}</dt><dd>{_payload_value(str(key), value)}</dd>"
+    rows = "".join(
+        f"<tr><td>{_esc(key)}</td><td>{_payload_value(str(key), value)}</td></tr>"
         for key, value in payload.items()
         if key not in SKIP_FIELDS
-    ]
-    return '<dl class="payload">' + "".join(rows) + "</dl>"
+    )
+    return f'<table class="payload">{rows}</table>'
 
 
 def _order(columns: dict[str, str], sort: str, direction: str, default: str) -> str:

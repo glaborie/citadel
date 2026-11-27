@@ -185,9 +185,11 @@ def test_the_run_timeline_renders_the_answer_as_markdown(env: tuple[TestClient, 
     assert "<script>alert(1)</script>" not in response.text
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in response.text
     assert 'href="javascript:' not in response.text
-    # Metadata is a key/value list, the run id is the page, arrays stay inline.
-    assert "<dt>outcome</dt>" in response.text
-    assert "<dt>run_id</dt>" not in response.text
+    # Metadata is a two-column table (label, value), the run id is the page,
+    # and arrays stay inline.
+    assert '<table class="payload">' in response.text
+    assert "<tr><td>outcome</td><td>completed</td></tr>" in response.text
+    assert "<td>run_id</td>" not in response.text
     assert "chunk-1, chunk-2" in response.text
 
 
