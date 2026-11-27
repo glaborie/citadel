@@ -8,6 +8,8 @@ like every other span.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from temporalio import activity
@@ -111,7 +113,7 @@ class RetrievalActivities:
         )
 
     def _result_event(self, request: RetrievalRequest, results: Results, status: str) -> None:
-        self._audit.append(
+        ref = self._audit.append(
             tenant_id=request.tenant_id,
             event_type="retrieval.result",
             actor_type="agent",
@@ -124,6 +126,36 @@ class RetrievalActivities:
                 "revisions": [item["revision"] for item in results.citations],
                 "scores": [item["score"] for item in results.citations],
             },
+        )
+        record_span(
+            "retrieval.result",
+            run_id=request.run_id,
+            audit_id=ref.audit_id,
+            status=status,
+            cited=str(len(results.citations)),
+            sources=self._sources(results.citations),
+        )
+
+    @staticmethod
+    def _sources(citations: Sequence[Mapping[str, Any]]) -> str:
+        """What was cited, as a reader can use it: document, revision, score.
+
+        The row's `citation_ids` are Qdrant point ids - storage, not evidence. A reviewer
+        reading a trace could not tell that three opaque ids were three chunks of one
+        runbook, nor which runbook. This is the same fact the ledger already keeps in
+        `source_uris`, put where the trace can show it.
+        """
+        return json.dumps(
+            [
+                {
+                    "id": str(item.get("chunk_id", "")),
+                    "source_uri": str(item.get("source_uri", "")),
+                    "revision": str(item.get("revision", ""))[:12],
+                    "score": item.get("score"),
+                }
+                for item in citations
+            ],
+            sort_keys=True,
         )
 
     @staticmethod

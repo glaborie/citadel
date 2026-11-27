@@ -19,7 +19,8 @@ def test_every_shell_script_is_executable() -> None:
     unexecutable = [
         path.name
         for path in SCRIPTS
-        if path.suffix == ".sh" and path.read_text(encoding="utf-8").startswith("#!")
+        if path.suffix == ".sh"
+        and path.read_text(encoding="utf-8").startswith("#!")
         and not os.access(path, os.X_OK)
     ]
     assert not unexecutable, f"git index mode must be 100755: {unexecutable}"
@@ -29,7 +30,8 @@ def test_every_python_script_is_executable() -> None:
     unexecutable = [
         path.name
         for path in SCRIPTS
-        if path.suffix == ".py" and path.read_text(encoding="utf-8").startswith("#!")
+        if path.suffix == ".py"
+        and path.read_text(encoding="utf-8").startswith("#!")
         and not os.access(path, os.X_OK)
     ]
     assert not unexecutable, f"git index mode must be 100755: {unexecutable}"
