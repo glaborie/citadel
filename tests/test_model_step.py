@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -11,6 +12,8 @@ from citadel.audit import AuditLedger
 from citadel.cache import AnswerCache, InMemoryCacheStore
 from citadel.model import ModelUnavailable, Reply, RequestedTool, ScriptedClient, Usage
 from citadel.model.client import parse_reply
+from citadel.prompts import assemble
+from citadel.skills import load_pack
 from citadel.workflows.model_step import ModelActivities, ModelStepRequest
 
 
@@ -65,6 +68,16 @@ def request(**overrides: Any) -> ModelStepRequest:
     return ModelStepRequest(**base)
 
 
+def as_chat_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The same pack text without the acting flag: a pack that may answer directly."""
+    monkeypatch.setattr(
+        "citadel.workflows.model_step.assemble",
+        lambda agent, task: assemble(
+            agent, task, pack=replace(load_pack(agent), requires_tool=False)
+        ),
+    )
+
+
 def build(
     replies: list[Reply], *, detector: Detector | None = None, cache: AnswerCache | None = None
 ) -> tuple[ModelActivities, FakeAudit]:
@@ -108,8 +121,10 @@ def wants(tool: str, arguments: dict[str, Any]) -> Reply:
 
 def test_an_answer_is_returned_with_its_provenance() -> None:
     activities, audit = build([answered()])
+    # Step two: an observation is behind the answer, so an acting pack may report it.
+    history = [{"role": "user", "content": "[tool result] up 2 restarts"}]
 
-    result = activities.next_step(request())
+    result = activities.next_step(request(history=history))
 
     assert (result.status, result.rule_id) == ("answered", "model.answered")
     assert result.content == "it restarted twice"
@@ -225,6 +240,58 @@ def test_tool_call_markup_in_content_is_not_an_answer() -> None:
     assert audit.events[-1]["payload"]["rule_id"] == "model.tool_markup"
 
 
+def test_a_zero_tool_answer_from_an_acting_pack_is_refused() -> None:
+    """#209: `tr-84819553` narrated a plan and the ledger recorded `completed`."""
+    announcement = (
+        "I'll start with the read-only checks - daemon health and the container list - "
+        "since they don't depend on each other."
+    )
+    activities, audit = build([answered(announcement)])
+
+    result = activities.next_step(request(task="check the docker daemon and list containers"))
+
+    assert (result.status, result.rule_id) == ("refused", "model.no_tool_call")
+    assert result.content == "", "a plan must not surface as the run's answer"
+    assert audit.events[-1]["payload"]["status"] == "refused"
+    assert audit.events[-1]["payload"]["rule_id"] == "model.no_tool_call"
+
+
+def test_the_gate_does_not_fire_once_a_tool_has_been_observed() -> None:
+    """The rule is "no observation", not "never answer": a result may be reported."""
+    activities, _ = build([answered("the daemon reports two restarts")])
+    history = [
+        {"role": "assistant", "content": "checking the daemon"},
+        {"role": "user", "content": "[tool result] up 2 restarts"},
+    ]
+
+    result = activities.next_step(request(history=history))
+
+    assert (result.status, result.rule_id) == ("answered", "model.answered")
+
+
+def test_a_pack_without_the_flag_may_answer_directly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A chat agent answers from context; acting is the pack's declaration, not a guess."""
+    as_chat_agent(monkeypatch)
+    activities, _ = build([answered()])
+
+    result = activities.next_step(request())
+
+    assert (result.status, result.rule_id) == ("answered", "model.answered")
+
+
+def test_an_acting_pack_never_reads_the_answer_cache() -> None:
+    """Only a first-step answer is cacheable, and an acting pack's first step must act."""
+    activities, audit, store, calls = cached_build([answered(), answered()])
+
+    first = activities.next_step(request())
+    second = activities.next_step(request())
+
+    assert (first.status, second.status) == ("refused", "refused")
+    assert not store.entries, "a plan must not be stored for a later run to replay"
+    assert not [event for event in audit.events if event["event_type"] == "cache.lookup"]
+    assert len(calls) == 2
+
+
 def test_an_unreported_cost_stays_unreported() -> None:
     activities, audit = build([answered(cost=None)])
 
@@ -311,7 +378,8 @@ def cached_build(
     return activities, audit, store, calls
 
 
-def test_a_cached_answer_skips_the_second_model_call() -> None:
+def test_a_cached_answer_skips_the_second_model_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    as_chat_agent(monkeypatch)
     activities, audit, _, calls = cached_build([answered(), answered()])
 
     first = activities.next_step(request())
@@ -330,8 +398,9 @@ def test_a_cached_answer_skips_the_second_model_call() -> None:
     assert decisions == ["miss", "exact"]
 
 
-def test_a_tool_request_is_never_cached() -> None:
+def test_a_tool_request_is_never_cached(monkeypatch: pytest.MonkeyPatch) -> None:
     """Only a plain answer is cacheable, so no tool result can be replayed."""
+    as_chat_agent(monkeypatch)
     activities, audit, _, calls = cached_build(
         [wants("read_logs", {"service": "checkout-api"}), answered()]
     )
@@ -350,7 +419,8 @@ def test_a_tool_request_is_never_cached() -> None:
     assert decisions == ["miss", "miss"]
 
 
-def test_an_output_blocked_answer_is_not_stored() -> None:
+def test_an_output_blocked_answer_is_not_stored(monkeypatch: pytest.MonkeyPatch) -> None:
+    as_chat_agent(monkeypatch)
     secret = "here it is: ghp_" + "A" * 36
     activities, _, store, _ = cached_build([answered(secret), answered("clean")])
 
@@ -362,8 +432,9 @@ def test_an_output_blocked_answer_is_not_stored() -> None:
     assert again.rule_id == "model.answered"
 
 
-def test_a_later_step_does_not_read_the_cache() -> None:
+def test_a_later_step_does_not_read_the_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     """A conversation with tool output cannot be answered by a first-step entry."""
+    as_chat_agent(monkeypatch)
     activities, _, _, calls = cached_build([answered(), answered()])
 
     activities.next_step(request())

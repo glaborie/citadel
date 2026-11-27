@@ -364,6 +364,25 @@ def test_tool_markup_in_content_never_completes_the_loop() -> None:
     assert trajectory.tools_executed() == ()
 
 
+def test_an_acting_pack_refuses_an_answer_with_no_tool_call() -> None:
+    """#209: narration is not a result, and the refusal says which rule fired."""
+    model = ScriptedClient(
+        [reply(text="I'll start with the read-only checks, since they don't depend on each other.")]
+    )
+    trajectory = run_agent(
+        complete=model.complete,
+        messages=[{"role": "user", "content": "check the docker daemon"}],
+        authorize=lambda tool: decision_for(tool),
+        execute=lambda name, arguments: "should not run",
+        gate=gate,
+        requires_tool=True,
+    )
+
+    assert trajectory.outcome == "refused"
+    assert trajectory.text == "", "a plan must not become the run's answer"
+    assert trajectory.safety_flags() == ("model.no_tool_call",)
+
+
 def _person_and_gateway(hits: list[dict[str, object]]) -> Any:
     """The detector reports a PERSON; the gateway answers with a plain completion."""
 

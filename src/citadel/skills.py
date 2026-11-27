@@ -44,6 +44,10 @@ class SkillPack:
     version: str
     index: str
     references: Mapping[str, str]
+    # An acting pack: its tasks are done by calling a tool, so an answer with no
+    # tool observation is a plan. The flag can only tighten a run - it grants
+    # nothing - so it stays documentation, not authority.
+    requires_tool: bool = False
 
     def prompt(self, *wanted: str) -> str:
         """Index plus only the references asked for: progressive disclosure."""
@@ -64,10 +68,9 @@ def load_pack(agent: str, directory: Path | None = None) -> SkillPack:
     """Load one agent's pack, or refuse. Never returns unverified text."""
     if not AGENT_NAME.match(agent):
         raise SkillPackMissing(f"no skill pack for agent {agent!r}")
-    root = skills_root() if directory is None else directory
-    folder = root / agent
+    folder = (skills_root() if directory is None else directory) / agent
     if not folder.is_dir():
-        raise SkillPackMissing(f"no skill pack for agent {agent!r} in {root}")
+        raise SkillPackMissing(f"no skill pack for agent {agent!r} in {folder.parent}")
     manifest = _manifest(folder, agent)
 
     references = MappingProxyType(
@@ -84,6 +87,7 @@ def load_pack(agent: str, directory: Path | None = None) -> SkillPack:
         version=manifest["version"],
         index=_verified(folder, INDEX, manifest["files"][INDEX]),
         references=references,
+        requires_tool=manifest.get("requires_tool", False),
     )
 
 
@@ -98,6 +102,7 @@ def write_manifests(root: Path | None = None) -> list[Path]:
             "agent": folder.name,
             "pack": current.get("pack", f"{folder.name}-1.0.0"),
             "version": current.get("version", "1.0.0"),
+            "requires_tool": current.get("requires_tool", False),
             "files": {
                 name: f"sha256:{_digest((folder / name).read_bytes())}"
                 for name in sorted(_files(folder))
@@ -122,6 +127,9 @@ def _manifest(folder: Path, agent: str) -> dict[str, Any]:
     for key in ("pack", "version"):
         if not isinstance(raw.get(key), str) or not raw[key]:
             raise SkillPackError(f"{path} has no {key}")
+    # `"requires_tool": "false"` is truthy; the type is part of the contract.
+    if not isinstance(raw.get("requires_tool", False), bool):
+        raise SkillPackError(f"{path} has a non-boolean requires_tool")
     files = raw.get("files")
     if not isinstance(files, dict) or INDEX not in files:
         raise SkillPackError(f"{path} does not pin {INDEX}")

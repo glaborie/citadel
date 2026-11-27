@@ -18,7 +18,9 @@ from temporalio.worker import Worker
 
 from citadel import dlp
 from citadel.audit import AuditLedger
+from citadel.model import Reply, ScriptedClient, Usage
 from citadel.retrieval.types import RetrievalOutcome, RetrievalRequest
+from citadel.workflows.activities import _run_outputs
 from citadel.workflows.model_step import (
     ModelActivities,
     ModelStepRequest,
@@ -265,6 +267,40 @@ def test_a_dlp_refusal_inside_complete_denies_the_run_and_writes_run_end() -> No
     assert calls == []
     assert ends[0].outcome == "denied"
     assert "dlp_blocked" in ends[0].safety_flags
+
+
+def test_a_plan_from_an_acting_pack_denies_the_run_and_flags_it() -> None:
+    """#209 end to end: `tr-84819553` recorded `completed`; it must record `denied`."""
+    plan = Reply(
+        content="I'll start with the read-only checks, since they don't depend on each other.",
+        tools=(),
+        usage=Usage(
+            prompt_tokens=1090, completion_tokens=193, cost_usd=0.001, cost_source="reported"
+        ),
+        model="auto/best-fast",
+        latency_ms=9,
+    )
+    activities = ModelActivities(
+        dsn="postgres://unused",
+        audit=_Audit("postgres://unused"),
+        client_factory=lambda alias: ScriptedClient([plan]),
+        analyzer=_Detector(),
+    )
+
+    result, requests, calls, ends = asyncio.run(run_task(next_step=activities.next_step))
+
+    assert (result.status, result.rule_id) == ("denied", "model.no_tool_call")
+    assert result.output.get("answer", "") == "", "the plan is not the run's answer"
+    assert len(requests) == 1, "a refusal ends the run; it is not retried into a result"
+    assert calls == []
+    assert ends[0].outcome == "denied"
+    # The trace's root span is built from this same end row, so it cannot disagree.
+    outputs = _run_outputs(ends[0])
+    assert (outputs["outcome"], outputs["answer"], outputs["safety_flags"]) == (
+        "denied",
+        "",
+        ["model.no_tool_call"],
+    )
 
 
 async def run_failing_task(error: Exception) -> list[RunEnd]:
