@@ -2752,6 +2752,13 @@
       "pattern": "SC201",
       "line": 67,
       "name": "Extract Method"
+    },
+    {
+      "fingerprint": "c14ad3ea72e2",
+      "file": "src/citadel/workflows/activities.py",
+      "pattern": "SC201",
+      "line": 81,
+      "name": "Extract Method"
     }
   ]
 }

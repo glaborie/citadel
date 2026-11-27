@@ -1,18 +1,25 @@
 from __future__ import annotations
 
+import base64
 import time
 import urllib.error
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from fastapi.testclient import TestClient
 
 from citadel import dlp
 from citadel.approvals import validate_approval
 from citadel.hashing import arguments_hash
-from citadel.identity import IdentityError
+from citadel.identity import IdentityError, Principal, mint_run_token
 from citadel.operator import app as operator_module
 from citadel.tools import runner
 
@@ -66,18 +73,40 @@ def approving(record: dict[str, Any]) -> Any:
 
 
 @pytest.fixture
+def tokens(run_private_key: Ed25519PrivateKey) -> Callable[..., str]:
+    def mint(run_id: str = RUN_ID, tenant: str = TENANT) -> str:
+        token, _ = mint_run_token(
+            Principal("user-alice", tenant, frozenset()),
+            agent_id="docker",
+            scopes=frozenset(),
+            risk_tier="T1",
+            private_key=run_private_key,
+            run_id=run_id,
+        )
+        return token
+
+    return mint
+
+
+@pytest.fixture
 def client(
     monkeypatch: pytest.MonkeyPatch,
     analyzer: dict[str, list[dict[str, Any]]],
+    run_public_key: Ed25519PublicKey,
+    tokens: Callable[..., str],
 ) -> TestClient:
+    public = run_public_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+    monkeypatch.setenv("CITADEL_RUN_TOKEN_PUBLIC_KEY", base64.b64encode(public).decode())
     monkeypatch.setenv("CITADEL_DB_DSN", "unused")
     monkeypatch.setattr(operator_module, "_already_used", lambda *_: False)
     # Approve exactly what the request asks for; mismatch tests override this.
-    monkeypatch.setattr(
-        operator_module,
-        "resolve_approval",
-        lambda **kw: approving(record_for(kw["tool"], kw["arguments"]))(**kw),
-    )
+    resolved: list[dict[str, Any]] = []
+
+    def resolve(**kw: Any) -> Any:
+        resolved.append(kw)
+        return approving(record_for(kw["tool"], kw["arguments"]))(**kw)
+
+    monkeypatch.setattr(operator_module, "resolve_approval", resolve)
 
     captured: dict[str, Any] = {}
     ledger: list[dict[str, Any]] = []
@@ -95,15 +124,18 @@ def client(
 
     monkeypatch.setattr(operator_module, "AuditLedger", lambda _dsn: SimpleNamespace(append=append))
     monkeypatch.setattr(runner, "run", fake_run)
-    test_client = TestClient(operator_module.app)
+    test_client = TestClient(
+        operator_module.app, headers={"Authorization": f"Bearer {tokens()}"}
+    )
     test_client.captured = captured
     test_client.ledger = ledger
+    test_client.resolved = resolved
     return test_client
 
 
 def body(tool: str, arguments: dict[str, Any], **overrides: Any) -> dict[str, Any]:
+    """No tenant: the operator takes it from the run token's claims."""
     payload: dict[str, Any] = {
-        "tenant_id": TENANT,
         "run_id": RUN_ID,
         "tool": tool,
         "arguments": arguments,
@@ -202,6 +234,46 @@ def test_t2_tool_is_refused(client: TestClient) -> None:
 def test_missing_approval_is_refused(client: TestClient) -> None:
     payload = body("open_remediation_pr", PR_ARGS, approval_ref="")
     assert client.post("/execute", json=payload).status_code == 403
+
+
+def test_execute_without_a_token_is_refused(client: TestClient) -> None:
+    """Red team: a peer on the internal network presenting no credential at all.
+
+    Before #237 this route took a credential-free body and drove the T1 writer.
+    """
+    anonymous = TestClient(operator_module.app)
+    response = anonymous.post(
+        "/execute", json=body("restart_service", {"service": "checkout-api"})
+    )
+    assert response.status_code == 401
+    assert client.captured == {}, "nothing may run for an unidentified caller"
+
+
+def test_a_token_for_another_run_is_refused(
+    client: TestClient, tokens: Callable[..., str]
+) -> None:
+    """Red team: a stolen approval spent under a token minted for a different run."""
+    other_run = "11111111-1111-1111-1111-111111111111"
+    response = client.post(
+        "/execute",
+        json=body("restart_service", {"service": "checkout-api"}),
+        headers={"Authorization": f"Bearer {tokens(run_id=other_run)}"},
+    )
+    assert response.status_code == 403
+    assert "run" in response.json()["detail"]
+    assert client.captured == {}
+
+
+def test_resolution_runs_under_the_token_tenant(client: TestClient) -> None:
+    """The tenant is a claim, not an input: the approval is resolved under it."""
+    payload = {**body("restart_service", {"service": "checkout-api"}), "tenant_id": "lab-b"}
+
+    forged = client.post("/execute", json=payload)
+    assert forged.status_code == 422, "the body cannot carry a tenant at all"
+
+    accepted = client.post("/execute", json=body("restart_service", {"service": "checkout-api"}))
+    assert accepted.status_code == 200
+    assert client.resolved[0]["tenant_id"] == TENANT
 
 
 def test_a_credential_in_approved_input_never_reaches_the_command(client: TestClient) -> None:

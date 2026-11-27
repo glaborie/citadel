@@ -1,11 +1,12 @@
 """The operator service: the only component that performs a T1 write.
 
-It is deliberately narrow. A caller supplies a tool name and named arguments
-that a human already approved plus the audit reference of that decision; the
-operator resolves the reference, re-builds the argv from the catalog and runs it.
-It accepts no command line and no free text, so a prompt-injected agent cannot
-compose an action of its own. The worst it can do is replay an approval, which
-the consumed reference prevents.
+It is deliberately narrow. A caller presents a signed run token, the audit
+reference of a human approval and the tool with the approved named arguments;
+the operator takes the tenant from the token's claims, resolves the reference
+under that tenant, re-builds the argv from the catalog and runs it. It accepts
+no command line, no free text and no tenant from the body, so a
+prompt-injected agent cannot compose an action of its own. The worst it can do
+is replay an approval, which the consumed reference prevents.
 """
 
 from __future__ import annotations
@@ -16,9 +17,9 @@ import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from citadel import __version__, dlp
@@ -27,6 +28,8 @@ from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
 from citadel.env import secret
 from citadel.identity import IdentityError
+from citadel.identity.bearer import require_run_token
+from citadel.identity.run_token import RunContext, bind_identity
 from citadel.tools import CommandDenied, build_argv, needs_body_file, pr_text
 from citadel.tools import runner as executor
 
@@ -39,7 +42,6 @@ app = FastAPI(title="Citadel Operator", version=__version__)
 class ExecuteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    tenant_id: str
     run_id: str
     tool: str
     arguments: dict[str, Any] = {}
@@ -113,11 +115,22 @@ def _body_file(tool: str, run_id: str, arguments: dict[str, Any]) -> Iterator[Pa
 
 
 @app.post("/execute")
-def execute(request: ExecuteRequest) -> dict[str, Any]:
+def execute(
+    request: ExecuteRequest,
+    ctx: Annotated[RunContext, Depends(require_run_token)],
+) -> dict[str, Any]:
+    # Identity first: the token decides the tenant and the run, and the body
+    # only has to agree with it. Before #237 this route took a credential-free
+    # body, so any peer on the internal network could drive the T1 writer.
+    try:
+        bind_identity(ctx, run_id=request.run_id)
+    except IdentityError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
     try:
         claims = resolve_approval(
             dsn=_dsn(),
-            tenant_id=request.tenant_id,
+            tenant_id=ctx.tenant_id,
             ref=request.approval_ref,
             run_id=request.run_id,
             tool=request.tool,
@@ -126,7 +139,7 @@ def execute(request: ExecuteRequest) -> dict[str, Any]:
     except IdentityError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
-    if _already_used(_dsn(), request.tenant_id, claims.ref):
+    if _already_used(_dsn(), ctx.tenant_id, claims.ref):
         raise HTTPException(status_code=409, detail="approval already used")
 
     # Checked before anything runs: a credential in an argument must never

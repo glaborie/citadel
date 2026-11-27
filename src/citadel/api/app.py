@@ -14,7 +14,7 @@ import math
 import os
 import uuid
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Any, Final
 
 import jwt
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -34,7 +34,7 @@ from citadel.identity import (
     mint_run_token,
     verify_run_token,
 )
-from citadel.identity.run_token import private_key_from_env
+from citadel.identity.run_token import DEFAULT_TTL_SECONDS, private_key_from_env
 from citadel.policy import (
     ApprovalAuthorization,
     AuthorizationRequest,
@@ -51,6 +51,17 @@ from citadel.workflows.specialist import SpecialistWorkflow
 from citadel.workflows.types import APPROVAL_TTL, ApprovalDecision, RunInput
 
 DLP_URL = os.environ.get("CITADEL_DLP_URL", "http://presidio:3000")
+
+# The mint TTL must outlive the slowest legitimate execution: a T1 call parks
+# for the whole approval TTL between authorisation and the write, and the
+# worker, runner and operator now verify the token at execution time too
+# (issue #237). The margin covers what the executor may still take once the
+# wait ends; a token past its expiry refuses, it never extends.
+EXECUTION_MARGIN_SECONDS: Final = 120
+
+
+def run_token_ttl() -> int:
+    return max(DEFAULT_TTL_SECONDS, APPROVAL_TTL + EXECUTION_MARGIN_SECONDS)
 
 # Values that turn CITADEL_EXPOSE_API_DOCS on. Unset, empty or anything else is
 # off: a typo must not publish the schema, and these paths are served before
@@ -318,6 +329,7 @@ def create_app(
             risk_tier=body.risk_tier,
             private_key=_key(),
             run_id=run_id,
+            ttl_seconds=run_token_ttl(),
         )
         with tenant_connection(_dsn(), principal.tenant_id) as conn:
             conn.execute(

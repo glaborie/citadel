@@ -23,7 +23,26 @@ from citadel.tools import runner
 from citadel.tools.bounds import bound
 from tests.conftest import AnalyzerResponse
 
-LOGS = {"agent": "docker", "tool": "read_logs", "arguments": {"service": "checkout-api"}}
+TENANT = "lab-a"
+RUN_ID = "22222222-2222-2222-2222-222222222222"
+LOGS = {
+    "agent": "docker",
+    "tenant_id": TENANT,
+    "run_id": RUN_ID,
+    "tool": "read_logs",
+    "arguments": {"service": "checkout-api"},
+}
+
+
+def body(agent: str, tool: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    """A request body that agrees with the tokens the `tokens` fixture mints."""
+    return {
+        "agent": agent,
+        "tenant_id": TENANT,
+        "run_id": RUN_ID,
+        "tool": tool,
+        "arguments": arguments or {},
+    }
 
 
 class Done:
@@ -35,13 +54,16 @@ class Done:
 
 @pytest.fixture
 def tokens(run_private_key: Ed25519PrivateKey) -> Callable[..., str]:
-    def mint(agent: str = "docker", ttl_seconds: int = 300) -> str:
+    def mint(
+        agent: str = "docker", ttl_seconds: int = 300, run_id: str = RUN_ID, tenant: str = TENANT
+    ) -> str:
         token, _ = mint_run_token(
-            Principal("user-alice", "lab-a", frozenset()),
+            Principal("user-alice", tenant, frozenset()),
             agent_id=agent,
             scopes=frozenset(),
             risk_tier="T0",
             private_key=run_private_key,
+            run_id=run_id,
             ttl_seconds=ttl_seconds,
         )
         return token
@@ -100,7 +122,43 @@ def test_a_token_for_another_agent_is_refused(
         headers={"Authorization": f"Bearer {tokens('github')}"},
     )
     assert response.status_code == 403
-    assert response.json()["detail"] == "agent does not match run token"
+    assert "agent" in response.json()["detail"]
+    assert "argv" not in client.captured
+
+
+def test_a_token_for_another_tenant_is_refused(
+    client: TestClient, tokens: Callable[..., str]
+) -> None:
+    """A lab-b token cannot drive lab-a's sandbox calls, even signed correctly."""
+    response = client.post(
+        "/execute",
+        json=LOGS,
+        headers={"Authorization": f"Bearer {tokens(tenant='lab-b')}"},
+    )
+    assert response.status_code == 403
+    assert "tenant" in response.json()["detail"]
+    assert "argv" not in client.captured
+
+
+def test_a_token_for_another_run_is_refused(
+    client: TestClient, tokens: Callable[..., str]
+) -> None:
+    """A leaked token from an earlier run cannot be spent on this one."""
+    other_run = "11111111-1111-1111-1111-111111111111"
+    response = client.post(
+        "/execute",
+        json=LOGS,
+        headers={"Authorization": f"Bearer {tokens(run_id=other_run)}"},
+    )
+    assert response.status_code == 403
+    assert "run" in response.json()["detail"]
+    assert "argv" not in client.captured
+
+
+def test_the_body_must_carry_the_tenant_and_run(client: TestClient) -> None:
+    """The binding fields are required: an omission is no way to skip the check."""
+    response = client.post("/execute", json={"agent": "docker", "tool": "read_logs"})
+    assert response.status_code == 422
     assert "argv" not in client.captured
 
 
@@ -137,27 +195,21 @@ def test_a_runner_without_a_verification_key_fails_closed(
 
 
 def test_execute_runs_the_built_argv(client: TestClient) -> None:
-    response = client.post(
-        "/execute", json={"agent": "docker", "tool": "inspect_containers", "arguments": {}}
-    )
+    response = client.post("/execute", json=body("docker", "inspect_containers"))
     assert response.status_code == 200
-    body = response.json()
-    assert body["allowlist_id"] == "docker.ps"
+    payload = response.json()
+    assert payload["allowlist_id"] == "docker.ps"
     assert client.captured["argv"] == ["docker", "ps"]
 
 
 def test_unknown_tool_is_refused(client: TestClient) -> None:
-    response = client.post(
-        "/execute", json={"agent": "docker", "tool": "exfiltrate", "arguments": {}}
-    )
+    response = client.post("/execute", json=body("docker", "exfiltrate"))
     assert response.status_code == 403
 
 
 def test_agent_cannot_run_another_agents_tool(client: TestClient) -> None:
     """Red team: the docker agent asking the sandbox for a GitHub command."""
-    response = client.post(
-        "/execute", json={"agent": "docker", "tool": "get_pr_status", "arguments": {}}
-    )
+    response = client.post("/execute", json=body("docker", "get_pr_status"))
     assert response.status_code == 403
 
 
@@ -184,7 +236,7 @@ def test_sandbox_refuses_t1_whatever_the_caller_asks(
     """Writes belong to the operator; the sandbox never runs one."""
     response = client.post(
         "/execute",
-        json={"agent": agent, "tool": tool, "arguments": arguments},
+        json=body(agent, tool, arguments),
         headers={"Authorization": f"Bearer {tokens(agent)}"},
     )
     assert response.status_code == 403
@@ -262,7 +314,7 @@ def test_detector_outage_blocks_the_call(
 def test_malformed_arguments_are_refused(client: TestClient) -> None:
     response = client.post(
         "/execute",
-        json={"agent": "docker", "tool": "read_logs", "arguments": {"service": "a; rm -rf /"}},
+        json=body("docker", "read_logs", {"service": "a; rm -rf /"}),
     )
     assert response.status_code == 403
 
@@ -270,7 +322,7 @@ def test_malformed_arguments_are_refused(client: TestClient) -> None:
 def test_extra_fields_are_rejected(client: TestClient) -> None:
     response = client.post(
         "/execute",
-        json={"agent": "docker", "tool": "inspect_containers", "arguments": {}, "argv": ["sh"]},
+        json={**body("docker", "inspect_containers"), "argv": ["sh"]},
     )
     assert response.status_code == 422
 
@@ -390,7 +442,7 @@ def test_a_secret_in_an_illegal_argument_is_refused_by_the_gate(
     secret = "ghp_" + "A1b2" * 8
     arguments = {"service": f"x;{secret}"}
     response = client.post(
-        "/execute", json={"agent": "docker", "tool": "read_logs", "arguments": arguments}
+        "/execute", json=body("docker", "read_logs", arguments)
     )
 
     assert response.status_code == 403
@@ -411,7 +463,7 @@ def test_the_gate_runs_even_when_validation_would_refuse(
 
     monkeypatch.setattr(dlp, "urlopen", counting)
     response = client.post(
-        "/execute", json={"agent": "docker", "tool": "read_logs", "arguments": arguments}
+        "/execute", json=body("docker", "read_logs", arguments)
     )
 
     assert response.status_code == 403
@@ -442,7 +494,7 @@ def github_client(
     return test_client
 
 
-DIFF = {"agent": "github", "tool": "pr_diff", "arguments": {"repo": "acme/infra", "number": "7"}}
+DIFF = body("github", "pr_diff", {"repo": "acme/infra", "number": "7"})
 
 
 def test_a_diff_above_the_default_cap_comes_back_whole(github_client: TestClient) -> None:

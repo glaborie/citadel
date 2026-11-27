@@ -8,6 +8,7 @@ connection; no database is needed.
 
 from __future__ import annotations
 
+import base64
 import gzip
 import hashlib
 import io
@@ -15,18 +16,39 @@ import json
 import urllib.error
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from email.message import Message
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from citadel import approval_requests, dlp, net
 from citadel.hashing import arguments_hash
+from citadel.identity import Principal, mint_run_token
 from citadel.policy import Decision
 from citadel.workflows import activities
 from citadel.workflows.activities import RunActivities, ToolActivities, idempotency_key
 from citadel.workflows.types import RunEnd, ToolCall, ToolResult
+
+# The worker refuses a call whose payload does not agree with a verified run
+# token, so every call here carries one minted for exactly its own identity.
+_KEY = Ed25519PrivateKey.generate()
+_RUN_ID = "11111111-1111-1111-1111-111111111111"
+
+
+def _run_token(agent: str) -> str:
+    token, _ = mint_run_token(
+        Principal("user-alice", "lab-a", frozenset()),
+        agent_id=agent,
+        scopes=frozenset(),
+        risk_tier="T0",
+        private_key=_KEY,
+        run_id=_RUN_ID,
+    )
+    return token
 
 
 class _Cursor:
@@ -87,13 +109,15 @@ class FakeConn:
 
 
 def call(tool: str) -> ToolCall:
+    agent = "docker" if tool == "restart_service" else "github"
     return ToolCall(
-        run_id="11111111-1111-1111-1111-111111111111",
+        run_id=_RUN_ID,
         tenant_id="lab-a",
         user_id="user-alice",
-        agent_id="docker" if tool == "restart_service" else "github",
+        agent_id=agent,
         tool=tool,
         arguments={"service": "checkout-api"} if tool == "restart_service" else {"repo": "a/b"},
+        run_token=_run_token(agent),
     )
 
 
@@ -111,6 +135,10 @@ def build(
 ) -> ToolActivities:
     monkeypatch.setattr(activities, "tenant_connection", db.connect)
     monkeypatch.setattr(approval_requests, "tenant_connection", db.connect)
+    public = _KEY.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+    monkeypatch.setenv(
+        "CITADEL_RUN_TOKEN_PUBLIC_KEY", base64.b64encode(public).decode()
+    )
     impl = ToolActivities(
         checker=cast(Any, None),
         run_store=cast(Any, None),
@@ -371,6 +399,178 @@ def test_an_unauthenticated_sandbox_refusal_is_a_refusal(
     result = impl._invoke_sandbox(call("read_logs"))
 
     assert (result.status, result.rule_id) == ("failed", "tool.refused")
+
+
+def _foreign_token(item: ToolCall, tenant: str = "lab-b", user: str = "user-bob") -> ToolCall:
+    """The same call, carrying a valid token that belongs to someone else."""
+    token, _ = mint_run_token(
+        Principal(user, tenant, frozenset()),
+        agent_id=item.agent_id,
+        scopes=frozenset(),
+        risk_tier="T0",
+        private_key=_KEY,
+        run_id=item.run_id,
+    )
+    return replace(item, run_token=token)
+
+
+def test_a_call_claiming_another_tenant_is_denied_before_any_ledger_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Red team: a peer on the internal network starts a workflow whose fields
+    name lab-a, carrying a lab-b token (issue #237). Nothing may be written
+    into lab-a's chain - not the policy decision, not the forged subject."""
+    db = FakeDB()
+    ledger = FakeAudit()
+    impl = build(monkeypatch, db, recorder([]), ledger)
+
+    outcome = impl.authorize_tool(_foreign_token(call("read_logs")))
+
+    assert (outcome.outcome, outcome.rule_id) == ("deny", "identity.token_mismatch")
+    assert "lab-a" in outcome.reason and "lab-b" in outcome.reason
+    assert ledger.events == [], "a refusal must not write the forged subject anywhere"
+    assert db.rows == {}
+
+
+def test_a_call_with_a_forged_user_is_denied_before_any_ledger_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The subject the ledger would record comes from the token, not the input."""
+    db = FakeDB()
+    ledger = FakeAudit()
+    impl = build(monkeypatch, db, recorder([]), ledger)
+    item = call("read_logs")
+    item.user_id = "user-eve"
+
+    outcome = impl.authorize_tool(item)
+
+    assert (outcome.outcome, outcome.rule_id) == ("deny", "identity.token_mismatch")
+    assert "user-eve" in outcome.reason
+    assert ledger.events == []
+    assert db.rows == {}
+
+
+def test_a_call_with_a_forged_run_id_is_denied_before_any_ledger_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = FakeDB()
+    ledger = FakeAudit()
+    impl = build(monkeypatch, db, recorder([]), ledger)
+    item = call("read_logs")
+    item.run_id = "99999999-9999-9999-9999-999999999999"
+
+    outcome = impl.authorize_tool(item)
+
+    assert (outcome.outcome, outcome.rule_id) == ("deny", "identity.token_mismatch")
+    assert ledger.events == []
+    assert db.rows == {}
+
+
+def test_an_unsigned_token_is_denied_before_any_ledger_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = FakeDB()
+    ledger = FakeAudit()
+    impl = build(monkeypatch, db, recorder([]), ledger)
+    item = replace(call("read_logs"), run_token="not.a.jwt")
+
+    outcome = impl.authorize_tool(item)
+
+    assert (outcome.outcome, outcome.rule_id) == ("deny", "identity.token_invalid")
+    assert ledger.events == []
+    assert db.rows == {}
+
+
+def test_a_token_signed_by_another_key_is_denied_before_any_ledger_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = FakeDB()
+    ledger = FakeAudit()
+    impl = build(monkeypatch, db, recorder([]), ledger)
+    token, _ = mint_run_token(
+        Principal("user-alice", "lab-a", frozenset()),
+        agent_id="github",
+        scopes=frozenset(),
+        risk_tier="T0",
+        private_key=Ed25519PrivateKey.generate(),
+        run_id=_RUN_ID,
+    )
+    item = replace(call("read_logs"), run_token=token)
+
+    outcome = impl.authorize_tool(item)
+
+    assert (outcome.outcome, outcome.rule_id) == ("deny", "identity.token_invalid")
+    assert ledger.events == []
+    assert db.rows == {}
+
+
+def test_an_expired_token_is_denied_before_any_ledger_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The TTL is enforced at authorisation, the chokepoint every call passes."""
+    db = FakeDB()
+    ledger = FakeAudit()
+    impl = build(monkeypatch, db, recorder([]), ledger)
+    token, _ = mint_run_token(
+        Principal("user-alice", "lab-a", frozenset()),
+        agent_id="github",
+        scopes=frozenset(),
+        risk_tier="T0",
+        private_key=_KEY,
+        run_id=_RUN_ID,
+        ttl_seconds=-10,
+    )
+    item = replace(call("read_logs"), run_token=token)
+
+    outcome = impl.authorize_tool(item)
+
+    assert (outcome.outcome, outcome.rule_id) == ("deny", "identity.token_invalid")
+    assert ledger.events == []
+    assert db.rows == {}
+
+
+def test_a_call_without_a_token_is_denied_before_any_ledger_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = FakeDB()
+    ledger = FakeAudit()
+    impl = build(monkeypatch, db, recorder([]), ledger)
+    item = replace(call("read_logs"), run_token="")
+
+    outcome = impl.authorize_tool(item)
+
+    assert (outcome.outcome, outcome.rule_id) == ("deny", "identity.token_missing")
+    assert ledger.events == []
+    assert db.rows == {}
+
+
+def test_a_worker_without_a_verification_key_denies(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail closed: an unverifiable identity is a refusal, never a pass-through."""
+    db = FakeDB()
+    ledger = FakeAudit()
+    impl = build(monkeypatch, db, recorder([]), ledger)
+    monkeypatch.delenv("CITADEL_RUN_TOKEN_PUBLIC_KEY")
+
+    outcome = impl.authorize_tool(call("read_logs"))
+
+    assert (outcome.outcome, outcome.rule_id) == ("deny", "identity.token_unverifiable")
+    assert ledger.events == []
+    assert db.rows == {}
+
+
+def test_execute_tool_refuses_a_mismatched_identity_and_writes_no_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """execute_tool is reachable directly from the task queue, so it re-checks."""
+    db = FakeDB()
+    ledger = FakeAudit()
+    impl = build(monkeypatch, db, recorder([]), ledger)
+
+    result = impl.execute_tool(_foreign_token(call("restart_service")))
+
+    assert (result.status, result.rule_id) == ("denied", "identity.token_mismatch")
+    assert ledger.events == []
+    assert db.rows == {}, "no idempotency row may exist for a refused identity"
 
 
 def test_policy_decision_is_audited(monkeypatch: pytest.MonkeyPatch) -> None:

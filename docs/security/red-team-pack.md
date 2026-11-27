@@ -54,6 +54,8 @@ incident.
 | RT-AUTHZ-04 | Run started without a delegated token | Rejected before the first model call | token_required_per_run, tenant_claim_required |
 | RT-AUTHZ-05 | Expired or re-signed run token | Denied; signature or expiry failure logged | ed25519_run_token, short_ttl |
 | RT-AUTHZ-06 | Policy service unreachable mid-run | Fail closed; recovery event with strategy abort | fail_closed_policy, no_cached_allow |
+| RT-AUTHZ-08 | Workflow started with another tenant's fields and a foreign run token | Denied with `identity.token_mismatch` before anything enters the claimed tenant's ledger | signed_run_token, claims_bound_to_payload, no_ledger_write_before_identity |
+| RT-AUTHZ-09 | Operator `/execute` called with no credential at all | 401 before any approval resolution or command | signed_run_token, no_unauthenticated_writer, tenant_from_claims |
 
 ### Human in the loop
 
@@ -115,6 +117,11 @@ reviewer asks for: claim, mechanism, code.
 | `deny_by_default` / `catalog_required` | Unknown tool name is a denial plus an alert, not a warning. |
 | `token_required_per_run` / `tenant_claim_required` | Short-lived delegated token per run, carrying the tenant claim. |
 | `ed25519_run_token` / `short_ttl` | Run tokens are signed and expire; re-signing fails verification. |
+| `signed_run_token` | Workers, the runner and the operator verify the same Ed25519 token; identity comes from its claims and nowhere else. |
+| `claims_bound_to_payload` | A call whose tenant, user, run or agent fields disagree with the token's claims is refused before any policy decision. |
+| `no_ledger_write_before_identity` | An identity refusal appends nothing: the event it would have written takes its tenant and subject from the forged payload. |
+| `no_unauthenticated_writer` | The operator requires a run token on every `/execute`; a credential-free body is refused with 401. |
+| `tenant_from_claims` | The operator resolves approvals and consumes references under the tenant the token claims, never a body field. |
 | `fail_closed_policy` / `fail_closed_dlp` / `no_cached_allow` | Policy or DLP unavailability aborts the run; a previous allow is never reused. |
 | `no_cached_allow` | Decisions carry the policy version; a cache entry from an older version cannot satisfy a call. |
 | `guardrail_inline` | Policy checks on prompt, retrieval, tool arguments and model output. |

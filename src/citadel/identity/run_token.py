@@ -120,3 +120,30 @@ def verify_run_token(token: str, public_key: Ed25519PublicKey) -> RunContext:
         scopes=frozenset(str(s) for s in scopes),
         risk_tier=str(claims["risk_tier"]),
     )
+
+
+def bind_identity(
+    context: RunContext,
+    *,
+    run_id: str = "",
+    tenant_id: str = "",
+    user_id: str = "",
+    agent_id: str = "",
+) -> None:
+    """Refuse a verified token whose claims disagree with the request carrying it.
+
+    The signature decides who is calling, not the payload; an empty field binds
+    nothing, and the mismatch names both sides so a refusal is diagnosable alone.
+    """
+    disagreements = [
+        f"{name} {actual!r} does not match the request {expected!r}"
+        for name, actual, expected in (
+            ("tenant", context.tenant_id, tenant_id),
+            ("user", context.user_id, user_id),
+            ("run", context.run_id, run_id),
+            ("agent", context.agent_id, agent_id),
+        )
+        if expected and actual != expected
+    ]
+    if disagreements:
+        raise IdentityError("run token " + "; ".join(disagreements))
