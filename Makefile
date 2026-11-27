@@ -140,6 +140,22 @@ calibration-kappa:  ## Pair labels with scores and measure kappa per dimension
 		uv run python scripts/cohens_kappa.py evals/calibration/labels/$$dim.json; \
 	done
 
+.PHONY: grafana-ui grafana-ui-off
+
+# Grafana is internal-only, and Docker binds no port on an internal network. This
+# is the loopback sidecar documented in docs/architecture/metrics.md, the same
+# pattern as scripts/mlflow-ui.sh: the UI never joins edge.
+grafana-ui:  ## Open Grafana on loopback:13000 through a socat sidecar
+	@docker rm -f citadel-grafana-ui >/dev/null 2>&1 || true
+	docker run -d --name citadel-grafana-ui --restart unless-stopped \
+		--network bridge -p 127.0.0.1:13000:13000 alpine/socat \
+		tcp-listen:13000,fork,reuseaddr tcp-connect:grafana:3000
+	docker network connect citadel_internal citadel-grafana-ui
+	@echo "open http://localhost:13000 (admin / secrets/grafana_admin_password)"
+
+grafana-ui-off:  ## Close the Grafana loopback sidecar
+	@docker rm -f citadel-grafana-ui >/dev/null && echo "closed" || echo "already down"
+
 .PHONY: mlflow-bootstrap
 
 # `make up` runs this as a one-shot before any worker starts; the target stays for an

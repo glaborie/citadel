@@ -57,8 +57,12 @@ def test_grafana_is_off_the_edge_and_not_published() -> None:
         "anonymous dashboards are a hole; keep anonymous access off"
     )
     doc = METRICS_DOC.read_text(encoding="utf-8")
-    assert "127.0.0.1:13000" in doc and "tcp-connect:grafana:3000" in doc, (
+    assert "make grafana-ui" in doc and "127.0.0.1:13000" in doc, (
         "the access path must be documented, not guessed"
+    )
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "grafana-ui:" in makefile and "tcp-connect:grafana:3000" in makefile, (
+        "the documented make target must actually forward to grafana"
     )
 
 
