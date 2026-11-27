@@ -36,9 +36,12 @@ cannot turn a 10% rate into hundreds of rows.
 }
 ```
 
-`inputs` is the comparison key: two rows are comparable only if the alias, the prompt pack
-and the schema version match. `expectations` is empty because nobody wrote any - a sampled
-run has no right answer, only a trajectory to grade.
+`inputs` is the comparison key. Online rows use the same `baseline.Key` and
+`baseline.compare` as the offline suite: dataset version, prompt packs and judge must
+match, while the model alias is the variable under test. A run on a new alias is compared
+with the accepted row for the same dataset, pack and judge; a changed prompt pack is not
+comparable and waits for an accepted row of its own. `expectations` is empty because nobody
+wrote any - a sampled run has no right answer, only a trajectory to grade.
 
 The trajectory is the ledger export, so it contains what the schema contains: hashes,
 ids, counts, tiers, decisions. It does not contain the prompt, chunk bodies, raw tool
@@ -62,9 +65,12 @@ partially-redacted trajectory pretending to be complete.
 
 After a row lands, the deterministic graders from `citadel.evals.graders` run over it -
 the ones that read the trajectory itself (`trajectory.valid`, `citations`, `dlp`,
-`idempotency`, `policy`, `risk_tier`). Their failures are recorded on the `eval.sample`
-audit event, not sent to MLflow as a score: MLflow scoring is `mlflow.genai.evaluate()`
-in the offline job, where the judge budget lives.
+`idempotency`, `policy`, `risk_tier`). The `eval.sample` audit event is the online
+counterpart of a baseline row: it carries the same key and per-grader scores, the row it
+was compared with, the `regressions` that comparison found, and the rendered markdown
+`report`. The next sample reads those rows back from the ledger, so a reviewer sees the
+diff in the audit trail. MLflow still holds the trajectory; scoring stays here until the
+judge budget moves online.
 
 Judged rubrics are deliberately not run here. A rubric needs a calibrated judge and an
 answer; sampling is not the place to spend either.

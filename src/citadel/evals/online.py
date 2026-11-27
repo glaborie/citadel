@@ -23,11 +23,12 @@ import json
 import os
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Final
 
+from citadel.evals import baseline
 from citadel.evals.graders import Grade, grade
 from citadel.evals.schema import Case, check_events
 
@@ -169,14 +170,10 @@ def _gate_output(event: dict[str, Any], gate: Gate) -> dict[str, Any]:
         return kept
 
 
-def replay(record: dict[str, Any]) -> list[Grade]:
-    """The offline grader, on a sample, without an agent anywhere near it.
-
-    A sampled run has no expectations - nobody wrote them - so only the graders that
-    read the trajectory itself can speak, which is the subset this issue asks for.
-    """
+def case_from(record: dict[str, Any]) -> Case:
+    """A sampled row as the Case the graders read."""
     inputs = record["inputs"]
-    case = Case(
+    return Case(
         id=str(inputs["run_id"]),
         version=int(inputs["dataset_version"]),
         tenant=str(inputs["tenant"]),
@@ -184,7 +181,48 @@ def replay(record: dict[str, Any]) -> list[Grade]:
         expectations={},
         events=list(record["outputs"]["trajectory"]),
     )
-    return grade(case)
+
+
+def replay(record: dict[str, Any]) -> list[Grade]:
+    """The offline grader, on a sample, without an agent anywhere near it.
+
+    A sampled run has no expectations - nobody wrote them - so only the graders that
+    read the trajectory itself can speak, which is the subset this issue asks for.
+    """
+    return grade(case_from(record))
+
+
+def row_for(record: dict[str, Any], *, grades: list[Grade] | None = None) -> baseline.Row:
+    """The sample as the same kind of row the offline suite records.
+
+    The key comes from the trajectory's `run.start` and the `inputs` metadata, through
+    `baseline.key_for`; the scores through `baseline.summarise`. An online run and an
+    offline run on the same dataset, pack, alias and judge therefore share a key.
+    """
+    inputs = record["inputs"]
+    return baseline.row_for(
+        [case_from(record)],
+        grades if grades is not None else replay(record),
+        dataset=f"v{int(inputs['dataset_version'])}",
+        judge=baseline.judge_label(inputs.get("judge")),
+    )
+
+
+def report(current: baseline.Row, rows: Iterable[baseline.Row]) -> str:
+    """The per-grader diff a reviewer reads, or the reason there is none yet.
+
+    The accepted row is the same one the offline gate would choose: the exact key, else
+    the nearest alias for the same dataset, pack and judge.
+    """
+    accepted = baseline.comparable(current.key, rows)
+    if accepted is None:
+        return f"no comparable accepted row for {current.key.label()}; this is the first"
+    problems = baseline.compare(current.scores, accepted)
+    lines = [f"this run: {current.key.label()}", "", baseline.render([accepted], current), ""]
+    lines.extend(f"- regression: {problem}" for problem in problems)
+    if not problems:
+        lines.append("- no regressions against the accepted row")
+    return "\n".join(lines)
 
 
 def offer(

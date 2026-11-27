@@ -24,6 +24,7 @@ from citadel import dlp, tool_outputs
 from citadel.approval_requests import record_request
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
+from citadel.evals import baseline
 from citadel.evals import online as eval_online
 from citadel.evals.recorder import export_run
 from citadel.hashing import arguments_hash
@@ -786,7 +787,11 @@ def _record_gate(text: str) -> tuple[str, dict[str, Any]]:
 
 
 def _sample_counts(*, dsn: str, tenant_id: str, day: str) -> tuple[int, list[tuple[Any, ...]]]:
-    """How many rows this tenant already has today, and the newest dataset id."""
+    """How many rows this tenant already has today, and enough history to compare.
+
+    The dataset id and the accepted row both live on `eval.sample` events. A bounded
+    history is enough: the comparison only reads rows with this dataset, pack and judge.
+    """
     with tenant_connection(dsn, tenant_id) as conn:
         taken = conn.execute(
             "SELECT count(*) FROM audit_events WHERE tenant_id = %s"
@@ -795,10 +800,58 @@ def _sample_counts(*, dsn: str, tenant_id: str, day: str) -> tuple[int, list[tup
         ).fetchone()
         rows = conn.execute(
             "SELECT seq, payload FROM audit_events WHERE tenant_id = %s"
-            " AND event_type = 'eval.sample' ORDER BY seq DESC LIMIT 1",
+            " AND event_type = 'eval.sample' ORDER BY seq DESC LIMIT 100",
             (tenant_id,),
         ).fetchall()
     return (int(taken[0]) if taken else 0), list(rows)
+
+
+def _previous_rows(rows: list[tuple[Any, ...]]) -> list[baseline.Row]:
+    """The sampled runs this tenant already has, as rows the same gate can compare."""
+    bodies = [
+        payload if isinstance(payload, dict) else json.loads(str(payload)) for _, payload in rows
+    ]
+    return [
+        baseline.row_from(body["key"], body["scores"], recorded=str(body.get("day", "unknown")))
+        for body in bodies
+        if isinstance(body, dict)
+        and isinstance(body.get("key"), dict)
+        and isinstance(body.get("scores"), dict)
+    ]
+
+
+def _score_payload(current: baseline.Row) -> dict[str, dict[str, object]]:
+    return {
+        name: {"passed": score.passed, "total": score.total, "gating": score.gating}
+        for name, score in current.scores.items()
+    }
+
+
+def _sample_payload(
+    *,
+    end: RunEnd,
+    policy: eval_online.Policy,
+    outcome: tuple[dict[str, Any], eval_online.Endpoint],
+    grades: list[Any],
+    rows: list[tuple[Any, ...]],
+) -> dict[str, Any]:
+    """What was exported, what it scored, and the diff the next sample reads back."""
+    record, endpoint = outcome
+    current = eval_online.row_for(record, grades=grades)
+    previous = _previous_rows(rows)
+    accepted = baseline.comparable(current.key, previous)
+    return {
+        "run_id": end.run_id,
+        "day": policy.day,
+        "dataset_id": endpoint.dataset_id,
+        "events": len(record["outputs"]["trajectory"]),
+        "failed_graders": [item.grader for item in grades if not item.passed],
+        "key": current.key.as_dict(),
+        "scores": _score_payload(current),
+        "compared_with": accepted.key.as_dict() if accepted is not None else None,
+        "regressions": baseline.compare(current.scores, accepted) if accepted is not None else [],
+        "report": eval_online.report(current, previous),
+    }
 
 
 def _sample_meta(events: list[dict[str, Any]]) -> eval_online.Meta:
@@ -838,24 +891,27 @@ def _sample_endpoint(*, rows: list[tuple[Any, ...]], tracking: str) -> eval_onli
 
 
 def _audit_sample(
-    *, end: RunEnd, outcome: tuple[dict[str, Any], eval_online.Endpoint],
-    policy: eval_online.Policy, audit: AuditLedger,
+    *,
+    end: RunEnd,
+    outcome: tuple[dict[str, Any], eval_online.Endpoint],
+    policy: eval_online.Policy,
+    rows: list[tuple[Any, ...]],
+    audit: AuditLedger,
 ) -> None:
-    """The sampler's own ledger row: what was exported, and what the graders said."""
-    record, endpoint = outcome
-    failed = [item.grader for item in eval_online.replay(record) if not item.passed]
+    """The sampler's own ledger row: what was exported, what it scored, and the diff.
+
+    The scores and the row they were compared with are kept here so the next sample can
+    compare against them. That is the online counterpart of `evals/baseline.json`: same
+    key, same comparison, and the diff a reviewer reads is in the audit trail.
+    """
+    record = outcome[0]
+    grades = eval_online.replay(record)
     audit.append(
         tenant_id=end.tenant_id,
         event_type="eval.sample",
         actor_type="agent",
         actor_id="orchestrator",
-        payload={
-            "run_id": end.run_id,
-            "day": policy.day,
-            "dataset_id": endpoint.dataset_id,
-            "events": len(record["outputs"]["trajectory"]),
-            "failed_graders": failed,
-        },
+        payload=_sample_payload(end=end, policy=policy, outcome=outcome, grades=grades, rows=rows),
     )
 
 
@@ -874,7 +930,7 @@ def _offer_online_sample(*, end: RunEnd, dsn: str, audit: AuditLedger) -> None:
     endpoint = _sample_endpoint(rows=rows, tracking=tracking)
     outcome = eval_online.offer(sample, endpoint=endpoint, gate=_record_gate)
     if outcome is not None:
-        _audit_sample(end=end, outcome=outcome, policy=policy, audit=audit)
+        _audit_sample(end=end, outcome=outcome, policy=policy, rows=rows, audit=audit)
 
 
 def _json_or_none(text: str) -> Any:

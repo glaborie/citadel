@@ -128,21 +128,25 @@ def main(argv: list[str] | None = None) -> int:
 
 def _baseline_row(args: argparse.Namespace, grades: list[Grade]) -> baseline.Row:
     """This run as a row: the scores, and what the trajectories say they ran under."""
-    cases = load_cases(args.dataset)
-    key = baseline.key_for(
-        cases,
+    return baseline.row_for(
+        load_cases(args.dataset),
+        grades,
         dataset=baseline.dataset_version(args.dataset),
         judge=args.judge or baseline.OFFLINE,
     )
-    return baseline.Row(key=key, scores=baseline.summarise(grades), recorded=baseline.today())
 
 
 def _gate(args: argparse.Namespace, row: baseline.Row) -> list[str]:
-    """What is below the row with this exact key. An empty list is a pass."""
-    rows = [item for item in baseline.load(args.baseline) if item.key == row.key]
-    if not rows:
+    """What is below the comparable row. An empty list is a pass.
+
+    A new model alias has no row of its own yet; it is compared with the accepted row
+    for the same dataset, pack and judge, which is what makes an alias change a diff
+    instead of an unanswerable "no baseline".
+    """
+    comparable = baseline.comparable(row.key, baseline.load(args.baseline))
+    if comparable is None:
         return [f"no baseline row for {row.key.label()} - record one with --record"]
-    return baseline.compare(row.scores, rows[0])
+    return baseline.compare(row.scores, comparable)
 
 
 if __name__ == "__main__":
