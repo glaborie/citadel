@@ -85,8 +85,10 @@ def test_the_text_report_names_the_hint(capsys: pytest.CaptureFixture[str]) -> N
     assert "mlflow" in out and "make up" in out
 
 
-def test_the_cli_suppresses_exactly_one_rule() -> None:
-    """One call site for every request, on the same terms as the eval reader."""
+def test_the_cli_suppresses_exactly_one_rule_per_scanner() -> None:
+    """Two scanners police the same line; each needs its own named suppression."""
     text = (ROOT / "src" / "citadel" / "cli" / "http.py").read_text(encoding="utf-8")
     assert text.count("# nosemgrep") == 1
     assert f"# nosemgrep: {DYNAMIC_URL}" in text
+    assert text.count("# nosec") == 1
+    assert "# nosec B310" in text

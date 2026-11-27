@@ -17,6 +17,10 @@ def reachable(url: str, timeout: float = 5.0) -> int:
     turns "mlflow is up and says OK" into a JSON error.
     """
     request = urllib.request.Request(url, method="GET")
+    # Two scanners police this line and neither reads the other's syntax: Semgrep wants
+    # `nosemgrep` on the line above, Bandit wants `nosec` on the line itself. Both are named,
+    # for the same reason the repo names them everywhere: a bare suppression hides the next
+    # finding too.
     # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310
         return int(response.status)
