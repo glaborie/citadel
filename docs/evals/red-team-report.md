@@ -1,8 +1,8 @@
 # Red-team report
 
-Generated 2026-11-27 07:53 UTC from `pytest -m redteam`. Do not edit by hand.
+Generated 2026-11-27 08:50 UTC from `pytest -m redteam`. Do not edit by hand.
 
-**31 of 35 blocked or denied as specified** · 0 failing · 0 known gaps · 4 pending · 0 not run · 31 executed in this run.
+**33 of 35 blocked or denied as specified** · 0 failing · 0 known gaps · 2 pending · 0 not run · 33 executed in this run.
 
 A pending case is one this run did not execute. Either it is `live-only`
 and names the live test that covers it, or it is owned by an issue that
@@ -40,8 +40,8 @@ to make it green. None of the three counts as passing.
 | RT-DLP-05 | pass | blocked | dlp | allows=1 deny_all=True scoped=True wildcard=False |
 | RT-DUR-01 | pass | allowed_once | durability | executed/replayed/failed calls=1 |
 | RT-DUR-02 | pending | audit_gap_detected | durability | live-only: live/test_audit_gap.py |
-| RT-CACHE-01 | pending | cache_miss | cache | not implemented; owner ADR-018 - no Citadel-owned cache before v0.3 |
-| RT-CACHE-02 | pending | cache_invalidated | cache | not implemented; owner ADR-018 - no Citadel-owned cache before v0.3 |
+| RT-CACHE-01 | pass | cache_miss | cache | exact=True semantic=True entitlement=True down=True expired=True parti |
+| RT-CACHE-02 | pass | cache_invalidated | cache | policy=miss tools=miss old=hit t1_cached=False |
 | RT-COST-01 | pass | aborted_at_budget | cost | budget_exceeded tokens=7500 cost=$0.000060 |
 | RT-EVAL-01 | pass | gate_failed | evaluation | golden=155 pass, degraded fails 4: called tools outside the allowlist: |
 | RT-DLP-06 | pass | blocked | dlp | 403 dlp_blocked over 90049 bytes, secret absent from the body |
