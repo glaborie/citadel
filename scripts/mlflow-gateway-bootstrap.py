@@ -155,8 +155,8 @@ def report() -> int:
         },
     )
     choices = (payload or {}).get("choices") or []
-    answer = choices[0]["message"]["content"] if choices else json.dumps(payload)[:200]
-    print(f"  chat through {ENDPOINT_NAME}: {status} -> {str(answer)[:80]}")
+    answer = (choices[0]["message"].get("content") or "") if choices else json.dumps(payload)[:200]
+    print(f"  chat through {ENDPOINT_NAME}: {status} -> {str(answer)[:80] or '(no text)'}")
     return 0 if status == 200 else 1
 
 
@@ -184,7 +184,10 @@ def main() -> int:
     api_base = os.environ.get("OMNIROUTE_BASE_URL", "http://omniroute:20128/v1")
     model_name = os.environ.get("MODEL_ALIAS_FAST", "auto/best-fast")
     if not api_key:
-        print(f"no OmniRoute key: set OMNIROUTE_API_KEY or mount {DEFAULT_KEY_FILE}", file=sys.stderr)
+        print(
+            f"no OmniRoute key: set OMNIROUTE_API_KEY or mount {DEFAULT_KEY_FILE}",
+            file=sys.stderr,
+        )
         return 2
     print(f"gateway setup: {api_base} model={model_name}")
     secret_id = ensure_secret(api_key, api_base)
