@@ -144,6 +144,7 @@ class RunWorkflow:
                     task=item.task,
                     model_alias=item.model_alias,
                     pack_version=item.prompt_pack_version,
+                    entitlements=list(item.entitlements),
                     history=history,
                 ),
                 start_to_close_timeout=timedelta(minutes=3),

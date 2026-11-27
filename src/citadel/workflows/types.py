@@ -95,6 +95,8 @@ class RunInput:
     task: str = ""
     model_alias: str = ""
     prompt_pack_version: str = ""
+    # The subject's entitlement set at submit time; part of the cache partition.
+    entitlements: list[str] = field(default_factory=list)
     max_steps: int = 3
     # Minted by the API at POST /runs. Every sandbox call re-presents it, so a
     # workload on the internal network cannot act as an agent it has no token for.

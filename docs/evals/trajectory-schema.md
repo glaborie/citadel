@@ -15,6 +15,7 @@ Citadel grades **agent trajectories**, not just final text. The unit of evaluati
 | `approval.decision` | run_id, approver, decision, reason, reason_sha256, reason_chars, dlp_redactions, dlp_categories, ttl, rule_id, audit_id | Signed; before tool execution. `reason` is the redacted text, never the raw one |
 | `tool.call` | run_id, tool, tier, args_hash, idempotency_key, status, duration, audit_id | Effects described, secrets excluded. `arguments` carries the canonical values after the `record` DLP surface: PII redacted in place, a credential blocks the field, and `args_hash` still identifies what policy authorised. `output` is what the tool answered, taken through the same `record` surface; when the body cannot be kept the record says which happened - `output_redacted` (the detector blocked it) or `output_too_large` (over the event cap, with `output_sha256` and `output_ref` still naming it). Never both, never silence. A web tool also carries `content_flags` (`untrusted_external`, and `prompt_injection` when the page instructs the reader) |
 | `recovery` | run_id, failed_step, strategy, outcome | Retry, fallback, escalate, abort |
+| `cache.lookup` | run_id, decision, partition_key, prompt_digest, score, audit_id | `decision` is `exact`, `semantic` or `miss`; no cached text is in the event |
 | `run.end` | run_id, outcome, citation_ids, safety_flags | Final span; `safety_flags` includes the content labels earned during the run (for example `untrusted_external` and `prompt_injection` from a fetched page) |
 
 ## Producers
@@ -34,6 +35,7 @@ a trajectory that claims it came from a run is wrong.
 | `approval.decision` | the API's approval route | live |
 | `tool.call` | `ToolActivities.execute_tool` | live |
 | `recovery` | none | fixture-only |
+| `cache.lookup` | `ModelActivities._record_cache`, first step only | live |
 | `run.end` | `RunActivities.finish_run` | live |
 
 

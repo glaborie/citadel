@@ -305,6 +305,7 @@ def create_app(
                         task=body.task,
                         model_alias=body.model_alias,
                         prompt_pack_version=body.prompt_pack_version,
+                        entitlements=sorted(principal.roles),
                         run_token=token,
                     )
                 )

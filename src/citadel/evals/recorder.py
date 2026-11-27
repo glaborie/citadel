@@ -27,6 +27,7 @@ AUDITED = frozenset(
         "dlp.event",
         "approval.decision",
         "tool.call",
+        "cache.lookup",
     }
 )
 

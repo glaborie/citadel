@@ -74,6 +74,9 @@ EVENT_FIELDS: dict[str, frozenset[str]] = {
         }
     ),
     "recovery": frozenset({"run_id", "failed_step", "strategy", "outcome"}),
+    "cache.lookup": frozenset(
+        {"run_id", "decision", "partition_key", "prompt_digest", "score", "audit_id"}
+    ),
     "run.end": frozenset({"run_id", "outcome", "citation_ids", "safety_flags"}),
 }
 

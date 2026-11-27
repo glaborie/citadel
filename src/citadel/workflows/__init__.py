@@ -38,21 +38,33 @@ def activities_for(
         # imports this package too, and qdrant_client cannot load twice.
         from qdrant_client import QdrantClient
 
+        from citadel.cache import AnswerCache, PostgresCacheStore
         from citadel.env import optional_secret
         from citadel.retrieval.activities import RetrievalActivities
         from citadel.retrieval.embed import OmniRouteEmbedder
         from citadel.retrieval.rerank import TeiReranker
 
+        embedder = OmniRouteEmbedder(
+            base_url=os.environ.get("OMNIROUTE_URL", "http://omniroute:20128/v1"),
+            api_key=optional_secret("OMNIROUTE_API_KEY"),
+            model=os.environ.get("CITADEL_EMBEDDING_MODEL", ""),
+        )
         run_activities = RunActivities(dsn=dsn, audit=audit)
-        model_activities = ModelActivities(dsn=dsn, audit=audit)
+        model_activities = ModelActivities(
+            dsn=dsn,
+            audit=audit,
+            cache=AnswerCache(
+                backend=PostgresCacheStore(dsn),
+                embedder=embedder,
+                embedding_model=os.environ.get("CITADEL_EMBEDDING_MODEL", ""),
+                ttl_seconds=int(os.environ.get("CITADEL_CACHE_TTL_SECONDS", "3600")),
+                similarity=float(os.environ.get("CITADEL_CACHE_SIMILARITY", "0.95")),
+            ),
+        )
         retrieval = RetrievalActivities(
             audit=audit,
             client=QdrantClient(url=os.environ.get("CITADEL_QDRANT_URL", "http://qdrant:6333")),
-            embedder=OmniRouteEmbedder(
-                base_url=os.environ.get("OMNIROUTE_URL", "http://omniroute:20128/v1"),
-                api_key=optional_secret("OMNIROUTE_API_KEY"),
-                model=os.environ.get("CITADEL_EMBEDDING_MODEL", ""),
-            ),
+            embedder=embedder,
             reranker=TeiReranker(os.environ.get("CITADEL_RERANKER_URL", "")),
             analyzer_url=os.environ.get("CITADEL_DLP_URL", "http://presidio:3000"),
         )
