@@ -436,6 +436,7 @@ services:
       KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/citadel/protocol/openid-connect/certs
       KEYCLOAK_AUDIENCE: citadel-agent
       CITADEL_DB_DSN_FILE: /run/secrets/db_dsn
+      CITADEL_METRICS_TOKEN_FILE: /run/secrets/metrics_token
       CITADEL_RUN_TOKEN_PRIVATE_KEY_FILE: /run/secrets/run_token_private_key
       CITADEL_DLP_URL: http://presidio:3000
       OPENFGA_API_URL: http://openfga:8080
@@ -449,6 +450,7 @@ services:
     secrets:
       - db_dsn
       - run_token_private_key
+      - metrics_token
     ports:
       - "18000:8000"
     depends_on:
@@ -506,6 +508,7 @@ services:
     environment:
       CITADEL_WORKER_ROLE: orchestrator
       CITADEL_METRICS_PORT: "9100"
+      CITADEL_METRICS_TOKEN_FILE: /run/secrets/metrics_token
       TEMPORAL_ADDRESS: temporal:7233
       OPENFGA_API_URL: http://openfga:8080
       CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
@@ -539,6 +542,7 @@ services:
     secrets:
       - db_dsn
       - omniroute_api_key
+      - metrics_token
     depends_on:
       temporal:
         condition: service_healthy
@@ -554,6 +558,7 @@ services:
     environment:
       CITADEL_WORKER_ROLE: docker
       CITADEL_METRICS_PORT: "9100"
+      CITADEL_METRICS_TOKEN_FILE: /run/secrets/metrics_token
       TEMPORAL_ADDRESS: temporal:7233
       OPENFGA_API_URL: http://openfga:8080
       CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
@@ -567,6 +572,7 @@ services:
       MLFLOW_EXPERIMENT_ID: ${MLFLOW_EXPERIMENT_ID:-1}
     secrets:
       - db_dsn
+      - metrics_token
     depends_on:
       temporal:
         condition: service_healthy
@@ -582,6 +588,7 @@ services:
     environment:
       CITADEL_WORKER_ROLE: github
       CITADEL_METRICS_PORT: "9100"
+      CITADEL_METRICS_TOKEN_FILE: /run/secrets/metrics_token
       TEMPORAL_ADDRESS: temporal:7233
       OPENFGA_API_URL: http://openfga:8080
       CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
@@ -595,6 +602,7 @@ services:
       MLFLOW_EXPERIMENT_ID: ${MLFLOW_EXPERIMENT_ID:-1}
     secrets:
       - db_dsn
+      - metrics_token
     depends_on:
       temporal:
         condition: service_healthy
@@ -610,6 +618,7 @@ services:
     environment:
       CITADEL_WORKER_ROLE: researcher
       CITADEL_METRICS_PORT: "9100"
+      CITADEL_METRICS_TOKEN_FILE: /run/secrets/metrics_token
       TEMPORAL_ADDRESS: temporal:7233
       OPENFGA_API_URL: http://openfga:8080
       CITADEL_TOOL_RUNNER_URL: http://tool-runner:8020
@@ -628,6 +637,7 @@ services:
       CITADEL_FETCHER_URL: http://fetcher:8040
     secrets:
       - db_dsn
+      - metrics_token
     depends_on:
       temporal:
         condition: service_healthy
@@ -863,6 +873,8 @@ volumes:
 secrets:
   db_dsn:
     file: ${CITADEL_SECRETS_DIR:-./secrets}/db_dsn
+  metrics_token:
+    file: ${CITADEL_SECRETS_DIR:-./secrets}/metrics_token
   run_token_private_key:
     file: ${CITADEL_SECRETS_DIR:-./secrets}/run_token_private_key
   console_session_key:
