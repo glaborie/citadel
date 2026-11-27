@@ -111,16 +111,12 @@ not profile-gated, because the dashboard is the only view of these metrics.
 
 Both containers sit on `internal` only. Prometheus publishes no port at all:
 Grafana reads it through the proxy datasource. Grafana publishes none either,
-because Docker binds nothing on an internal network. Reach the UI through a
+because Docker binds nothing on an internal network. Reach the UI through the
 loopback socat sidecar, the same pattern as `scripts/mlflow-ui.sh`:
 
 ```bash
-docker run -d --name citadel-grafana-ui --restart unless-stopped \
-  --network bridge -p 127.0.0.1:13000:13000 alpine/socat \
-  tcp-listen:13000,fork,reuseaddr tcp-connect:grafana:3000
-docker network connect citadel_internal citadel-grafana-ui
-# then http://localhost:13000
-docker rm -f citadel-grafana-ui      # close it again
+make grafana-ui       # 127.0.0.1:13000 -> grafana:3000, then http://localhost:13000
+make grafana-ui-off   # close it again
 ```
 
 The sidecar listens on loopback only, so Grafana is not reachable from the edge
@@ -129,6 +125,9 @@ sign-up are off, and the admin password arrives as a Docker secret
 (`GF_SECURITY_ADMIN_PASSWORD__FILE`), never as a plaintext env value.
 
 The dashboard reads only the metric names above with their bounded labels: no
-tenant, user, run id or prompt-derived series. The cost panel shows reported USD
+tenant, user, run id or prompt-derived series. The one exception is Prometheus's
+own `up`, in the "Scrape targets up" panel: it exists before any run emits a
+`citadel_*` sample, so "empty because nothing ran" is distinguishable from "the
+scrape is broken". The cost panel shows reported USD
 and unreported calls side by side, so a dashboard cannot repeat the "free versus
 unknown" mistake above.
