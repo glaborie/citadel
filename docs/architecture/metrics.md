@@ -73,10 +73,34 @@ request.
 | `citadel_policy_denials_total` | counter | `rule` (the bounded rule ids in `policy/authorize.py`) | `_deny` |
 | `citadel_cache_lookups_total` | counter | `result` (`exact`, `semantic`, `miss`) | `ModelActivities._cached` |
 | `citadel_approval_wait_seconds` | histogram | `decision` (`approved`, `denied`) | `close_request`, from the approval row's database clock |
+| `citadel_runs_refused_total` | counter | - | `budgeted_principal`, when `POST /runs` returns `429` |
 
 A value outside its label set is recorded as `other`, so a request cannot create
 an unbounded time series. A new policy rule counts under `other` until it is
 named in `metrics.POLICY_RULES`.
+
+## Alerts
+
+Prometheus evaluates one rule from `docker/prometheus/rules/citadel.yml`
+(group `citadel-ingress`), mounted read-only at `/etc/prometheus/rules` and
+loaded by `rule_files` in `prometheus.yml`:
+
+| Alert | Expression | For | Severity |
+|---|---|---|---|
+| `CitadelRunRefusalsSustained` | `sum(rate(citadel_runs_refused_total[5m])) * 60 > 5` | 10 m | `warning` |
+
+That is more than five refusals per minute, averaged over five minutes, for ten
+minutes. The per-credential budget defaults to 30 runs/min
+(`CITADEL_RUNS_PER_MINUTE`), so one client sitting at its own limit does not
+fire it: it takes several callers looping, or a budget set below the workload's
+real rate. The rule names no tenant or user - the counter carries no such label,
+by design - so the investigation starts from the API log and the audit ledger.
+
+No Alertmanager ships with the stack, and nothing here may reach the internet
+anyway. A firing alert therefore shows up in Prometheus' own `/alerts` page
+(reachable through `make grafana-ui`) and in the `ALERTS` series Grafana can
+chart; paging delivery is an operator decision for later, not something this
+repository implements.
 
 ## Cost semantics
 
@@ -102,6 +126,7 @@ not profile-gated, because the dashboard is the only view of these metrics.
 | Item | Value |
 |---|---|
 | Scrape config | `docker/prometheus/prometheus.yml`, job `citadel` |
+| Alert rules | `docker/prometheus/rules/citadel.yml`, group `citadel-ingress` |
 | Targets | `api:8000` plus `worker-orchestrator`, `worker-docker`, `worker-github`, `worker-researcher` on `:9100` |
 | Scrape interval | 15 s |
 | Retention | 15 d (`--storage.tsdb.retention.time`), named volume `prometheus-data` |

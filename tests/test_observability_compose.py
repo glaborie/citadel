@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 COMPOSE_PATH = ROOT / "compose.yaml"
 SCRAPE_PATH = ROOT / "docker/prometheus/prometheus.yml"
+RULES_PATH = ROOT / "docker/prometheus/rules/citadel.yml"
 DASHBOARD_PATH = ROOT / "docker/grafana/dashboards/citadel.json"
 METRICS_DOC = ROOT / "docs/architecture/metrics.md"
 
@@ -99,6 +100,38 @@ def test_the_admin_password_is_a_secret_file_not_an_env_value() -> None:
     )
     provision = (ROOT / "scripts/provision-secrets.sh").read_text(encoding="utf-8")
     assert "grafana_admin_password" in provision, "make up would fail with a missing secret file"
+
+
+def test_the_refusal_alert_is_loaded_and_documented() -> None:
+    """A sustained 429 rate must surface without a human watching the dashboard."""
+    scrape = SCRAPE_PATH.read_text(encoding="utf-8")
+    assert "rule_files:" in scrape
+    assert "- /etc/prometheus/rules/*.yml" in scrape, (
+        "a rule file Prometheus never loads is documentation, not an alert"
+    )
+    block = _service_block(COMPOSE_PATH.read_text(encoding="utf-8"), "prometheus")
+    assert "./docker/prometheus/rules:/etc/prometheus/rules:ro" in block, (
+        "rule_files points at a path the container does not mount"
+    )
+
+    rules = RULES_PATH.read_text(encoding="utf-8")
+    alert = re.search(r"^      - alert: (\S+)$", rules, re.MULTILINE)
+    assert alert is not None, "the rule file defines no alert"
+    name = alert.group(1)
+    assert name == "CitadelRunRefusalsSustained"
+    assert "sum(rate(citadel_runs_refused_total[5m])) * 60 > 5" in rules, (
+        "the alert must read the ingress refusal counter, in per-minute units"
+    )
+    assert re.search(r"^        for: \d+m$", rules, re.MULTILINE), (
+        "without for:, a two-scrape blip pages someone"
+    )
+    assert re.search(r"^          severity: warning$", rules, re.MULTILINE)
+
+    doc = METRICS_DOC.read_text(encoding="utf-8")
+    assert f"`{name}`" in doc, "an alert nobody can look up is a dead end"
+    assert "| `citadel_runs_refused_total` |" in doc, (
+        "the metric the alert reads must stay in the documented table"
+    )
 
 
 def test_the_dashboard_uses_only_documented_bounded_metrics() -> None:
