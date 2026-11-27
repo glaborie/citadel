@@ -139,10 +139,17 @@ def user_token(username: str) -> str:
     )
 
 
-def run_body(*, agent: str, risk_tier: str, pack: str, alias: str, task: str) -> dict[str, Any]:
-    """Exactly the fields `RunRequest` accepts; it forbids anything else."""
+def run_body(
+    *, agent: str, risk_tier: str, pack: str, alias: str, task: str, scopes: list[str] | None = None
+) -> dict[str, Any]:
+    """Exactly the fields `RunRequest` accepts; it forbids anything else.
+
+    `scopes` is empty unless asked for: the tool authorization reads it, so a run that needs
+    a tool says so rather than inheriting one silently.
+    """
     return {
         "agent_id": agent,
+        "scopes": sorted(set(scopes or [])),
         "risk_tier": risk_tier,
         "prompt_pack_version": pack,
         "model_alias": alias,
@@ -177,6 +184,7 @@ def main() -> int:
     parser.add_argument("--pack", default="", help="prompt pack version (default: <agent>-1.0.0)")
     parser.add_argument("--alias", default="auto/best-fast", help="model alias")
     parser.add_argument("--risk-tier", default="T0")
+    parser.add_argument("--scopes", default="", help="comma-separated tool scopes the run may use")
     parser.add_argument("--user", default="alice", help="dev user whose identity the run carries")
     parser.add_argument("--token-only", action="store_true", help="print a bearer token and stop")
     parser.add_argument("--wait", action="store_true", help="poll until the run leaves 'created'")
@@ -194,6 +202,7 @@ def main() -> int:
         pack=args.pack or f"{args.agent}-1.0.0",
         alias=args.alias,
         task=args.task,
+        scopes=[scope.strip() for scope in args.scopes.split(",") if scope.strip()],
     )
     created = submit(token, body)
     run_id = str(created["run_id"])
