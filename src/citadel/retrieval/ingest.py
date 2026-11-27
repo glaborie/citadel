@@ -7,8 +7,8 @@ forgotten - it is a collection that does not hold the data.
 Every chunk carries the digest of the whole file it came from. Re-ingesting an
 unchanged file writes the same point ids, so it stores nothing new; a changed
 file adds one revision and leaves the old one retrievable. Old revisions are not
-pruned here (shortcut: re-index is idempotent, not a retention policy; add a
-prune when storage matters).
+pruned here by default: re-indexing is idempotent in content and additive in membership, so
+`--prune` is what makes the index equal the corpus. `make knowledge-sync` runs it.
 
 Two named vectors: server-side BM25 in `text`, and a dense vector in `dense`
 computed through the embedding endpoint. Without an embedder the point carries
