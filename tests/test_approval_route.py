@@ -350,13 +350,18 @@ def agent_env(
         )
     )
 
-    def token_for(agent: str) -> str:
+    def token_for(agent: str, user: str | None = None) -> str:
         token, _context = mint_run_token(
-            Principal(user_id="user-alice", tenant_id="lab-a", roles=frozenset()),
+            Principal(
+                user_id=user or ("user-bob" if agent == "researcher" else "user-alice"),
+                tenant_id="lab-a",
+                roles=frozenset(),
+            ),
             agent_id=agent,
             scopes=frozenset(),
             risk_tier="T1",
             private_key=run_private_key,
+            run_id="run-1",
         )
         return token
 
@@ -377,7 +382,7 @@ def test_an_agent_approval_is_audited_as_agent(
     assert decided["actor_id"] == "agent:lab-a/researcher"
     assert decided["payload"]["actor_type"] == "agent"
     assert decided["payload"]["approver"] == "agent:lab-a/researcher"
-    assert decided["payload"]["on_behalf_of"] == "user-alice"
+    assert decided["payload"]["on_behalf_of"] == "user-bob"
     assert decided["payload"]["relation"] == "can_approve"
     assert checker.agents == [("agent:lab-a/researcher", "tool:lab-a/restart_service")]
 
@@ -388,6 +393,21 @@ def test_an_agent_cannot_approve_the_run_it_proposed(
     client, events, checker, token_for = agent_env
     response = _post(client, token_for("docker"), {"service": "checkout-api"})
 
+    assert response.status_code == 403
+    assert response.json()["detail"]["rule_id"] == "approval.self_approval_denied"
+    assert events == []
+    assert checker.agents == []
+
+
+def test_an_agent_cannot_approve_a_run_for_its_own_user(
+    agent_env: tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any],
+) -> None:
+    client, events, checker, token_for = agent_env
+    response = _post(
+        client,
+        token_for("researcher", "user-alice"),
+        {"service": "checkout-api"},
+    )
     assert response.status_code == 403
     assert response.json()["detail"]["rule_id"] == "approval.self_approval_denied"
     assert events == []

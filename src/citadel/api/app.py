@@ -92,6 +92,7 @@ class Approver:
     actor_id: str
     on_behalf_of: str | None = None
     roles: frozenset[str] = frozenset()
+    run_id: str | None = None
 
 
 class RunRequest(BaseModel):
@@ -239,6 +240,7 @@ def create_app(
             actor_type="agent",
             actor_id=context.agent_id,
             on_behalf_of=context.user_id,
+            run_id=context.run_id,
         )
 
     def _checker() -> RelationChecker:
@@ -285,7 +287,7 @@ def create_app(
         token, context = mint_run_token(
             principal,
             agent_id=body.agent_id,
-            scopes=frozenset(body.scopes),
+            scopes=frozenset(principal.roles),
             risk_tier=body.risk_tier,
             private_key=_key(),
             run_id=run_id,
@@ -382,7 +384,7 @@ def create_app(
                     ),
                 ) from exc
 
-        return {"run_id": context.run_id, "tenant_id": context.tenant_id, "run_token": token}
+        return {"run_id": context.run_id, "tenant_id": context.tenant_id}
 
     @app.get("/runs")
     def list_runs(
@@ -464,11 +466,21 @@ def create_app(
             relation = "approver_role"
             decided_by = approver.actor_id
         else:
+            if approver.run_id != body.run_id:
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "reason": "the agent run token does not name this run",
+                        "rule_id": "approval.run_mismatch",
+                    },
+                )
             verdict = authorize_approval(
                 ApprovalAuthorization(
                     tenant_id=approver.tenant_id,
                     approving_agent=approver.actor_id,
                     origin_agent=run_agent,
+                    approving_user=approver.on_behalf_of or "",
+                    origin_user=run_user,
                     tool=body.tool,
                 ),
                 _checker(),
