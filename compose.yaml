@@ -338,6 +338,7 @@ services:
       - metrics_token
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
     security_opt:
       - no-new-privileges:true

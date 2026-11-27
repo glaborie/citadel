@@ -1,0 +1,33 @@
+# Alerting rules for the Citadel stack.
+#
+# The ingress budget (#256) is per (tenant, user) and defaults to 30 runs/min.
+# One credential at its limit is normal traffic control; a sustained fleet-wide
+# refusal rate means callers are looping, or the budget sits below what the
+# workload actually needs. Both are operator decisions, which is why this is an
+# alert and not an automatic adjustment.
+#
+# This deployment ships no Alertmanager, so a firing alert is visible in
+# Prometheus itself (`/alerts`, reachable through `make grafana-ui` and the
+# Grafana datasource) rather than delivered to a pager. Delivery is out of scope
+# in #256; add an Alertmanager and point Prometheus at it when it is wanted.
+groups:
+  - name: citadel-ingress
+    rules:
+      - alert: CitadelRunRefusalsSustained
+        # `rate` over 5m averages the 15s scrapes; `* 60` turns per-second into
+        # per-minute so the threshold reads in the same unit as
+        # CITADEL_RUNS_PER_MINUTE. 5/min is well under one credential's 30/min
+        # budget, so a single client at its limit does not page anyone.
+        expr: sum(rate(citadel_runs_refused_total[5m])) * 60 > 5
+        for: 10m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "Citadel is refusing more than 5 run creations per minute"
+          description: >-
+            POST /runs returned 429 for 10 minutes at an average above 5
+            refusals per minute. Find the credential that is looping (the 429s
+            are not labelled, so start from the API log and the audit ledger) and
+            check whether CITADEL_RUNS_PER_MINUTE is below the real workload
+            rate before raising it.
