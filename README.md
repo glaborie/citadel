@@ -121,7 +121,9 @@ docs/milestones.md            # scope and exit criteria
 docs/exit-review-v0.1.md      # v0.1 exit review
 docs/exit-review-v0.2.md      # v0.2 exit review
 docs/implementation-notes/    # what was executed and what it printed
-docs/security/tool-tiers.md
+docs/security/tool-tiers.md             # tool classification and approval flow
+docs/security/citadel-threat-model.md   # trust boundaries and abuse paths
+docs/security/llm-top10-mapping.md      # OWASP LLM Top 10 coverage
 docs/operations/              # runbooks: start a run, CLI, host firewall
 docs/evals/trajectory-schema.md
 docs/adr/                     # 23 ADRs and an index
