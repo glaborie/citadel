@@ -16,4 +16,14 @@ RUN set -eux; \
       'd241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66  tokenizer.json' \
       'a5c2e5a7b1a29a0702cd28c08a399b5ecc110c263009d17f7e3b415f25905fd8  tokenizer_config.json' \
       '5d3e70fd0c9ff14b9b5169a51e957b7a9c74897afd0a35ce4bd318150c1d4d4a  onnx/model.onnx' \
-      | sha256sum -c -
+      | sha256sum -c -; \
+    groupadd --system --gid 10001 tei; \
+    useradd --system --uid 10001 --gid 10001 --home-dir /tmp --shell /usr/sbin/nologin tei; \
+    chown -R 10001:10001 /models
+
+# Issue #227: the model directory is read at startup and never written, so the
+# server runs unprivileged. TEI's default port 80 needs CAP_NET_BIND_SERVICE,
+# which a capability-dropped user cannot hold — the service serves 8080
+# instead (compose.yaml and CITADEL_RERANKER_URL follow).
+ENV HOME=/tmp
+USER 10001:10001
