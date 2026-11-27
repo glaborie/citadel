@@ -98,9 +98,14 @@ by design - so the investigation starts from the API log and the audit ledger.
 
 No Alertmanager ships with the stack, and nothing here may reach the internet
 anyway. A firing alert therefore shows up in Prometheus' own `/alerts` page
-(reachable through `make grafana-ui`) and in the `ALERTS` series Grafana can
-chart; paging delivery is an operator decision for later, not something this
-repository implements.
+(reachable through `make grafana-ui`) and in the dashboard's "Firing alerts"
+panel, which charts the `ALERTS` series; paging delivery is an operator decision
+for later, not something this repository implements.
+
+The "Ingress refusals per minute" panel next to it draws the rule's own
+expression with the threshold as a line, so the rate is visible before it is
+sustained: `ALERTS` only turns red after `for:`, while the line shows how close
+the traffic is to firing it.
 
 ## Cost semantics
 
@@ -150,9 +155,11 @@ sign-up are off, and the admin password arrives as a Docker secret
 (`GF_SECURITY_ADMIN_PASSWORD__FILE`), never as a plaintext env value.
 
 The dashboard reads only the metric names above with their bounded labels: no
-tenant, user, run id or prompt-derived series. The one exception is Prometheus's
-own `up`, in the "Scrape targets up" panel: it exists before any run emits a
+tenant, user, run id or prompt-derived series. The exceptions are Prometheus's
+own series. `up`, in the "Scrape targets up" panel, exists before any run emits a
 `citadel_*` sample, so "empty because nothing ran" is distinguishable from "the
-scrape is broken". The cost panel shows reported USD
+scrape is broken". `ALERTS`, in "Firing alerts", is the only view of the rules
+above from inside the dashboard, and it carries just the alert name and state.
+The cost panel shows reported USD
 and unreported calls side by side, so a dashboard cannot repeat the "free versus
 unknown" mistake above.
