@@ -255,12 +255,16 @@ _OPERATIONAL = re.compile(
     re.IGNORECASE,
 )
 
-# A source URI, a bare source path or a chunk id. The scheme is optional because
-# ingested sources are `fs:...` and `gh:...` and a model copies them verbatim;
-# parentheses are not required because the skill's examples cite inline, and a
-# token is checked wherever it appears.
+# A source URI, a bare source path, a prefixed chunk id or a bare UUID (Qdrant
+# point ids are UUIDs). The scheme is kept because ingested sources are `fs:...`
+# and `gh:...` and a model copies them verbatim; parentheses are not required
+# because the skill's examples cite inline, and a token is checked wherever it
+# appears.
 _CITATION_TOKEN = re.compile(
-    r"chunk-[A-Za-z0-9_-]+|(?:[A-Za-z0-9_.-]+:)?(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.\-/]+"
+    r"chunk-[A-Za-z0-9_-]+"
+    r"|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+    r"|(?:fs|gh):[A-Za-z0-9_.\-/]+"
+    r"|(?:[A-Za-z0-9_.-]+:)?(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.\-/]+"
 )
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")

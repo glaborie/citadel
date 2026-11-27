@@ -36,12 +36,13 @@ same evidence.
   run keeps its pre-#183 trajectory. A Qdrant transport failure still fails the
   activity, as any other activity failure does.
 
-## The citation token fix this exposed
+## The citation token fixes this exposed
 
-The first real caller made the model copy `fs:...`/`gh:...` source URIs
-verbatim. `_CITATION_TOKEN` in `citadel/evals/graders.py` did not allow the
-scheme, so a correct citation graded as "names no retrieved chunk". The token now
-accepts an optional scheme prefix; `tests/test_evals.py` covers it.
+The first real caller made the model copy `fs:...`/`gh:...` source URIs and bare
+chunk ids verbatim. `_CITATION_TOKEN` in `citadel/evals/graders.py` recognized
+neither a scheme without a slash (`fs:live-run-183.md`) nor a bare Qdrant point
+id (a UUID), so a correct citation graded as "names no retrieved chunk". The token
+now accepts both; `tests/test_evals.py` covers each.
 
 ## Measured
 
@@ -56,8 +57,31 @@ accepts an optional scheme prefix; `tests/test_evals.py` covers it.
 - `tests/test_run_loop.py` stubs retrieval as refused, so the loop tests still
   prove sequencing without a corpus.
 
-## Not measured
+## Live run on the owner's stack
 
-- No live run on the owner's stack was produced; the proof is the workflow-level
-  test with the activity seam real and the clients stubbed. A live run needs the
-  stack, an API token, an embedding alias and the Qdrant collection ingested.
+The stack was rebuilt from this branch (`make rebuild` equivalent) and the
+`citadel-app:0.1.0` image restarted. `knowledge/live-run-183.md` (a synthetic
+checkout-api runbook, gitignored) was ingested into `citadel_lab-a`, then a task
+run was submitted for tenant `lab-a` through `POST /runs`:
+
+| Run | Task | Result |
+|---|---|---|
+| `bbb4ecd2-d919-4c66-9929-aa49941b4078` | runbook question, tool use allowed | completed; 12 events including `retrieval.query` and `retrieval.result`; `run.end.citation_ids` equals the 3 retrieved chunk ids |
+| `aa32ee09-ef37-40cf-a695-73b3514dc3f4` | same question, answer only from evidence, cite every factual sentence | completed; 6 events; all 11 graders pass, including `citation.supported` |
+
+The second run's recording (`citadel.evals.recorder --tenant lab-a --run
+aa32ee09-ef37-40cf-a695-73b3514dc3f4`) is schema-valid, `retrieval.query` carries
+`collection=citadel_lab-a` and a `sha256:` filter-set digest, and
+`retrieval.result` names `fs:live-run-183.md`.
+
+The first live run exposed two defects the stubbed test could not: the model
+cited `chunk_id=<uuid>` and `source_uri=fs:live-run-183.md`, and the citation
+token regex recognized neither. It now accepts bare UUIDs (Qdrant point ids) and
+scheme-qualified sources without a slash (`fs:live-run-183.md`). The first run
+still fails `citation.supported` for a different reason: the model added a
+paragraph from `inspect_containers` and split some claims from their citation
+across sentences, and the rule is per-sentence and retrieval-only by design. The
+second run shows the clean path.
+
+Not measured: a live cross-tenant retrieval (the tenant-pairing proof remains
+the workflow-level test, and Qdrant collection isolation is unchanged).
