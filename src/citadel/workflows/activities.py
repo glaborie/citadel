@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import time
 import urllib.error
@@ -23,6 +24,8 @@ from citadel import dlp, tool_outputs
 from citadel.approval_requests import record_request
 from citadel.audit import AuditLedger
 from citadel.db import tenant_connection
+from citadel.evals import online as eval_online
+from citadel.evals.recorder import export_run
 from citadel.hashing import arguments_hash
 from citadel.net import open_url
 from citadel.policy import AuthorizationRequest, RelationChecker, RunStore, authorize
@@ -769,6 +772,109 @@ class RunActivities:
             outcome=end.outcome,
             safety_flags=",".join(end.safety_flags),
         )
+        try:
+            _offer_online_sample(end=end, dsn=self._dsn, audit=self._audit)
+        except Exception as exc:  # noqa: BLE001 - the run is over; a sampler cannot fail it
+            logging.getLogger(__name__).warning(
+                "online eval sample skipped for %s: %s", end.run_id, exc
+            )
+
+
+def _record_gate(text: str) -> tuple[str, dict[str, Any]]:
+    """The `record` DLP surface, as the eval export uses it."""
+    return dlp.gate(text, surface="record", analyzer_url=DLP_URL)
+
+
+def _sample_counts(*, dsn: str, tenant_id: str, day: str) -> tuple[int, list[tuple[Any, ...]]]:
+    """How many rows this tenant already has today, and the newest dataset id."""
+    with tenant_connection(dsn, tenant_id) as conn:
+        taken = conn.execute(
+            "SELECT count(*) FROM audit_events WHERE tenant_id = %s"
+            " AND event_type = 'eval.sample' AND payload->>'day' = %s",
+            (tenant_id, day),
+        ).fetchone()
+        rows = conn.execute(
+            "SELECT seq, payload FROM audit_events WHERE tenant_id = %s"
+            " AND event_type = 'eval.sample' ORDER BY seq DESC LIMIT 1",
+            (tenant_id,),
+        ).fetchall()
+    return (int(taken[0]) if taken else 0), list(rows)
+
+
+def _sample_meta(events: list[dict[str, Any]]) -> eval_online.Meta:
+    """The run's own metadata, plus the schema version and judge this export claims."""
+    start = next((event for event in events if event.get("type") == "run.start"), {})
+    judge = [item.strip() for item in os.environ.get("CITADEL_EVAL_JUDGE", "").split(",")]
+    return eval_online.Meta(
+        model_alias=str(start.get("model_alias", "")),
+        prompt_pack_version=str(start.get("prompt_pack_version", "")),
+        dataset_version=int(os.environ.get("CITADEL_EVAL_DATASET_VERSION", "1")),
+        judge=tuple(item for item in judge if item),
+    )
+
+
+def _ledger_sample(
+    *, end: RunEnd, dsn: str, policy: eval_online.Policy, taken: int
+) -> eval_online.Sample:
+    """The run as the exporter sees it: the ledger's trajectory, and its metadata."""
+    events = export_run(dsn=dsn, tenant_id=end.tenant_id, run_id=end.run_id)
+    return eval_online.Sample(
+        events=events,
+        tenant_id=end.tenant_id,
+        run_id=end.run_id,
+        meta=_sample_meta(events),
+        policy=policy,
+        taken=taken,
+    )
+
+
+def _sample_endpoint(*, rows: list[tuple[Any, ...]], tracking: str) -> eval_online.Endpoint:
+    """Where the row goes: the id the last sample recorded, or a fresh dataset."""
+    return eval_online.Endpoint(
+        tracking_uri=tracking,
+        experiment_id=os.environ.get("MLFLOW_EXPERIMENT_ID", "1"),
+        dataset_id=eval_online.dataset_id_from(rows),
+    )
+
+
+def _audit_sample(
+    *, end: RunEnd, outcome: tuple[dict[str, Any], eval_online.Endpoint],
+    policy: eval_online.Policy, audit: AuditLedger,
+) -> None:
+    """The sampler's own ledger row: what was exported, and what the graders said."""
+    record, endpoint = outcome
+    failed = [item.grader for item in eval_online.replay(record) if not item.passed]
+    audit.append(
+        tenant_id=end.tenant_id,
+        event_type="eval.sample",
+        actor_type="agent",
+        actor_id="orchestrator",
+        payload={
+            "run_id": end.run_id,
+            "day": policy.day,
+            "dataset_id": endpoint.dataset_id,
+            "events": len(record["outputs"]["trajectory"]),
+            "failed_graders": failed,
+        },
+    )
+
+
+def _offer_online_sample(*, end: RunEnd, dsn: str, audit: AuditLedger) -> None:
+    """ADR-017 decision 3: a deterministic, bounded sample of real runs into the dataset.
+
+    Best-effort: the run has finished, so a failure here is a log line, not a failed
+    activity. A refusal (a secret in the trajectory) is the sampler working.
+    """
+    policy = eval_online.policy_from_env()
+    tracking = os.environ.get("MLFLOW_TRACKING_URI", "").rstrip("/")
+    if policy.rate <= 0 or not tracking:
+        return
+    taken, rows = _sample_counts(dsn=dsn, tenant_id=end.tenant_id, day=policy.day)
+    sample = _ledger_sample(end=end, dsn=dsn, policy=policy, taken=taken)
+    endpoint = _sample_endpoint(rows=rows, tracking=tracking)
+    outcome = eval_online.offer(sample, endpoint=endpoint, gate=_record_gate)
+    if outcome is not None:
+        _audit_sample(end=end, outcome=outcome, policy=policy, audit=audit)
 
 
 def _json_or_none(text: str) -> Any:

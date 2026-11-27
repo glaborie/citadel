@@ -499,6 +499,11 @@ services:
       TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
       MLFLOW_EXPERIMENT_ID: ${MLFLOW_EXPERIMENT_ID:-1}
+      # ADR-017 decision 3. Rate 0 means no run is sampled; the cap bounds a day.
+      CITADEL_EVAL_SAMPLE_RATE: ${CITADEL_EVAL_SAMPLE_RATE:-0}
+      CITADEL_EVAL_SAMPLE_CAP: ${CITADEL_EVAL_SAMPLE_CAP:-25}
+      CITADEL_EVAL_DATASET_VERSION: ${CITADEL_EVAL_DATASET_VERSION:-1}
+      CITADEL_EVAL_JUDGE: ${CITADEL_EVAL_JUDGE:-}
       # The model step runs here, so this worker needs the pack on disk, the
       # detector and the gateway. It is the only worker that talks to a model.
       CITADEL_SKILLS_DIR: /app/skills
