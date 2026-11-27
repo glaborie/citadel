@@ -77,10 +77,15 @@ answer; sampling is not the place to spend either.
 
 ## The dataset id
 
-MLflow 3.18 answers `{}` to every `/api/3.0/mlflow/datasets/search` filter, so a name
-cannot be resolved back to an id. The id is instead remembered where runs already are: the
-first sample creates `citadel-online-samples`, and every `eval.sample` event records its
-`dataset_id`. The next sample reads the most recent one.
+The first sample creates `citadel-online-samples` and every `eval.sample` event records
+its `dataset_id`; the next sample reads the most recent one, so a rename in MLflow does not
+fork the dataset.
+
+Discovery is worth a warning: `/api/3.0/mlflow/datasets/search` filtered by
+`experiment_ids` returns an empty object for datasets created through the API, which reads
+like "there is no dataset". A `filter_string` on the name **with an explicit `order_by`**
+does resolve it - that is how `make eval-samples` finds the dataset without being told an
+id, and why the ledger is a fallback rather than the only route.
 
 ## Grading a sample offline
 
