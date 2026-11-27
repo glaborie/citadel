@@ -26,7 +26,7 @@ from typing import Any
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter, SpanExportResult
 from opentelemetry.sdk.trace.id_generator import IdGenerator, RandomIdGenerator
 from opentelemetry.trace import Tracer
 
@@ -48,24 +48,103 @@ class _RunIdGenerator(IdGenerator):
         return RandomIdGenerator().generate_span_id()
 
 
+def resolve_experiment(tracking: str) -> str | None:
+    """The id the exporter must name, or None after one warning that says why.
+
+    `MLFLOW_EXPERIMENT_ID` wins when the server confirms it exists; otherwise the id is
+    taken for `MLFLOW_EXPERIMENT_NAME`, which the bootstrap creates if it is absent. A
+    tracking URI with no experiment behind it used to look exactly like a healthy one:
+    MLflow answers 404, the SDK retries, drops the batch, and nothing in the process
+    mentioned it. The warning is the whole point of this function.
+    """
+    from citadel import mlflow_bootstrap
+
+    configured = os.environ.get("MLFLOW_EXPERIMENT_ID", "").strip()
+    try:
+        if configured and mlflow_bootstrap.experiment_exists(configured, base=tracking):
+            return configured
+        return mlflow_bootstrap.ensure_experiment(base=tracking)
+    except (OSError, KeyError, ValueError) as exc:
+        logger.warning(
+            "telemetry disabled: no MLflow experiment at %s (%s). Spans from this process "
+            "will not be recorded; the audit ledger is unaffected.",
+            tracking,
+            exc,
+        )
+        return None
+
+
+class _WarnOnceExporter(SpanExporter):
+    """An exporter that reports a dead trace path once per process.
+
+    The SDK retries a failed batch and then discards it. Its own logging goes through a
+    logger nothing here configures, so a rejected batch was invisible. One warning is
+    enough to notice; one per batch would be a flood during an outage, so later failures
+    are counted in `dropped`, not logged again.
+    """
+
+    def __init__(self, inner: SpanExporter) -> None:
+        self._inner = inner
+        self.dropped = 0
+        self._warned = False
+
+    def _refused(self, reason: object) -> None:
+        self.dropped += 1
+        if self._warned:
+            return
+        self._warned = True
+        logger.warning(
+            "telemetry export failed: %s. Spans are being dropped (further failures are "
+            "counted, not logged); the audit ledger is unaffected.",
+            reason,
+        )
+
+    def export(self, spans: Any) -> SpanExportResult:  # noqa: ANN401 - the SDK's own type
+        try:
+            result = self._inner.export(spans)
+        except Exception as exc:  # noqa: BLE001 - a failing exporter must not fail a run
+            self._refused(exc)
+            return SpanExportResult.FAILURE
+        if result is SpanExportResult.FAILURE:
+            self._refused("the exporter returned FAILURE")
+        return result
+
+    def shutdown(self) -> None:
+        self._inner.shutdown()
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return self._inner.force_flush(timeout_millis)
+
+
 def configure(service_name: str) -> None:
-    """Start exporting when MLflow is configured. Otherwise spans are a no-op."""
+    """Start exporting when MLflow answers. Otherwise spans are a no-op, and it says so."""
     global _tracer, _provider
     if _tracer is not None:
         return
     tracking = os.environ.get("MLFLOW_TRACKING_URI", "").rstrip("/")
-    experiment = os.environ.get("MLFLOW_EXPERIMENT_ID", "")
-    if not tracking or not experiment:
+    if not tracking:
+        # Never configured: a deliberate no-op, and no warning to drown the logs in.
+        return
+    experiment = resolve_experiment(tracking)
+    if experiment is None:
         return
 
+    _start(tracking, experiment, service_name)
+
+
+def _start(tracking: str, experiment: str, service_name: str) -> None:
+    """Build the provider. Only called once a resolvable experiment exists."""
+    global _tracer, _provider
     provider = TracerProvider(
         resource=Resource.create({"service.name": service_name}),
         id_generator=_RunIdGenerator(),
     )
-    exporter = OTLPSpanExporter(
-        endpoint=f"{tracking}/v1/traces",
-        headers={"x-mlflow-experiment-id": experiment},
-        timeout=5,
+    exporter = _WarnOnceExporter(
+        OTLPSpanExporter(
+            endpoint=f"{tracking}/v1/traces",
+            headers={"x-mlflow-experiment-id": experiment},
+            timeout=5,
+        )
     )
     # Batched: a slow or down MLflow must not add latency to a tool call.
     provider.add_span_processor(BatchSpanProcessor(exporter))
