@@ -18,9 +18,14 @@ up:  ## Start the stack, unwrapping secrets through sops
 
 # `up` never builds, so a checkout that has new code keeps running the old
 # image until something changes the tag. This is the target to use after a pull.
-rebuild:  ## Rebuild images from the checkout, then restart the stack
+# `--build` alone trusts the layer cache: it reported "Built" while the containers kept
+# running the previous code, which reads exactly like a fix that did not work. `up` has no
+# `--no-cache` of its own, so the build is its own step.
+rebuild:  ## Rebuild images from scratch (no cache), then restart the stack
 	chmod +x scripts/provision-secrets.sh
-	sops exec-env secrets/citadel.env 'scripts/provision-secrets.sh && docker compose up -d --build'
+	sops exec-env secrets/citadel.env 'scripts/provision-secrets.sh \
+		&& docker compose build --no-cache \
+		&& docker compose up -d'
 
 # The smell gate's version lives with its hashes, so `make check` and the smell-check
 # job cannot drift apart (#41). Blank if the requirements file is malformed, which is a
