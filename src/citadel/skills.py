@@ -68,7 +68,12 @@ def load_pack(agent: str, directory: Path | None = None) -> SkillPack:
     """Load one agent's pack, or refuse. Never returns unverified text."""
     if not AGENT_NAME.match(agent):
         raise SkillPackMissing(f"no skill pack for agent {agent!r}")
-    folder = (skills_root() if directory is None else directory) / agent
+    root = (skills_root() if directory is None else directory).resolve()
+    folder = (root / agent).resolve()
+    try:
+        folder.relative_to(root)
+    except ValueError as exc:
+        raise SkillPackMissing(f"no skill pack for agent {agent!r}") from exc
     if not folder.is_dir():
         raise SkillPackMissing(f"no skill pack for agent {agent!r} in {folder.parent}")
     manifest = _manifest(folder, agent)
