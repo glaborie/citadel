@@ -94,8 +94,12 @@ Expectation keys beyond the example above:
 
 `approval.decision.decision` is `approved` or `denied`; a `tool` field ties the decision to the call it authorises. `actor_type` is `user` or `agent`, `relation` names what authorised it (`approver_role` or `can_approve`), and an agent decision carries `on_behalf_of` naming the user whose run the approving agent was started for (ADR-022).
 
-Still missing: MLflow dataset/scorer logging and a `recovery` producer. Judged
-rubrics run only when `--judge` is supplied; the default harness is deterministic.
+Online sampling exports real runs into an MLflow dataset - deterministic, bounded and
+off by default - and replays a row through these same graders without an agent:
+`citadel.evals.online.replay(record)`. See `docs/evals/online-sampling.md` for what a
+row carries, what the `record` DLP surface refuses, and why judged rubrics stay
+offline. Still missing: a `recovery` producer. Judged rubrics run only when `--judge`
+is supplied; the default harness is deterministic.
 
 ## Graders
 
