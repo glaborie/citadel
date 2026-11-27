@@ -132,7 +132,7 @@ Failure policy: DLP detector unavailable, a detector answer the reader cannot pa
 - **Orchestrator** — owns conversation, planning, delegation and final response. Holds no direct side-effecting tools.
 - **Docker specialist** — read-only host inspection; `restart_service` only as a T1 write.
 - **GitHub specialist** — read repository/docs; `open_remediation_pr` only as a T1 write.
-- **Researcher** (v0.2) — `search_web` and `fetch_page` only; produces cited findings and recommendations, never executes infrastructure actions.
+- **Researcher** — `search_web` and `fetch_page` only; produces cited findings and recommendations, never executes infrastructure actions.
 
 Each specialist is a child workflow with its own versioned `SKILL.md` pack. Skills are documentation with progressive disclosure — an index first, full text on demand. They cannot declare tools, widen allowlists or override policy. Tool permissions live in OpenFGA and manifests.
 
@@ -183,13 +183,13 @@ MLflow stores versioned eval datasets and `mlflow.genai.evaluate()` results. Sco
 
 ## 10. Deployment topology (Compose, as built)
 
-`api`, `approval-ui`, `temporal`, `temporal-ui`, `worker-orchestrator`, `worker-docker`, `worker-github`, `keycloak`, `postgres`, `openfga`, `openfga-migrate`, `omniroute`, `presidio`, `mlflow`, `qdrant`, `reranker`, `tool-runner`, `operator`, `docker-socket-proxy`, `github-egress`. That is 20 definitions, 19 running services (`openfga-migrate` is a one-shot). Images are pinned by digest in `compose.yaml`.
+`api`, `approval-ui`, `temporal`, `temporal-ui`, `worker-orchestrator`, `worker-docker`, `worker-github`, `worker-researcher`, `keycloak`, `postgres`, `openfga`, `openfga-migrate`, `omniroute`, `presidio`, `mlflow`, `mlflow-bootstrap`, `qdrant`, `reranker`, `searxng`, `fetcher`, `tool-runner`, `operator`, `docker-socket-proxy`, `github-egress`. That is 24 default definitions, 22 long-running services, and 20 services with health checks (all healthy); `openfga-migrate` and `mlflow-bootstrap` are one-shot. The `ingest` one-shot is defined under the `tools` profile, so `make ingest` adds that definition only when invoked. Images are pinned by digest in `compose.yaml`.
 
 Ingestion is a one-shot `ingest` service behind the `tools` profile: `make ingest TENANT=lab-a` reads `knowledge/` and the repositories named by `CITADEL_INGEST_REPOS` into that tenant's Qdrant collection, writing a dense vector from the configured embedding alias (after DLP redaction, so the hosted endpoint sees cleaned text) and a server-side BM25 sparse vector. It is the only service with the knowledge mount and the GitHub read token, and it reaches GitHub through the same allowlisted proxy as the sandbox.
 
-The query half is `RetrievalActivities.retrieve` on the orchestrator worker: it builds the ACL filter from the subject's entitlement tags, sends the dense and sparse prefetches in one Qdrant request, fuses with RRF, redacts each candidate through DLP, reranks top 50 to top 8 with the in-stack TEI service, and writes `retrieval.query` / `retrieval.result` with a filter-set digest and citation metadata. No workflow calls it yet; the Researcher specialist in #131 is the first caller.
+The query half is `RetrievalActivities.retrieve` on the orchestrator worker: it builds the ACL filter from the subject's entitlement tags, sends the dense and sparse prefetches in one Qdrant request, fuses with RRF, redacts each candidate through DLP, reranks top 50 to top 8 with the in-stack TEI service, and writes `retrieval.query` / `retrieval.result` with a filter-set digest and citation metadata. It is registered on the orchestrator worker but no workflow calls it yet (D1 in `docs/exit-review-v0.2.md`).
 
-Not yet in Compose because they belong to v0.2: `worker-researcher`, `searxng`, `fetcher`. Prometheus/Grafana remain optional (v0.3).
+The researcher services are in Compose: `worker-researcher` sits on an internal `research` network with `searxng` and `fetcher`, and on the `web` bridge for egress; none of the three publishes a port. Prometheus/Grafana remain optional (v0.3).
 
 ## 11. Verification items (all resolved)
 
