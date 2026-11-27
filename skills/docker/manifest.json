@@ -2,6 +2,7 @@
   "agent": "docker",
   "pack": "docker-1.1.0",
   "version": "1.1.0",
+  "requires_tool": true,
   "files": {
     "SKILL.md": "sha256:01b784b178140ab0a1c2a497bcca7a68367cb58ff314012eaabe9cd128eec7a7",
     "references/restart-playbook.md": "sha256:a8f0cddbc6f9759b4eb395dc2329393ca16d3dd3a9a9e205b5e4944445c81666",
