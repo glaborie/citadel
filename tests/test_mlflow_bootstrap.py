@@ -52,6 +52,7 @@ def test_missing_experiment_is_created(monkeypatch: pytest.MonkeyPatch) -> None:
     assert mlflow_bootstrap.ensure_experiment() == "7"
     assert created == [f"{mlflow_bootstrap.BASE}/api/2.0/mlflow/experiments/create"]
 
+
 def _found(monkeypatch: pytest.MonkeyPatch, experiment_id: str) -> None:
     def urlopen(request: Any, timeout: Any = None) -> Reply:
         assert "get-by-name" in request.full_url

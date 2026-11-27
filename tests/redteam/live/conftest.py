@@ -51,9 +51,7 @@ def env_value(name: str) -> str:
     raise pytest.skip(f"{name} not available in the environment or {searched}")
 
 
-def http_json(
-    url: str, *, token: str | None = None, payload: dict[str, Any] | None = None
-) -> Any:
+def http_json(url: str, *, token: str | None = None, payload: dict[str, Any] | None = None) -> Any:
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
