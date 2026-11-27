@@ -74,22 +74,19 @@ def resolve_experiment(tracking: str) -> str | None:
         return None
 
 
-class _WarnOnceExporter(SpanExporter):
-    """An exporter that reports a dead trace path once per process.
+class _FailureLog:
+    """One warning per process, then a count: an outage is a line, not a flood.
 
-    The SDK retries a failed batch and then discards it. Its own logging goes through a
-    logger nothing here configures, so a rejected batch was invisible. One warning is
-    enough to notice; one per batch would be a flood during an outage, so later failures
-    are counted in `dropped`, not logged again.
+    The policy lives here rather than in the exporter so that it is one object with one
+    job - the exporter asks it to record a failure and does not care what it cost.
     """
 
-    def __init__(self, inner: SpanExporter) -> None:
-        self._inner = inner
-        self.dropped = 0
+    def __init__(self) -> None:
+        self.count = 0
         self._warned = False
 
-    def _refused(self, reason: object) -> None:
-        self.dropped += 1
+    def record(self, reason: object) -> None:
+        self.count += 1
         if self._warned:
             return
         self._warned = True
@@ -99,15 +96,32 @@ class _WarnOnceExporter(SpanExporter):
             reason,
         )
 
+
+class _WarnOnceExporter(SpanExporter):
+    """An exporter that reports a dead trace path once per process.
+
+    The SDK retries a failed batch and then discards it. Its own logging goes through a
+    logger nothing here configures, so a rejected batch was invisible.
+    """
+
+    def __init__(self, inner: SpanExporter) -> None:
+        self._inner = inner
+        self.failures = _FailureLog()
+
+    @property
+    def dropped(self) -> int:
+        """How many batches were lost. A number an operator can print, not just a log line."""
+        return self.failures.count
+
     def export(self, spans: Any) -> SpanExportResult:  # noqa: ANN401 - the SDK's own type
         try:
-            result = self._inner.export(spans)
+            exported = self._inner.export(spans)
         except Exception as exc:  # noqa: BLE001 - a failing exporter must not fail a run
-            self._refused(exc)
+            self.failures.record(exc)
             return SpanExportResult.FAILURE
-        if result is SpanExportResult.FAILURE:
-            self._refused("the exporter returned FAILURE")
-        return result
+        if exported is SpanExportResult.FAILURE:
+            self.failures.record("the exporter returned FAILURE")
+        return exported
 
     def shutdown(self) -> None:
         self._inner.shutdown()
