@@ -182,6 +182,8 @@ def approval(**overrides: str) -> ApprovalAuthorization:
         "tenant_id": "lab-a",
         "approving_agent": "researcher",
         "origin_agent": "docker",
+        "approving_user": "user-bob",
+        "origin_user": "user-alice",
         "tool": "restart_service",
     }
     base.update(overrides)
@@ -202,6 +204,17 @@ def test_an_agent_cannot_approve_its_own_run() -> None:
     assert decision.outcome == "deny"
     assert decision.rule_id == "approval.self_approval_denied"
     assert checker.calls == 0, "self-approval is refused before any policy lookup"
+
+
+def test_an_agent_cannot_approve_the_run_of_the_user_it_runs_for() -> None:
+    checker = FakeChecker()
+    decision = authorize_approval(
+        approval(origin_user="user-bob", approving_user="user-bob"),
+        checker,
+    )
+    assert decision.outcome == "deny"
+    assert decision.rule_id == "approval.self_approval_denied"
+    assert checker.calls == 0
 
 
 def test_agent_approval_needs_the_relation() -> None:

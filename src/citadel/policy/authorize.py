@@ -48,6 +48,8 @@ class ApprovalAuthorization:
     tenant_id: str
     approving_agent: str
     origin_agent: str
+    approving_user: str
+    origin_user: str
     tool: str
 
 
@@ -195,6 +197,10 @@ def _identity_denial(request: ApprovalAuthorization) -> Decision | None:
         return _deny("identity.missing_agent", "no approving agent on the approval request")
     if not request.origin_agent.strip():
         return _deny("identity.missing_agent", "no originating agent on the approval request")
+    if not request.approving_user.strip():
+        return _deny("identity.missing_user", "no approving user on the approval request")
+    if not request.origin_user.strip():
+        return _deny("identity.missing_user", "no originating user on the approval request")
     return None
 
 
@@ -215,14 +221,17 @@ def _catalog_denial(request: ApprovalAuthorization, tools: dict[str, ToolSpec]) 
 def _four_eyes_denial(
     request: ApprovalAuthorization, tools: dict[str, ToolSpec]
 ) -> Decision | None:
-    """The agent that proposes a call is never the agent that approves it."""
-    if request.approving_agent != request.origin_agent:
-        return None
-    return _deny(
-        "approval.self_approval_denied",
-        "an agent cannot approve a run it proposed",
-        tools[request.tool].tier,
-    )
+    """Neither side of the agent pair may be the proposer or owner."""
+    if (
+        request.approving_agent == request.origin_agent
+        or request.approving_user == request.origin_user
+    ):
+        return _deny(
+            "approval.self_approval_denied",
+            "an agent cannot approve a run it or its user proposed",
+            tools[request.tool].tier,
+        )
+    return None
 
 
 def _policy_denial(

@@ -86,6 +86,7 @@ def test_run_start_records_pinned_provenance(
     assert event["payload"]["prompt_pack_version"] == PACK
     assert event["payload"]["model_alias"] == "auto/best-fast"
     assert event["payload"]["run_id"] == response.json()["run_id"]
+    assert "run_token" not in response.json()
 
 
 def test_a_pack_version_the_deployment_does_not_have_is_rejected(
