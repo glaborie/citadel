@@ -94,6 +94,15 @@ eval-record:  ## Record this run as a baseline row (fails rather than rewriting 
 	uv run python -m citadel.evals --record
 
 .PHONY: calibration-sample
+# Read the sampled runs back out of the MLflow eval dataset. The dataset id is not
+# discoverable by name - MLflow answers {} to every dataset search - so the script reads
+# the id the sampler recorded on the eval.sample audit events, then the rows.
+.PHONY: eval-samples
+eval-samples:  ## Read the sampled runs back from the MLflow eval dataset
+	cd $$HOME/projects/citadel && docker compose run --rm --no-deps \
+		-v $(CURDIR):/repo:ro -e PYTHONPATH=/repo/src \
+		api python /repo/scripts/read-eval-samples.py $(ARGS)
+
 calibration-sample:  ## Rebuild the judge-calibration sample from the goldens
 	uv run python scripts/build-calibration-sample.py
 
