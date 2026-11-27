@@ -60,28 +60,6 @@ def _entitlements(request: RetrievalRequest) -> Entitlements:
     return Entitlements.for_tenant(request.tenant_id)
 
 
-def _sources(citations: Sequence[Mapping[str, Any]]) -> str:
-    """What was cited, as a reader can use it: document, revision, score.
-
-    The row's `citation_ids` are Qdrant point ids - storage, not evidence. A reviewer
-    reading a trace could not tell that three opaque ids were three chunks of one
-    runbook, nor which runbook. This is the same fact the ledger already keeps in
-    `source_uris`, put where the trace can show it.
-    """
-    return json.dumps(
-        [
-            {
-                "id": str(item.get("chunk_id", "")),
-                "source_uri": str(item.get("source_uri", "")),
-                "revision": str(item.get("revision", ""))[:12],
-                "score": item.get("score"),
-            }
-            for item in citations
-        ],
-        sort_keys=True,
-    )
-
-
 class RetrievalActivities:
     def __init__(
         self,

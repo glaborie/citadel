@@ -60,7 +60,7 @@ def _safety_flags(result: ToolResult) -> list[str]:
     return sorted(flags)
 
 
-def _sources(citations: Any) -> list[dict[str, Any]]:  # noqa: ANN401 - the activity's JSON
+def _cited_documents(citations: Any) -> list[dict[str, Any]]:  # noqa: ANN401 - the activity's JSON
     """The citation rows a reader can act on: which document, which revision, how well it scored."""
     if not isinstance(citations, list):
         return []
@@ -96,7 +96,7 @@ class RunWorkflow:
             safety_flags=_safety_flags(result),
             answer=str(result.output.get("answer", ""))[:4000],
             citation_ids=[str(citation) for citation in result.output.get("citation_ids", [])],
-            sources=_sources(result.output.get("citations", [])),
+            sources=_cited_documents(result.output.get("citations", [])),
         )
         return result
 
