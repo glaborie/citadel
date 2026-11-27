@@ -78,6 +78,9 @@ check:  ## Run the CI gates locally before a push
 .PHONY: eval
 
 # Deterministic grading of the committed trajectory fixtures.
+doctor:  ## Report whether each dependency answers (same as `citadel doctor`)
+	@uv run --quiet citadel doctor
+
 run:  ## Start a run: make run TASK="call inspect_containers, then name one container"
 	@scripts/start-run.py --task "$(TASK)" --wait
 
