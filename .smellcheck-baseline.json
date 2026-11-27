@@ -2593,11 +2593,25 @@
       "name": "Extract Constant"
     },
     {
+      "fingerprint": "fdb4f774d519",
+      "file": "src/citadel/workflows/orchestrator.py",
+      "pattern": "SC703",
+      "line": 102,
+      "name": "Avoid Blocking Calls in Async Functions"
+    },
+    {
       "fingerprint": "d0acb213e228",
       "file": "src/citadel/workflows/orchestrator.py",
       "pattern": "SC201",
       "line": 106,
       "name": "Extract Method"
+    },
+    {
+      "fingerprint": "13e7611c78eb",
+      "file": "src/citadel/workflows/orchestrator.py",
+      "pattern": "SC206",
+      "line": 106,
+      "name": "Reify Parameters"
     },
     {
       "fingerprint": "b451ea95fa82",
