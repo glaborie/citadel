@@ -10,6 +10,7 @@ provider all fail closed.
 import asyncio
 import hashlib
 import json
+import math
 import os
 import uuid
 from dataclasses import dataclass
@@ -42,6 +43,7 @@ from citadel.policy import (
     authorize_approval,
 )
 from citadel.policy.openfga import build_checker
+from citadel.ratelimit import RunBudget, runs_per_minute
 from citadel.runs import PostgresRunStore
 from citadel.skills import SkillPack, SkillPackError, SkillPackMissing, load_pack
 from citadel.workflows.orchestrator import RunWorkflow
@@ -152,12 +154,15 @@ def create_app(
     dsn: str | None = None,
     private_key: Ed25519PrivateKey | None = None,
     checker: RelationChecker | None = None,
+    budget: RunBudget | None = None,
 ) -> FastAPI:
     # The schema is a complete map of the attack surface, so it is served only
     # when an environment opts in (#220). Redoc is never served; /docs and
     # /openapi.json ride the same flag. Read per app, not at import, so tests
     # can toggle it by rebuilding the app.
     expose_docs = _expose_api_docs()
+    # One budget per app, so a rebuilt app in a test starts from a full bucket.
+    run_budget = budget if budget is not None else RunBudget(runs_per_minute())
     app = FastAPI(
         title="Citadel API",
         version=__version__,
@@ -196,6 +201,28 @@ def create_app(
         except IdentityError as exc:
             # Never fall back to a default tenant or an anonymous principal.
             raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+    def budgeted_principal(
+        principal: Annotated[Principal, Depends(current_principal)],
+    ) -> Principal:
+        """The authenticated caller, with one run charged to their budget.
+
+        Charged before the handler runs, so a refused request never reaches the
+        database, and before the body is inspected, so an exhausted credential
+        cannot use 4xx detail to probe which agents exist.
+        """
+        wait = run_budget.take(principal.tenant_id, principal.user_id)
+        if wait is None:
+            return principal
+        # A refusal is counted, not written to the ledger: the limiter exists to
+        # stop a loop becoming work, and an append per refused request would be
+        # that work (and a 500 whenever the database is the thing that is down).
+        metrics.run_refused()
+        raise HTTPException(
+            status_code=429,
+            detail="run budget exhausted; retry after the given delay",
+            headers={"Retry-After": str(max(1, math.ceil(wait)))},
+        )
 
     def current_approver(
         authorization: Annotated[str | None, Header()] = None,
@@ -270,7 +297,7 @@ def create_app(
 
     @app.post("/runs", status_code=201)
     async def create_run(
-        body: RunRequest, principal: Annotated[Principal, Depends(current_principal)]
+        body: RunRequest, principal: Annotated[Principal, Depends(budgeted_principal)]
     ) -> dict[str, Any]:
         # Provenance is only reproducible if it names content this deployment
         # actually has, so the caller's label is checked, never trusted.

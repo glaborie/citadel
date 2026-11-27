@@ -20,15 +20,16 @@ carried, recorded in an ADR).
 | LLM07 | System prompt leakage | The system prompt is assembled from versioned skill-pack text and digested; no secret is placed in a prompt, and authority lives in OpenFGA, so leaking the prompt grants nothing | `src/citadel/prompts.py` (`assemble`, `_digest`), `src/citadel/skills.py` | **Partial** — no output filter stops a verbatim echo; the impact is disclosure of documentation, not of capability |
 | LLM08 | Vector and embedding weaknesses | Per-tenant collections, ACL filter applied inside the query before reranking, filter-set digest in the audit event, tenant-partitioned cache, reranker in-stack | `src/citadel/retrieval/activities.py`, `docs/architecture.md` §6, ADR-016 | **Covered** |
 | LLM09 | Misinformation | Citations carry `(source_uri, revision, chunk_id, line_range)`; the orchestrator must say when evidence is insufficient; eval graders score citation grounding | `docs/architecture.md` §6, `docs/evals/`, `run.end.citation_ids` | **Partial** — citation presence is graded, citation *sufficiency* is not |
-| LLM10 | Unbounded consumption | `max_steps` 6, `max_tokens` 8000, workflow activity timeouts, approval TTL with auto-deny, OmniRoute quotas and cost headers | `src/citadel/model/types.py:68-69`, `src/citadel/workflows/orchestrator.py:177`, `src/citadel/workflows/types.py` (`APPROVAL_TTL`) | **Partial** — no ingress rate limit; a valid token can open runs in a loop and only OmniRoute's quota bounds it. Confirmed as a gap to close, not an accepted control: #256 |
+| LLM10 | Unbounded consumption | `max_steps` 6, `max_tokens` 8000, workflow activity timeouts, approval TTL with auto-deny, and a per-credential ingress budget on `POST /runs` (429 with `Retry-After`) | `src/citadel/ratelimit.py`, `src/citadel/api/app.py` (`budgeted_principal`), `src/citadel/model/types.py:68-69`, `tests/test_run_budget.py` | **Covered** — the caps bound one run, the budget bounds a client that starts many (#256) |
 
 ## Where the mapping found something worth fixing
 
-1. **LLM10 needs an ingress budget.** `grep -rniE 'rate.?limit|quota|throttl'
-   src/` returns nothing. The step and token caps bound one run; they do not
-   bound a client that starts many. The owner has decided the API should carry
-   its own budget rather than leaning on OmniRoute's quota, so this stays a
-   Partial until a per-tenant limiter lands at `/runs` (#256).
+1. **LLM10 needed an ingress budget, and #256 added one.** Before it,
+   `grep -rniE 'rate.?limit|quota|throttl' src/` returned nothing: the step and
+   token caps bound one run, not a client that starts many. `RunBudget` charges
+   one run per `(tenant, user)` before the request reaches the database and
+   refuses with 429 plus `Retry-After`, so the control is the API's own rather
+   than OmniRoute's quota.
 2. **LLM04's trust boundary is ingest, not the model.** Poisoning arrives as a
    committed runbook or an ingested repository, and the content hash records
    what arrived rather than whether it should have. The review gate is the PR

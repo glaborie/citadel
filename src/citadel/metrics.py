@@ -104,6 +104,11 @@ CACHE_LOOKUPS: Final = Counter(
     ["result"],
     registry=REGISTRY,
 )
+RUNS_REFUSED: Final = Counter(
+    "citadel_runs_refused_total",
+    "Run creations refused by the per-credential ingress budget.",
+    registry=REGISTRY,
+)
 APPROVAL_WAIT: Final = Histogram(
     "citadel_approval_wait_seconds",
     "Seconds from approval request to decision.",
@@ -147,6 +152,10 @@ def dlp_block(*, surface: str, reason: str) -> None:
 
 def policy_denial(rule_id: str) -> None:
     POLICY_DENIALS.labels(rule=_label(rule_id, POLICY_RULES)).inc()
+
+
+def run_refused() -> None:
+    RUNS_REFUSED.inc()
 
 
 def cache_lookup(result: str) -> None:
