@@ -47,6 +47,7 @@ def run_agent(
     budget: Budget | None = None,
     alias: str | None = None,
     run_id: str = "",
+    requires_tool: bool = False,
 ) -> Trajectory:
     plan = budget or Budget()
     steps: list[Step] = []
@@ -96,6 +97,18 @@ def run_agent(
             return Trajectory("refused", tuple(steps), usage)
 
         if not reply.tools:
+            # Same rule as `ModelActivities.next_step`: an acting pack's answer
+            # with no tool call and no observation behind it is a plan, not a
+            # result. A plain chat loop keeps answering directly.
+            if requires_tool and not any(step.kind == "tool.call" for step in steps):
+                steps.append(
+                    Step(
+                        "run.end",
+                        "refused: the pack requires a tool call and this reply asked for none",
+                        flags=("model.no_tool_call",),
+                    )
+                )
+                return Trajectory("refused", tuple(steps), usage)
             steps.append(Step("run.end", "answered without tools"))
             return Trajectory("completed", tuple(steps), usage, reply.content)
 
