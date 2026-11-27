@@ -24,9 +24,7 @@ from citadel.research import fetch
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = sorted([*(ROOT / "src").rglob("*.py"), *(ROOT / "scripts").rglob("*.py")])
-DYNAMIC_URL = (
-    "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected"
-)
+DYNAMIC_URL = "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected"
 READER = ROOT / "scripts" / "read-eval-samples.py"
 RULE = "python.lang.security.audit.httpsconnection-detected.httpsconnection-detected"
 

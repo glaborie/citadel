@@ -226,9 +226,7 @@ TEXT = "contact alice@example.com now"
     "item",
     [
         pytest.param(("EMAIL_ADDRESS", 8, 20, 0.9), id="tuple-not-span"),
-        pytest.param(
-            {"entity_type": "EMAIL_ADDRESS", "start": 8, "end": 20}, id="score-missing"
-        ),
+        pytest.param({"entity_type": "EMAIL_ADDRESS", "start": 8, "end": 20}, id="score-missing"),
         pytest.param(
             {"type": "EMAIL_ADDRESS", "start": 8, "end": 20, "score": 0.9}, id="field-renamed"
         ),
@@ -264,9 +262,7 @@ TEXT = "contact alice@example.com now"
             {"entity_type": "EMAIL_ADDRESS", "start": 20, "end": 8, "score": 0.9},
             id="end-before-start",
         ),
-        pytest.param(
-            {"entity_type": "", "start": 8, "end": 20, "score": 0.9}, id="no-entity-type"
-        ),
+        pytest.param({"entity_type": "", "start": 8, "end": 20, "score": 0.9}, id="no-entity-type"),
     ],
 )
 def test_a_span_the_reader_cannot_parse_is_a_refusal(item: Any) -> None:

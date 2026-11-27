@@ -176,6 +176,7 @@ def test_empty_command_is_denied() -> None:
     with pytest.raises(CommandDenied):
         match([], agent="docker")
 
+
 def test_a_command_may_raise_its_own_output_cap() -> None:
     """Only the command whose output IS the answer: a diff, not a log."""
     commands = load_allowlist()

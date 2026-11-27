@@ -56,7 +56,7 @@ class FakeDB:
                 "2026-01-01",
             )
         ]
-        self.events = [
+        self.events: list[Any] = [
             (1, "policy.decision", "agent", "docker", {"decision": "requires_approval"}, "now")
         ]
         self.calls = [("restart_service", "executed", "now")]
@@ -154,6 +154,62 @@ def test_argument_preview_is_escaped(env: tuple[TestClient, FakeDB]) -> None:
     assert "&lt;script&gt;" in response.text
 
 
+def test_the_run_timeline_renders_the_answer_as_markdown(env: tuple[TestClient, FakeDB]) -> None:
+    client, db = env
+    db.events = [
+        (
+            7,
+            "run.end",
+            "agent",
+            "orchestrator",
+            {
+                "run_id": RUN,
+                "outcome": "completed",
+                "answer": (
+                    "## Restart\n\nUse **bold** and `code`.\n\n"
+                    "<script>alert(1)</script>\n\n[x](javascript:alert(1))"
+                ),
+                "citation_ids": ["chunk-1", "chunk-2"],
+                "safety_flags": [],
+            },
+            "now",
+        )
+    ]
+    _login(client)
+    response = client.get(f"/runs/{RUN}")
+    assert response.status_code == 200
+    assert "<h2>Restart</h2>" in response.text
+    assert "<strong>bold</strong>" in response.text
+    assert "<code>code</code>" in response.text
+    # The answer is model output: no raw HTML and no javascript: link survives.
+    assert "<script>alert(1)</script>" not in response.text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in response.text
+    assert 'href="javascript:' not in response.text
+    # Metadata is a key/value list, the run id is the page, arrays stay inline.
+    assert "<dt>outcome</dt>" in response.text
+    assert "<dt>run_id</dt>" not in response.text
+    assert "chunk-1, chunk-2" in response.text
+
+
+def test_a_tool_stream_renders_verbatim_and_escaped(env: tuple[TestClient, FakeDB]) -> None:
+    client, db = env
+    db.events = [
+        (
+            8,
+            "tool.call",
+            "agent",
+            "docker",
+            {"tool": "read_logs", "stdout": "line one\n<script>x</script>"},
+            "now",
+        )
+    ]
+    _login(client)
+    response = client.get(f"/runs/{RUN}")
+    assert response.status_code == 200
+    assert "<pre>line one\n&lt;script&gt;x&lt;/script&gt;</pre>" in response.text
+    assert "<script>x</script>" not in response.text
+
+
 FRAMING = {
     "x-frame-options": "DENY",
     "x-content-type-options": "nosniff",
@@ -172,7 +228,7 @@ def _assert_refuses_framing(response: Any) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    ["/", "/runs", "/approvals", f"/approvals/{REQUEST}", "/audit"],
+    ["/", "/runs", "/approvals", f"/approvals/{REQUEST}", "/audit", f"/runs/{RUN}"],
 )
 def test_every_console_view_refuses_framing(env: tuple[TestClient, FakeDB], path: str) -> None:
     """A framed approval page is a T1 write decided by a decoy click."""

@@ -7,7 +7,17 @@ back to the ledger without trusting either store alone.
 The trace id is derived from the run id and forced through a custom id
 generator, so spans emitted by different processes (API, worker, operator) land
 in the same MLflow trace without propagating context through Temporal headers.
-The spans are siblings, not a call tree: each one is an audit event.
+
+Each span is still one audit event, but they hang off a single per-run root span
+named `run`, whose id is derived from the run id the same way. Without it MLflow
+has no root to take the trace's request and response from: it showed ten
+parentless spans, and the Inputs/Outputs columns were empty - the trace recorded
+what the agent did and nothing about what it produced.
+
+The root is written twice with the same span id, and the second write **replaces**
+the first rather than merging into it (measured: writing only outputs took the
+request back to null). So `run.end` re-sends the inputs, which it reads back from
+the run.start audit event, and only then is the root complete.
 
     MLFLOW_TRACKING_URI=http://mlflow:5000
     MLFLOW_EXPERIMENT_ID=1
@@ -18,23 +28,31 @@ from __future__ import annotations
 import atexit
 import contextvars
 import hashlib
+import json
 import logging
 import os
 import uuid
-from typing import Any
+from typing import Any, Final
 
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter, SpanExportResult
 from opentelemetry.sdk.trace.id_generator import IdGenerator, RandomIdGenerator
-from opentelemetry.trace import Tracer
+from opentelemetry.trace import (
+    NonRecordingSpan,
+    SpanContext,
+    TraceFlags,
+    Tracer,
+    set_span_in_context,
+)
 
 logger = logging.getLogger(__name__)
 
 _tracer: Tracer | None = None
 _provider: TracerProvider | None = None
 _current_trace: contextvars.ContextVar[int] = contextvars.ContextVar("citadel_trace", default=0)
+_current_span: contextvars.ContextVar[int] = contextvars.ContextVar("citadel_span", default=0)
 
 
 class _RunIdGenerator(IdGenerator):
@@ -45,7 +63,8 @@ class _RunIdGenerator(IdGenerator):
         return forced or RandomIdGenerator().generate_trace_id()
 
     def generate_span_id(self) -> int:
-        return RandomIdGenerator().generate_span_id()
+        forced = _current_span.get()
+        return forced or RandomIdGenerator().generate_span_id()
 
 
 def resolve_experiment(tracking: str) -> str | None:
@@ -175,27 +194,144 @@ def shutdown() -> None:
     _tracer = None
 
 
-def record_span(name: str, *, run_id: str, audit_id: str, **attributes: Any) -> None:
-    """Emit one span linked to an audit event. Telemetry never fails a run."""
+ROOT_SPAN_NAME: Final = "run"
+
+
+def _as_json(value: Any) -> str:
+    """MLflow reads span inputs and outputs as JSON text, and renders it as the trace's payload."""
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, sort_keys=True, default=str)
+
+
+def _set_span(name: str, run_id: str, values: dict[str, Any], *, root: bool) -> None:
+    """Start and end one span, parented to the run root unless it is the root itself."""
     tracer = _tracer
     if tracer is None:
         return
-    token = _current_trace.set(_trace_id(run_id))
+    token_trace = _current_trace.set(_trace_id(run_id))
+    token_span = _current_span.set(_root_span_id(run_id)) if root else None
     try:
-        values: dict[str, Any] = {
-            "citadel.run_id": run_id,
-            "citadel.audit_id": audit_id,
-            **attributes,
-        }
+        attributes = {key: value for key, value in values.items() if value is not None}
+        # The root has no parent to point at; the id generator still puts it on the run's
+        # trace. Everything else hangs off the root, whichever process writes it.
         with tracer.start_as_current_span(
             name,
-            attributes={key: value for key, value in values.items() if value is not None},
+            context=None if root else _root_context(run_id),
+            attributes=attributes,
         ):
             pass
     except Exception:  # noqa: BLE001 - a broken exporter must not block the control
         logger.warning("failed to emit span %s", name, exc_info=True)
     finally:
-        _current_trace.reset(token)
+        if token_span is not None:
+            _current_span.reset(token_span)
+        _current_trace.reset(token_trace)
+
+
+def record_span(name: str, *, run_id: str, audit_id: str, **attributes: Any) -> None:
+    """Emit one span linked to an audit event. Telemetry never fails a run."""
+    _set_span(
+        name,
+        run_id,
+        {"citadel.run_id": run_id, "citadel.audit_id": audit_id, **attributes},
+        root=False,
+    )
+
+
+def _root_values(
+    run_id: str,
+    audit_id: str,
+    inputs: Any,
+    outputs: Any,
+    attributes: dict[str, Any],
+) -> dict[str, Any]:
+    """The root span's attributes, with the trace-level request and response."""
+    values: dict[str, Any] = {
+        "citadel.run_id": run_id,
+        "citadel.audit_id": audit_id,
+        **attributes,
+    }
+    encoded_inputs = _payload(inputs)
+    encoded_outputs = _payload(outputs)
+    if encoded_inputs is not None:
+        values[SPAN_INPUTS] = encoded_inputs
+    if encoded_outputs is not None:
+        values[SPAN_OUTPUTS] = encoded_outputs
+        values["mlflow.spanType"] = "AGENT"
+    return values
+
+
+def record_root_span(
+    name: str = ROOT_SPAN_NAME,
+    *,
+    run_id: str,
+    audit_id: str,
+    inputs: Any = None,
+    outputs: Any = None,
+    **attributes: Any,
+) -> None:
+    """Write the run's root span, the one MLflow takes the trace's request and response from.
+
+    Called twice per run with the same span id: once at `run.start` with the inputs, once at
+    `run.end` with the outputs. A partial write is still better than none - a run that dies
+    mid-flight shows what it was asked.
+    """
+    _set_span(name, run_id, _root_values(run_id, audit_id, inputs, outputs, attributes), root=True)
+
+
+SPAN_INPUTS: Final = "mlflow.spanInputs"
+SPAN_OUTPUTS: Final = "mlflow.spanOutputs"
+
+MODE_ENV: Final = "CITADEL_TRACE_CONTENT"
+TEXT_KEYS: Final = ("task", "answer")
+
+
+def content_mode() -> str:
+    """How much free text a trace may carry: `full`, `summary` (default) or `none`.
+
+    `summary` keeps the shape of a payload - lengths, digests, ids - and drops the text, which
+    is what ADR-005 asks for (traces carry redacted payloads). `full` is an explicit opt-in for
+    a development stack, where reading the actual answer in the MLflow UI is the whole point.
+    A value nobody recognises falls back to `summary`: a typo must not widen what leaves.
+    """
+    mode = os.environ.get(MODE_ENV, "summary").strip().lower()
+    return mode if mode in {"full", "summary", "none"} else "summary"
+
+
+def _payload(payload: Any) -> str | None:  # noqa: ANN401 - a dict or an already-encoded string
+    """Encode what the mode allows, and nothing else."""
+    if payload is None:
+        return None
+    mode = content_mode()
+    if mode == "none":
+        return None
+    if mode == "full" or not isinstance(payload, dict):
+        return _as_json(payload)
+    kept = {key: value for key, value in payload.items() if key not in TEXT_KEYS}
+    for key in TEXT_KEYS:
+        if key in payload:
+            text = str(payload[key])
+            kept[f"{key}_chars"] = len(text)
+            kept[f"{key}_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return _as_json(kept)
+
+
+def _root_context(run_id: str) -> Any:  # noqa: ANN401 - opentelemetry's Context type
+    """A parent context pointing at the run's root span, which may not be exported yet."""
+    parent = SpanContext(
+        trace_id=_trace_id(run_id),
+        span_id=_root_span_id(run_id),
+        is_remote=True,
+        trace_flags=TraceFlags(TraceFlags.SAMPLED),
+    )
+    return set_span_in_context(NonRecordingSpan(parent))
+
+
+def _root_span_id(run_id: str) -> int:
+    """A 64-bit id derived from the run id, so both writers agree without sharing state."""
+    digest = hashlib.sha256(f"root:{run_id}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") or 1
 
 
 def _trace_id(run_id: str) -> int:

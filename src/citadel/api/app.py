@@ -276,6 +276,17 @@ def create_app(
             )
         # Written after the row exists, so a recorded trajectory always names a
         # real run. If this fails the request fails and no run is claimed.
+        # What the trace's root span carries. The task text stays out of both stores; the
+        # hash proves which text ran. The worker re-sends this dict when it closes the span,
+        # because a second write to a span id replaces the first rather than merging.
+        trace_inputs = {
+            "task_sha256": hashlib.sha256(body.task.encode()).hexdigest() if body.task else "",
+            "task_chars": len(body.task or ""),
+            "tenant_id": principal.tenant_id,
+            "agent_id": body.agent_id,
+            "model_alias": body.model_alias,
+            "risk_tier": body.risk_tier,
+        }
         ref = AuditLedger(_dsn()).append(
             tenant_id=principal.tenant_id,
             event_type="run.start",
@@ -289,13 +300,12 @@ def create_app(
                 "prompt_pack_version": body.prompt_pack_version,
                 "model_alias": body.model_alias,
                 "risk_tier": body.risk_tier,
-                # The task itself stays out of the ledger; the hash proves which
-                # text ran without storing it.
-                "task_sha256": hashlib.sha256(body.task.encode()).hexdigest() if body.task else "",
-                "task_chars": len(body.task),
+                "task_sha256": trace_inputs["task_sha256"],
+                "task_chars": trace_inputs["task_chars"],
+                "trace_inputs": trace_inputs,
             },
         )
-        telemetry.record_span(
+        telemetry.record_root_span(
             "run.start",
             run_id=run_id,
             audit_id=ref.audit_id,
@@ -304,6 +314,8 @@ def create_app(
             risk_tier=body.risk_tier,
             prompt_pack_version=body.prompt_pack_version,
             model_alias=body.model_alias,
+            # The text goes to the span, never to the ledger: the ledger keeps the hash.
+            inputs={**trace_inputs, "task": body.task or ""},
         )
         if body.task:
             try:

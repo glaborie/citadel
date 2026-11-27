@@ -31,9 +31,7 @@ def entry(index: int = 0) -> dict[str, Any]:
 
 def register(payload: Any, **kwargs: Any) -> tuple[registration.Registration, Ledger]:
     ledger: Ledger = kwargs.pop("ledger", None) or Ledger()
-    request = registration.Request(
-        tenant_id="lab-a", actor_id="acme-observability", ledger=ledger
-    )
+    request = registration.Request(tenant_id="lab-a", actor_id="acme-observability", ledger=ledger)
     return registration.register(payload, request=request, **kwargs), ledger
 
 
