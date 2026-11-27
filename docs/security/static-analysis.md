@@ -1,4 +1,4 @@
-# Static analysis: the one suppression
+# Static analysis: the suppressions, and why each is honest
 
 `.github/workflows/security.yml` runs Bandit, Semgrep (`p/python` + `p/security-audit`,
 with `--error`), CodeQL (`security-extended`), Gitleaks, pip-audit, zizmor and a SBOM/grype
@@ -33,7 +33,7 @@ reason for it.
 
 `tests/test_static_analysis_suppressions.py` holds the reasoning in executable form: the
 context really does verify, the suppression names its rule, and no other bare `# nosemgrep`
-enters `src/`.
+enters `src/` or `scripts/`.
 
 ## Verifying it, and re-verifying after an upgrade
 
@@ -65,6 +65,20 @@ suppression is dead weight: delete it rather than leaving a comment that means n
 
 The suppression count is asserted, so a second one shows up in review as a change to a test
 rather than as a quiet comment.
+
+## `scripts/mlflow-gateway-bootstrap.py` — `dynamic-urllib-use-detected`
+
+```python
+# nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+with urllib.request.urlopen(request, timeout=60) as response:
+```
+
+The rule warns that `urllib` accepts `file://`, so a URL an attacker controls could read
+local files. This URL cannot be attacker-controlled: the host and scheme are the module
+constant `BASE` (`http://127.0.0.1:5000`) and every path is a literal in the file. No
+argument, environment variable or response value reaches the URL, so there is nothing to
+name and nothing to validate. Every connection in the script goes through this one call
+site, which is what keeps that claim checkable by reading four lines instead of the file.
 
 ## Why the suppression is also stripped from the SARIF
 

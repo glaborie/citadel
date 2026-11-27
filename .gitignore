@@ -32,3 +32,6 @@ secrets/*
 
 # `make eval-samples --html /out/...` writes here
 .eval-out/
+
+# a stray local store: the real one is the mlflow-data volume
+mlflow.db
