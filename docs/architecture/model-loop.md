@@ -95,7 +95,11 @@ RunWorkflow.run(RunInput)
 A reply whose `content` carries a provider's native tool-call markup, with no
 `tool_calls` alongside it, is refused with `model.tool_markup`: the request
 never reached a policy decision, so accepting it would report a task done
-without doing it.
+without doing it. A DLP refusal raised inside `complete` (the re-gated
+conversation includes earlier tool output) is returned as `dlp_blocked` like
+every other refusal, not raised out of the activity. If an activity still fails
+unexpectedly, the orchestrator writes `run.end` with outcome `failed` before the
+workflow failure surfaces, so a run never stays at `created`.
 
 Three properties are worth naming, because each one is a place the design could
 have gone wrong:

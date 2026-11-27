@@ -166,6 +166,21 @@ class ModelActivities:
         messages = _messages(request, prompt.system)
         try:
             reply = client.complete(messages=messages, tools=prompt.tools)
+        except dlp.DlpBlocked as exc:
+            # `complete` re-gates the whole conversation, so a tool observation
+            # that passed on arrival can still block here. That is a refusal to
+            # this step, not an activity failure that kills the run.
+            self._record(
+                request,
+                {"status": "dlp_blocked", "rule_id": "dlp.blocked", **dict(exc.report)},
+            )
+            return ModelStepResult(
+                status="dlp_blocked",
+                rule_id="dlp.blocked",
+                detail="the detector refused the conversation before any request left the process",
+                prompt_digest=prompt.digest,
+                prompt_pack=prompt.pack_id,
+            )
         except ModelUnavailable as exc:
             return self._refuse(
                 request,
