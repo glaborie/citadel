@@ -78,12 +78,26 @@ def post_form(url: str, fields: dict[str, str]) -> dict[str, Any]:
 
 
 def admin_token() -> str:
+    """The master-realm admin, whose password is the only Keycloak secret in the repo."""
     user = setting("KEYCLOAK_ADMIN_USER")
     password = setting("KEYCLOAK_ADMIN_PASSWORD")
-    if not user or not password:
+    missing = [
+        name
+        for name, value in (
+            ("KEYCLOAK_ADMIN_USER", user),
+            ("KEYCLOAK_ADMIN_PASSWORD", password),
+        )
+        if not value
+    ]
+    if missing:
+        # The user is in .env and nowhere else (there is no keycloak_admin_user file); the
+        # password is in .env or secrets/keycloak_admin_password. Naming which one is
+        # missing is the difference between a one-line fix and reading this script.
         raise SystemExit(
-            "KEYCLOAK_ADMIN_USER and KEYCLOAK_ADMIN_PASSWORD must be set "
-            "(or secrets/keycloak_admin_password must exist)"
+            f"{' and '.join(missing)} not found.\n"
+            "  make token / make run load .env for you; a bare scripts/start-run.py needs\n"
+            "  `set -a; . ./.env; set +a` first. The password also falls back to\n"
+            "  secrets/keycloak_admin_password; the user has no fallback file."
         )
     return str(
         post_form(
@@ -123,7 +137,10 @@ def client_secret(token: str) -> str:
 def user_token(username: str) -> str:
     password = setting("CITADEL_DEV_PASSWORD")
     if not password:
-        raise SystemExit("CITADEL_DEV_PASSWORD must be set, or secrets/citadel_dev_password")
+        raise SystemExit(
+            "CITADEL_DEV_PASSWORD not found: it is in .env, or secrets/citadel_dev_password.\n"
+            "  make token / make run load .env for you."
+        )
     return str(
         post_form(
             f"{KEYCLOAK_URL}/realms/{REALM}/protocol/openid-connect/token",
