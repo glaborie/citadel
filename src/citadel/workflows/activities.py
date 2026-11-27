@@ -753,10 +753,10 @@ class RunActivities:
         if not row or not row[0]:
             return {}
         try:
-            value = json.loads(row[0])
+            decoded = json.loads(row[0])
         except ValueError:
             return {}
-        return value if isinstance(value, dict) else {}
+        return decoded if isinstance(decoded, dict) else {}
 
     @activity.defn
     def finish_run(self, end: RunEnd) -> None:

@@ -32,7 +32,7 @@ import json
 import logging
 import os
 import uuid
-from typing import Any
+from typing import Any, Final
 
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
@@ -194,7 +194,7 @@ def shutdown() -> None:
     _tracer = None
 
 
-ROOT_SPAN_NAME = "run"
+ROOT_SPAN_NAME: Final = "run"
 
 
 def _as_json(value: Any) -> str:
@@ -239,6 +239,29 @@ def record_span(name: str, *, run_id: str, audit_id: str, **attributes: Any) -> 
     )
 
 
+def _root_values(
+    run_id: str,
+    audit_id: str,
+    inputs: Any,
+    outputs: Any,
+    attributes: dict[str, Any],
+) -> dict[str, Any]:
+    """The root span's attributes, with the trace-level request and response."""
+    values: dict[str, Any] = {
+        "citadel.run_id": run_id,
+        "citadel.audit_id": audit_id,
+        **attributes,
+    }
+    encoded_inputs = _payload(inputs)
+    encoded_outputs = _payload(outputs)
+    if encoded_inputs is not None:
+        values[SPAN_INPUTS] = encoded_inputs
+    if encoded_outputs is not None:
+        values[SPAN_OUTPUTS] = encoded_outputs
+        values["mlflow.spanType"] = "AGENT"
+    return values
+
+
 def record_root_span(
     name: str = ROOT_SPAN_NAME,
     *,
@@ -254,26 +277,14 @@ def record_root_span(
     `run.end` with the outputs. A partial write is still better than none - a run that dies
     mid-flight shows what it was asked.
     """
-    values: dict[str, Any] = {
-        "citadel.run_id": run_id,
-        "citadel.audit_id": audit_id,
-        **attributes,
-    }
-    encoded_inputs = _payload(inputs)
-    encoded_outputs = _payload(outputs)
-    if encoded_inputs is not None:
-        values[SPAN_INPUTS] = encoded_inputs
-    if encoded_outputs is not None:
-        values[SPAN_OUTPUTS] = encoded_outputs
-        values["mlflow.spanType"] = "AGENT"
-    _set_span(name, run_id, values, root=True)
+    _set_span(name, run_id, _root_values(run_id, audit_id, inputs, outputs, attributes), root=True)
 
 
-SPAN_INPUTS = "mlflow.spanInputs"
-SPAN_OUTPUTS = "mlflow.spanOutputs"
+SPAN_INPUTS: Final = "mlflow.spanInputs"
+SPAN_OUTPUTS: Final = "mlflow.spanOutputs"
 
-MODE_ENV = "CITADEL_TRACE_CONTENT"
-TEXT_KEYS = ("task", "answer")
+MODE_ENV: Final = "CITADEL_TRACE_CONTENT"
+TEXT_KEYS: Final = ("task", "answer")
 
 
 def content_mode() -> str:
@@ -284,8 +295,8 @@ def content_mode() -> str:
     a development stack, where reading the actual answer in the MLflow UI is the whole point.
     A value nobody recognises falls back to `summary`: a typo must not widen what leaves.
     """
-    value = os.environ.get(MODE_ENV, "summary").strip().lower()
-    return value if value in {"full", "summary", "none"} else "summary"
+    mode = os.environ.get(MODE_ENV, "summary").strip().lower()
+    return mode if mode in {"full", "summary", "none"} else "summary"
 
 
 def _payload(payload: Any) -> str | None:  # noqa: ANN401 - a dict or an already-encoded string

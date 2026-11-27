@@ -33,11 +33,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
-from typing import Any
+from typing import Any, Final
 
 import jwt
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from markdown_it import MarkdownIt
 from starlette.middleware.base import RequestResponseEndpoint
 
 from citadel import __version__
@@ -64,6 +65,19 @@ RUN_COLUMNS = {
 }
 AUDIT_COLUMNS = {"seq": "seq", "event": "event_type", "actor": "actor_id", "at": "created_at"}
 
+# Raw HTML off and images off: an answer is model or tool output, and the page
+# must never let it become markup or fetch a URL on the reader's behalf. Links
+# survive markdown-it's own scheme validation (javascript: is refused).
+MARKDOWN: Final = (
+    MarkdownIt("commonmark", {"html": False}).enable(["table", "strikethrough"]).disable("image")
+)
+# Fields that are prose, not metadata: the final answer and an approval reason.
+MARKDOWN_FIELDS: Final = {"answer", "reason"}
+# Multi-line streams stay verbatim; every other scalar goes in the key/value list.
+PRE_FIELDS: Final = {"stdout", "stderr"}
+# The page already names the run; repeating it on every event is noise.
+SKIP_FIELDS: Final = {"run_id"}
+
 STYLE = """
 body{font:14px/1.5 system-ui,sans-serif;margin:2rem;color:#111}
 nav{display:flex;gap:1rem;margin-bottom:1.5rem}
@@ -76,6 +90,14 @@ textarea{min-height:5rem}
 th a{color:#06c;text-decoration:none;white-space:nowrap}
 tr.filters th{padding-top:0}
 tr.filters input{width:100%;box-sizing:border-box}
+dl.payload{margin:0}
+dl.payload dt{font-size:.75em;text-transform:uppercase;color:#555;letter-spacing:.03em}
+dl.payload dd{margin:0 0 .4rem}
+dl.payload dl{margin:.2rem 0 0 .5rem}
+.markdown h1,.markdown h2,.markdown h3{font-size:1.05em;margin:.6rem 0 .3rem}
+.markdown p,.markdown ul,.markdown ol{margin:.3rem 0}
+.markdown pre{padding:.5rem}
+.markdown code{background:#f0f0f0;padding:0 .2em}
 """
 
 
@@ -113,6 +135,39 @@ def _tbody(rows: list[list[str]]) -> str:
 def _table(headers: tuple[str, ...], rows: list[list[str]]) -> str:
     head = "".join(f"<th>{_esc(item)}</th>" for item in headers)
     return f"<table><thead><tr>{head}</tr></thead><tbody>{_tbody(rows)}</tbody></table>"
+
+
+def _joined(values: list[Any]) -> str:
+    """A list in one line; a list of records becomes `key: value` pairs, not JSON."""
+    if values and all(isinstance(item, dict) for item in values):
+        return "; ".join(
+            ", ".join(f"{key}: {item}" for key, item in entry.items()) for entry in values
+        )
+    return ", ".join(str(item) for item in values)
+
+
+def _payload_value(key: str, value: Any) -> str:
+    if key in MARKDOWN_FIELDS and isinstance(value, str) and value.strip():
+        return f'<div class="markdown">{MARKDOWN.render(value)}</div>'
+    if key in PRE_FIELDS and isinstance(value, str) and value.strip():
+        return f"<pre>{_esc(value)}</pre>"
+    if isinstance(value, dict):
+        return _payload(value)
+    if isinstance(value, list):
+        return _esc(_joined(value)) or "—"
+    return _esc(value)
+
+
+def _payload(payload: Any) -> str:
+    """One audit payload as a definition list; prose fields render as markdown."""
+    if not isinstance(payload, dict):
+        return f"<pre>{_esc(payload)}</pre>"
+    rows = [
+        f"<dt>{_esc(key)}</dt><dd>{_payload_value(str(key), value)}</dd>"
+        for key, value in payload.items()
+        if key not in SKIP_FIELDS
+    ]
+    return '<dl class="payload">' + "".join(rows) + "</dl>"
 
 
 def _order(columns: dict[str, str], sort: str, direction: str, default: str) -> str:
@@ -558,7 +613,7 @@ def create_app(
                     _esc(row[0]),
                     _esc(row[1]),
                     _esc(f"{row[2]}:{row[3]}"),
-                    f"<code>{_esc(json.dumps(row[4], sort_keys=True)[:300])}</code>",
+                    _payload(row[4]),
                     _esc(row[5]),
                 ]
                 for row in events
@@ -751,7 +806,7 @@ def create_app(
                         _esc(row[0]),
                         _esc(row[1]),
                         _esc(f"{row[2]}:{row[3]}"),
-                        f"<code>{_esc(json.dumps(row[4], sort_keys=True)[:300])}</code>",
+                        _payload(row[4]),
                         _esc(row[5]),
                     ]
                     for row in rows
