@@ -18,6 +18,7 @@ from temporalio.worker import Worker
 
 from citadel import dlp
 from citadel.audit import AuditLedger
+from citadel.retrieval.types import RetrievalOutcome, RetrievalRequest
 from citadel.workflows.model_step import (
     ModelActivities,
     ModelStepRequest,
@@ -129,6 +130,10 @@ async def run_task(
             return next_step(request)
         return queue.pop(0) if len(queue) > 1 else queue[0]
 
+    @activity.defn(name="retrieve")
+    def stub_retrieve(_request: RetrievalRequest) -> RetrievalOutcome:
+        return RetrievalOutcome(status="refused", rule_id="retrieval.stubbed", detail="no evidence")
+
     @activity.defn(name="finish_run")
     def stub_finish_run(end: RunEnd) -> None:
         ends.append(end)
@@ -152,7 +157,7 @@ async def run_task(
                 env.client,
                 task_queue=QUEUE,
                 workflows=[RunWorkflow],
-                activities=[stub_next_step, stub_finish_run],
+                activities=[stub_retrieve, stub_next_step, stub_finish_run],
                 activity_executor=executor,
             ),
             Worker(
@@ -269,6 +274,10 @@ async def run_failing_task(error: Exception) -> list[RunEnd]:
     def failing_next_step(_request: ModelStepRequest) -> ModelStepResult:
         raise error
 
+    @activity.defn(name="retrieve")
+    def stub_retrieve(_request: RetrievalRequest) -> RetrievalOutcome:
+        return RetrievalOutcome(status="refused", rule_id="retrieval.stubbed", detail="no evidence")
+
     @activity.defn(name="finish_run")
     def stub_finish_run(end: RunEnd) -> None:
         ends.append(end)
@@ -280,7 +289,7 @@ async def run_failing_task(error: Exception) -> list[RunEnd]:
             env.client,
             task_queue=QUEUE,
             workflows=[RunWorkflow],
-            activities=[failing_next_step, stub_finish_run],
+            activities=[stub_retrieve, failing_next_step, stub_finish_run],
             activity_executor=executor,
         ):
             handle = await env.client.start_workflow(
