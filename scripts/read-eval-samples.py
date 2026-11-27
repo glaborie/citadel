@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import sys
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -42,9 +43,24 @@ def dataset_ids(dsn: str, tenant_id: str) -> list[str]:
     return seen
 
 
+def base_url(tracking_uri: str) -> str:
+    """http(s) only, and only the origin.
+
+    The dataset id comes from the ledger and the tracking URI from the environment, so
+    neither may steer where this reads: `file://` would read the disk, and a path in the
+    base would silently retarget the request. Both are refused here, which is also why the
+    URL is not interpolated into a bare `urlopen(url)` call.
+    """
+    parts = urllib.parse.urlsplit(tracking_uri)
+    if parts.scheme not in {"http", "https"} or not parts.netloc:
+        raise ValueError(f"tracking uri must be http(s), got {tracking_uri!r}")
+    return f"{parts.scheme}://{parts.netloc}"
+
+
 def records(tracking_uri: str, dataset_id: str) -> list[dict[str, Any]]:
-    url = f"{tracking_uri.rstrip('/')}/api/3.0/mlflow/datasets/{dataset_id}/records"
-    with urllib.request.urlopen(url, timeout=15) as response:
+    path = f"/api/3.0/mlflow/datasets/{urllib.parse.quote(dataset_id, safe='')}/records"
+    request = urllib.request.Request(f"{base_url(tracking_uri)}{path}")
+    with urllib.request.urlopen(request, timeout=15) as response:
         payload = dict(json.loads(response.read()))
     body = payload.get("records", [])
     return json.loads(body) if isinstance(body, str) else body
