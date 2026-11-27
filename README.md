@@ -44,6 +44,15 @@ collects 800 tests: 765 pass and 35 skip as live-network or live-model cases. A
 fresh clone installs and runs that suite; the live cases opt in with
 `CITADEL_LIVE_TESTS=1` against the running stack.
 
+Before the first `make up`, copy `.env.example` to `.env` (gitignored) and fill
+in `DOCKER_GID` with the host's docker group id:
+`getent group docker | cut -d: -f3` (or `stat -c '%g' /var/run/docker.sock`).
+Compose injects it as `group_add` on `operator` so uid 10001 can reach the
+socket; unset or empty renders `group_add: [""]` and `docker compose up` stops
+with `unable to find group : no matching entries in group file`, an error that
+names no variable. Every checkout and worktree needs its own `.env`; see the
+comment in `.env.example`.
+
 | Control | Evidence |
 |---|---|
 | Identity | Keycloak login → delegated run token bound to tenant, user and run; child workflows get a scoped token, never the user's |
