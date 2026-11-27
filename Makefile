@@ -98,6 +98,10 @@ eval-record:  ## Record this run as a baseline row (fails rather than rewriting 
 # discoverable by name - MLflow answers {} to every dataset search - so the script reads
 # the id the sampler recorded on the eval.sample audit events, then the rows.
 .PHONY: eval-samples
+mlflow-gateway:  ## Give the AI Gateway one OmniRoute endpoint and point the assistant at it
+	@docker cp scripts/mlflow-gateway-bootstrap.py citadel-mlflow-1:/tmp/gateway.py
+	@docker exec citadel-mlflow-1 python3 /tmp/gateway.py
+
 mlflow-ui:  ## Open the MLflow UI on loopback:5000 (inspection only, loopback bound)
 	scripts/mlflow-ui.sh --on
 

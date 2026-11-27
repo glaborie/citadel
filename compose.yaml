@@ -264,6 +264,26 @@ services:
       - --allowed-hosts=mlflow,mlflow:5000,localhost,localhost:5000,127.0.0.1,127.0.0.1:5000
       - --backend-store-uri=sqlite:////mlflow/mlflow.db
       - --artifacts-destination=/mlflow/artifacts
+    environment:
+      # The in-server AI Gateway is what the assistant talks to (/gateway/mlflow/...).
+      # Its one endpoint points at OmniRoute, so MLflow still has no route off the
+      # stack: the gateway calls a sibling service, and OmniRoute remains the only
+      # egress. Requested by the operator so the assistant can answer at all.
+      MLFLOW_ENABLE_AI_GATEWAY: "true"
+      # The gateway refuses a private upstream by default (SSRF guard). OmniRoute is
+      # private on purpose, so this is the one host the guard must allow.
+      MLFLOW_GATEWAY_API_BASE_ALLOW_PRIVATE_IPS: "true"
+      # A sibling service on an internal network speaks http, not https; the default
+      # allowlist is https-only. Paired with the private-IP allowance above, this lets
+      # the gateway reach exactly one class of upstream: named services inside the stack.
+      MLFLOW_GATEWAY_API_BASE_ALLOWED_SCHEMES: "https,http"
+      # The gateway needs the OmniRoute key to call it, and it arrives the way every
+      # other credential does: as a file, never as an environment value (the custody
+      # test enforces that). The bootstrap reads it once and turns it into a gateway
+      # secret, so the key is not needed again after that.
+      OMNIROUTE_API_KEY_FILE: /run/secrets/omniroute_api_key
+    secrets:
+      - omniroute_api_key
     volumes:
       - mlflow-data:/mlflow
     healthcheck:

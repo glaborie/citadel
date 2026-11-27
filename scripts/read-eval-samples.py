@@ -201,8 +201,8 @@ def fetch(request: urllib.request.Request) -> dict[str, Any]:
     The rule's premise is an actor-controlled URL. These are not: the host is the
     operator's tracking URI, constrained to http(s) by base_url(), and the dataset id -
     the one value that comes from data - is percent-escaped into the path.
-    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
     """
+    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
     with urllib.request.urlopen(request, timeout=15) as response:
         return dict(json.loads(response.read()))
 
