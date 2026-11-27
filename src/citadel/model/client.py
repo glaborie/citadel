@@ -31,6 +31,24 @@ class ModelUnavailable(RuntimeError):
     """The gateway could not answer. The run must not pretend that it did."""
 
 
+# Native tool-call syntax leaked into `content` by an upstream the gateway did
+# not translate. It is a request no policy path has seen, not an answer.
+_TOOL_MARKUP = (
+    "｜DSML｜",
+    "<|tool_call|>",
+    "<tool_call>",
+    "</tool_call>",
+    "<function_calls>",
+    "</function_calls>",
+    "<|python_tag|>",
+    "[TOOL_CALLS]",
+)
+
+
+def contains_tool_markup(text: str) -> bool:
+    return any(marker in text for marker in _TOOL_MARKUP)
+
+
 def parse_usage(raw: object) -> Usage:
     """Read the usage block, including the gateway's own cost figure."""
     if not isinstance(raw, Mapping):

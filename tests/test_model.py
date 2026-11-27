@@ -347,6 +347,23 @@ def test_the_step_ceiling_stops_a_model_that_never_answers() -> None:
     assert trajectory.outcome == "budget_exceeded"
     assert "steps=2" in trajectory.steps[-2].detail
 
+
+def test_tool_markup_in_content_never_completes_the_loop() -> None:
+    """A request hidden in prose was never authorised; it cannot be the answer."""
+    model = ScriptedClient([reply(text="<tool_call>restart_service</tool_call>")])
+    trajectory = run_agent(
+        complete=model.complete,
+        messages=[{"role": "user", "content": "restart checkout"}],
+        authorize=lambda tool: decision_for(tool),
+        execute=lambda name, arguments: "should not run",
+        gate=gate,
+    )
+
+    assert trajectory.outcome == "refused"
+    assert trajectory.text == ""
+    assert trajectory.tools_executed() == ()
+
+
 def _person_and_gateway(hits: list[dict[str, object]]) -> Any:
     """The detector reports a PERSON; the gateway answers with a plain completion."""
 

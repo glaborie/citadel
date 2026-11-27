@@ -21,7 +21,7 @@ from temporalio import activity
 from citadel import dlp
 from citadel.audit import AuditLedger
 from citadel.env import optional_secret
-from citadel.model import ModelUnavailable, OmniRouteClient
+from citadel.model import ModelUnavailable, OmniRouteClient, contains_tool_markup
 from citadel.prompts import assemble
 from citadel.telemetry import record_span
 
@@ -196,10 +196,21 @@ class ModelActivities:
             )
 
         tool = reply.tools[0] if reply.tools else None
+        # An upstream that does not translate the pack's tools answers in prose
+        # with its native markup. Treating that as an answer ends the run having
+        # done nothing and puts the markup in front of a reader.
+        markup = tool is None and contains_tool_markup(reply.content)
+        if markup:
+            status, rule_id = "refused", "model.tool_markup"
+        elif tool is not None:
+            status, rule_id = "tool_requested", "model.tool_requested"
+        else:
+            status, rule_id = "answered", "model.answered"
         ref = self._record(
             request,
             {
-                "status": "tool_requested" if tool is not None else "answered",
+                "status": status,
+                "rule_id": rule_id,
                 "model": reply.model,
                 "input_hash": _hash(messages),
                 "output_hash": _hash(
@@ -236,10 +247,14 @@ class ModelActivities:
             prompt_pack=prompt.pack_id,
         )
         return ModelStepResult(
-            status="tool_requested" if tool is not None else "answered",
-            rule_id="model.tool_requested" if tool is not None else "model.answered",
-            detail=f"{reply.model} answered in {reply.latency_ms} ms",
-            content=reply.content,
+            status=status,
+            rule_id=rule_id,
+            detail=(
+                "the reply carried tool-call markup in content instead of tool_calls"
+                if markup
+                else f"{reply.model} answered in {reply.latency_ms} ms"
+            ),
+            content="" if markup else reply.content,
             tool=tool.name if tool is not None else "",
             arguments=dict(tool.arguments) if tool is not None else {},
             prompt_digest=prompt.digest,

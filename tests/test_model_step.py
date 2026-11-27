@@ -8,6 +8,7 @@ import pytest
 
 from citadel.audit import AuditLedger
 from citadel.model import ModelUnavailable, Reply, RequestedTool, ScriptedClient, Usage
+from citadel.model.client import parse_reply
 from citadel.workflows.model_step import ModelActivities, ModelStepRequest
 
 
@@ -162,6 +163,38 @@ def test_a_poisoned_reply_never_enters_context() -> None:
     assert result.status == "dlp_blocked"
     assert result.content == "", "a blocked reply must not travel further"
     assert audit.events[-1]["payload"]["surface"] == "output"
+
+
+def test_tool_call_markup_in_content_is_not_an_answer() -> None:
+    """#168: an untranslated tool request in prose must not complete the run."""
+    bar = "\uff5c"
+    payload = {
+        "model": "auto/best-fast",
+        "choices": [
+            {
+                "message": {
+                    "content": (
+                        "I'll verify the state before proposing anything. Starting with "
+                        "the container inventory.\n\n"
+                        f"<{bar}DSML{bar}calls>\n"
+                        f'<{bar}DSML{bar}invoke name="inspect_containers">\n'
+                        f"</{bar}DSML{bar}invoke>\n"
+                        f"</{bar}DSML{bar}calls>"
+                    )
+                },
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 100, "completion_tokens": 20, "cost": 0.001},
+    }
+    activities, audit = build([parse_reply(payload, latency_ms=1)])
+
+    result = activities.next_step(request(task="restart the reranker"))
+
+    assert (result.status, result.rule_id) == ("refused", "model.tool_markup")
+    assert result.content == "", "markup must never surface as the answer"
+    assert audit.events[-1]["payload"]["status"] == "refused"
+    assert audit.events[-1]["payload"]["rule_id"] == "model.tool_markup"
 
 
 def test_an_unreported_cost_stays_unreported() -> None:
