@@ -13,7 +13,7 @@ from types import ModuleType
 
 import pytest
 
-from citadel.retrieval.ingest import stale_sources
+from citadel.retrieval.corpus import stale_sources
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "knowledge-sync.py"
