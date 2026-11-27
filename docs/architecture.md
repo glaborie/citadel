@@ -190,7 +190,7 @@ Ingestion is a one-shot `ingest` service behind the `tools` profile: `make inges
 
 The query half is `RetrievalActivities.retrieve` on the orchestrator worker: it builds the ACL filter from the subject's entitlement tags, sends the dense and sparse prefetches in one Qdrant request, fuses with RRF, redacts each candidate through DLP, reranks top 50 to top 8 with the in-stack TEI service, and writes `retrieval.query` / `retrieval.result` with a filter-set digest and citation metadata. It is registered on the orchestrator worker but no workflow calls it yet (D1 in `docs/exit-review-v0.2.md`).
 
-The researcher services are in Compose: `worker-researcher` sits on an internal `research` network with `searxng` and `fetcher`, and on the `web` bridge for egress; none of the three publishes a port. Prometheus exposition is built in ([metrics.md](architecture/metrics.md)); a Grafana profile remains optional.
+The researcher services are in Compose: `worker-researcher` sits on an internal `research` network with `searxng` and `fetcher`, and on the `web` bridge for egress; none of the three publishes a port. Prometheus and Grafana are in the stack ([metrics.md](architecture/metrics.md)); Prometheus is internal-only, Grafana is loopback-only and requires a login.
 
 ## 11. Verification items (all resolved)
 
