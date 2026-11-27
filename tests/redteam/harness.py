@@ -638,10 +638,11 @@ def exec_agent_self_approval(case_: Case, _: Path) -> Outcome:
     )
     token, _context = mint_run_token(
         Principal(user_id="user-alice", tenant_id="lab-a", roles=frozenset()),
-        agent_id="docker",
+        agent_id="researcher",
         scopes=frozenset(),
         risk_tier="T1",
         private_key=run_key,
+        run_id="run-1",
     )
     db = support.FakeDB()
     db.run_owner = ("user-alice", "docker")
