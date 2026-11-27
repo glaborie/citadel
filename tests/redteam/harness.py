@@ -399,8 +399,24 @@ def exec_secret_in_prompt(case_: Case, _: Path) -> Outcome:
     text = fixture_text("dlp/api_key.txt")
     verdict = dlp.inspect(text, surface="input", analyzer_url=ANALYZER, opener=detector([]))
     categories = sorted({finding.category for finding in verdict.findings})
-    ok = verdict.action == "block" and "GITHUB_TOKEN" in categories
-    return Outcome(ok, f"{verdict.action} {categories}")
+    github_ok = verdict.action == "block" and "GITHUB_TOKEN" in categories
+
+    jwt = (
+        "eyJhbGciOiJFZERTQSJ9."
+        "eyJpc3MiOiJjaXRhZGVsIiwic3ViIjoiYWxpY2UifQ."
+        "c2lnbmF0dXJlX3Rlc3RfdmFsdWVfZm9yX2RscA"
+    )
+    jwt_verdict = dlp.inspect(
+        f"run token: {jwt}", surface="input", analyzer_url=ANALYZER, opener=detector([])
+    )
+    jwt_categories = sorted({finding.category for finding in jwt_verdict.findings})
+    jwt_ok = jwt_verdict.action == "block" and "JWT" in jwt_categories
+    ok = github_ok and jwt_ok
+    detail = (
+        f"github={verdict.action}/{categories}"
+        f" jwt={jwt_verdict.action}/{jwt_categories}"
+    )
+    return Outcome(ok, detail)
 
 
 def exec_swiss_identifiers_redacted(case_: Case, _: Path) -> Outcome:

@@ -114,6 +114,15 @@ TECHNICAL_NOUNS: frozenset[str] = frozenset(
 SECRET_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("GITHUB_TOKEN", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}")),
     ("GITHUB_PAT", re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}")),
+    (
+        "JWT",
+        re.compile(
+            r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{5,}"
+            r"\.[A-Za-z0-9_-]{5,}"
+            r"\.[A-Za-z0-9_-]{16,}"
+            r"(?![A-Za-z0-9_-])"
+        ),
+    ),
     ("AWS_ACCESS_KEY", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
     ("PRIVATE_KEY", re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")),
     ("AGE_SECRET_KEY", re.compile(r"\bAGE-SECRET-KEY-1[0-9A-Z]{58}\b")),
