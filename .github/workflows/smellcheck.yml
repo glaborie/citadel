@@ -4,12 +4,16 @@ on:
     branches:
     - master
 
+# Every workflow in this repository grants the token the same floor (#40): read the
+# repository and nothing else. The smell check only reads source, and nothing in this
+# workflow writes a PR comment, so the job-level `pull-requests: write` that used to sit
+# here was a grant with no consumer.
+permissions:
+  contents: read
+
 jobs:
   smell-check:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write  # Only needed if you want PR comments (e.g., with Smelly Python)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -18,8 +22,11 @@ jobs:
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      # Hashes, not a name (#41): an unpinned install runs whatever PyPI serves next,
+      # which is the one supply-chain step in this workflow that actions pinning does
+      # not cover. `make check` runs the same version from the same file.
       - name: Install smellcheck
-        run: pip install smellcheck
+        run: pip install --require-hashes -r .github/requirements-smellcheck.txt
       - name: Run smellcheck
         run: |
           smellcheck src/ --min-severity warning --baseline .smellcheck-baseline.json --fail-on warning
