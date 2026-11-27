@@ -319,6 +319,7 @@ services:
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
       MLFLOW_EXPERIMENT_NAME: ${MLFLOW_EXPERIMENT_NAME:-citadel-trajectories}
       MLFLOW_EXPERIMENT_ID: ${MLFLOW_EXPERIMENT_ID:-1}
+      CITADEL_TRACE_CONTENT: "${CITADEL_TRACE_CONTENT:-full}"  # dev: traces carry the task and the answer in plain text
     depends_on:
       mlflow:
         condition: service_healthy
@@ -522,6 +523,7 @@ services:
       TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
       MLFLOW_EXPERIMENT_ID: ${MLFLOW_EXPERIMENT_ID:-1}
+      CITADEL_TRACE_CONTENT: "${CITADEL_TRACE_CONTENT:-full}"  # dev: traces carry the task and the answer in plain text
     secrets:
       - db_dsn
       - run_token_private_key
@@ -595,6 +597,7 @@ services:
       TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
       MLFLOW_EXPERIMENT_ID: ${MLFLOW_EXPERIMENT_ID:-1}
+      CITADEL_TRACE_CONTENT: "${CITADEL_TRACE_CONTENT:-full}"  # dev: traces carry the task and the answer in plain text
       # ADR-017 decision 3. Rate 0 means no run is sampled; the cap bounds a day.
       CITADEL_EVAL_SAMPLE_RATE: ${CITADEL_EVAL_SAMPLE_RATE:-0}
       CITADEL_EVAL_SAMPLE_CAP: ${CITADEL_EVAL_SAMPLE_CAP:-25}
@@ -645,6 +648,7 @@ services:
       TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
       MLFLOW_EXPERIMENT_ID: ${MLFLOW_EXPERIMENT_ID:-1}
+      CITADEL_TRACE_CONTENT: "${CITADEL_TRACE_CONTENT:-full}"  # dev: traces carry the task and the answer in plain text
     secrets:
       - db_dsn
       - metrics_token
@@ -675,6 +679,7 @@ services:
       TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
       MLFLOW_EXPERIMENT_ID: ${MLFLOW_EXPERIMENT_ID:-1}
+      CITADEL_TRACE_CONTENT: "${CITADEL_TRACE_CONTENT:-full}"  # dev: traces carry the task and the answer in plain text
     secrets:
       - db_dsn
       - metrics_token
@@ -705,6 +710,7 @@ services:
       TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
       MLFLOW_EXPERIMENT_ID: ${MLFLOW_EXPERIMENT_ID:-1}
+      CITADEL_TRACE_CONTENT: "${CITADEL_TRACE_CONTENT:-full}"  # dev: traces carry the task and the answer in plain text
       # The two research tools run here, not in the sandbox: the fetcher is the
       # only egress point and the worker holds no CLI or socket.
       CITADEL_DLP_URL: http://presidio:3000

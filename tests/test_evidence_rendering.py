@@ -74,6 +74,7 @@ def test_the_sheet_carries_the_scores_already_written_on_it() -> None:
 
     assert len(scored) == 30
 
+
 def test_a_recorded_tool_answer_reaches_the_judge() -> None:
     """The whole point of #156: an answer that quotes a tool can be checked against it."""
     import dataclasses
@@ -88,6 +89,7 @@ def test_a_recorded_tool_answer_reaches_the_judge() -> None:
 
     assert "output=" in rendered
     assert "reconnecting every 90000 ms" in rendered
+
 
 def test_a_stated_duration_appears_in_the_evidence() -> None:
     """The rater took these on trust in v1; the record now has to carry them."""

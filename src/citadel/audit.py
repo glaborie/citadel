@@ -138,7 +138,6 @@ class AuditLedger:
             expected_prev = str(stored)
         return True, len(rows)
 
-
     def unaudited(self, tenant_id: str) -> list[str]:
         """Idempotency keys of tool calls that left no tool.call event behind."""
         with tenant_connection(self._dsn, tenant_id) as conn:

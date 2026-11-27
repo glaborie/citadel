@@ -101,6 +101,7 @@ class RunWorkflow:
                 citation_ids=citation_ids or [],
                 safety_flags=safety_flags,
                 answer=answer,
+                task=item.task,
             ),
             start_to_close_timeout=timedelta(seconds=30),
             retry_policy=RetryPolicy(maximum_attempts=3),

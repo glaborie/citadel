@@ -63,7 +63,8 @@ def test_the_tenant_is_set_as_a_local_variable(seen: list[tuple[str, Any]]) -> N
 
 def test_a_connection_without_a_tenant_is_refused(seen: list[tuple[str, Any]]) -> None:
     """An empty claim must not open a connection that sees every tenant."""
-    with pytest.raises(ValueError, match="without a tenant"), db.tenant_connection(
-        "postgres://fake", ""
+    with (
+        pytest.raises(ValueError, match="without a tenant"),
+        db.tenant_connection("postgres://fake", ""),
     ):
         pass

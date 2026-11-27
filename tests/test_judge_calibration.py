@@ -121,8 +121,7 @@ def test_the_labels_cover_the_sheet_and_pair_with_the_scores() -> None:
         human = json.loads(human_path.read_text(encoding="utf-8"))
         assert len(human["items"]) == 30, version
         assert all(
-            set(item)
-            >= {"id", "sample_id", "plan", "grounding", "recovery", "escalation"}
+            set(item) >= {"id", "sample_id", "plan", "grounding", "recovery", "escalation"}
             for item in human["items"]
         ), version
 
