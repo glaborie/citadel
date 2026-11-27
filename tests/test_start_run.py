@@ -12,6 +12,8 @@ from typing import Any
 
 import pytest
 
+from citadel.skills import load_pack
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "start-run.py"
 
@@ -28,7 +30,11 @@ def test_the_body_is_exactly_the_fields_the_api_accepts() -> None:
     from citadel.api.app import RunRequest
 
     body = _launcher().run_body(
-        agent="docker", risk_tier="T0", pack="docker-1.0.0", alias="auto/best-fast", task="hi"
+        agent="docker",
+        risk_tier="T0",
+        pack=load_pack("docker").name,
+        alias="auto/best-fast",
+        task="hi",
     )
     assert set(body) == set(RunRequest.model_fields)
     assert RunRequest.model_validate(body)
@@ -37,7 +43,11 @@ def test_the_body_is_exactly_the_fields_the_api_accepts() -> None:
 def test_the_tenant_and_user_are_never_in_the_body() -> None:
     """Both come from the token; a body that names them is a request to be someone else."""
     body = _launcher().run_body(
-        agent="docker", risk_tier="T0", pack="docker-1.0.0", alias="auto/best-fast", task=""
+        agent="docker",
+        risk_tier="T0",
+        pack=load_pack("docker").name,
+        alias="auto/best-fast",
+        task="",
     )
     assert "tenant_id" not in body
     assert "user_id" not in body
