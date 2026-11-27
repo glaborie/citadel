@@ -50,6 +50,16 @@ elif [ ! -s "$dir/metrics_token" ]; then
 fi
 chmod 0644 "$dir/metrics_token"
 
+# The Grafana admin password is operator-local. SOPS may supply one; otherwise
+# keep the first generated value so a later `make up` does not lock the operator
+# out of a browser session they saved. Read it from this file to log in.
+if [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
+    printf '%s' "$GRAFANA_ADMIN_PASSWORD" > "$dir/grafana_admin_password"
+elif [ ! -s "$dir/grafana_admin_password" ]; then
+    openssl rand -hex 24 > "$dir/grafana_admin_password"
+fi
+chmod 0644 "$dir/grafana_admin_password"
+
 # pgx (OpenFGA) reads this instead of taking the password in argv or env.
 # Format: host:port:database:user:password (libpq escapes `\` and `:`).
 pgpass_pw=${POSTGRES_PASSWORD//\\/\\\\}

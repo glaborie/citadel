@@ -1,0 +1,9 @@
+# Load every dashboard from the read-only mount on start.
+apiVersion: 1
+
+providers:
+  - name: citadel
+    type: file
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

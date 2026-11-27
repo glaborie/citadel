@@ -148,6 +148,17 @@ Prometheus so it reloads the file. The API and workers read it per request. An
 unset or unreadable file makes the endpoint answer `503`; it never falls back to
 an open scrape.
 
+### Grafana admin password
+
+`GRAFANA_ADMIN_PASSWORD` is optional in SOPS: if unset,
+`scripts/provision-secrets.sh` generates `secrets/grafana_admin_password` once and
+keeps it. It is mounted as a Docker secret and read by Grafana through
+`GF_SECURITY_ADMIN_PASSWORD__FILE`, so it never appears in a container's config.
+To change it, set a new value in `secrets/citadel.env` (or delete the file),
+`make up`, and restart `grafana`. The UI is internal-only and reached through the
+loopback sidecar in `docs/architecture/metrics.md`; anonymous access and sign-up
+are disabled.
+
 ### Keycloak admin and OmniRoute
 
 `KEYCLOAK_ADMIN_PASSWORD` is a bootstrap value

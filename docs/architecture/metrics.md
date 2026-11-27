@@ -95,7 +95,40 @@ without one still scrapes every other metric. Cache samples appear only once
 
 ## Grafana
 
-No Grafana service or dashboard is shipped. The milestone makes Grafana optional;
-add it behind a Compose profile once the dashboards exist, and read these metric
-names rather than inventing new ones. A dashboard that sums reported USD without
-the unreported counter repeats the cost mistake above.
+`prometheus` and `grafana` are Compose services and start with the rest of the
+stack: `make up`, or `docker compose up -d --wait prometheus grafana`. They are
+not profile-gated, because the dashboard is the only view of these metrics.
+
+| Item | Value |
+|---|---|
+| Scrape config | `docker/prometheus/prometheus.yml`, job `citadel` |
+| Targets | `api:8000` plus `worker-orchestrator`, `worker-docker`, `worker-github`, `worker-researcher` on `:9100` |
+| Scrape interval | 15 s |
+| Retention | 15 d (`--storage.tsdb.retention.time`), named volume `prometheus-data` |
+| Dashboard | `docker/grafana/dashboards/citadel.json`, provisioned as "Citadel controls" |
+| Grafana state | named volume `grafana-data` |
+| Login | `admin`, password from `secrets/grafana_admin_password` |
+
+Both containers sit on `internal` only. Prometheus publishes no port at all:
+Grafana reads it through the proxy datasource. Grafana publishes none either,
+because Docker binds nothing on an internal network. Reach the UI through a
+loopback socat sidecar, the same pattern as `scripts/mlflow-ui.sh`:
+
+```bash
+docker run -d --name citadel-grafana-ui --restart unless-stopped \
+  --network bridge -p 127.0.0.1:13000:13000 alpine/socat \
+  tcp-listen:13000,fork,reuseaddr tcp-connect:grafana:3000
+docker network connect citadel_internal citadel-grafana-ui
+# then http://localhost:13000
+docker rm -f citadel-grafana-ui      # close it again
+```
+
+The sidecar listens on loopback only, so Grafana is not reachable from the edge
+network or the LAN and the compose file itself stays closed. Anonymous access and
+sign-up are off, and the admin password arrives as a Docker secret
+(`GF_SECURITY_ADMIN_PASSWORD__FILE`), never as a plaintext env value.
+
+The dashboard reads only the metric names above with their bounded labels: no
+tenant, user, run id or prompt-derived series. The cost panel shows reported USD
+and unreported calls side by side, so a dashboard cannot repeat the "free versus
+unknown" mistake above.

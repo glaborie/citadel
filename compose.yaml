@@ -294,6 +294,70 @@ services:
     depends_on:
       mlflow:
         condition: service_healthy
+
+  prometheus:
+    # Scrapes every /metrics endpoint with the shared bearer token. Internal
+    # only and no published port: the dashboards in Grafana are the only view,
+    # and the UI carries no control decision (ADR-015). Retention is a flag, so
+    # the disk ceiling is explicit rather than a surprise.
+    image: prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    secrets:
+      - metrics_token
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    logging: *logging
+    networks:
+      - internal
+
+  grafana:
+    # Operator UI for the metrics. Internal only and no published port: Docker
+    # binds nothing on an internal network, and an unauthenticated dashboard
+    # would be a hole anyway. Reach it through the loopback socat sidecar in
+    # docs/architecture/metrics.md, the same pattern as scripts/mlflow-ui.sh.
+    # The admin password is read from a file secret, never an env value.
+    image: grafana/grafana:13.2.6@sha256:b21409d7951ddcfd63a4b49083e4ef2cc35bc1437d071813bf82bfb238b00bca
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # No internet route; turn the outbound features off rather than retrying.
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+    secrets:
+      - grafana_admin_password
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    logging: *logging
+    networks:
+      - internal
+
   presidio:
     image: mcr.microsoft.com/presidio-analyzer:2.2.362@sha256:286e3fa7f3a7426e775e8564fe1870f1ba8f999d3ab8bbb8cc46a44355d9d6e9
     environment:
@@ -849,6 +913,8 @@ volumes:
   omniroute-data:
   mlflow-data:
   qdrant-data:
+  prometheus-data:
+  grafana-data:
 
 # Injected from the host environment (i.e. .env) and mounted as files, so they
 # never appear in a container's Config.Env, which the Docker API exposes.
@@ -858,6 +924,8 @@ secrets:
     file: ${CITADEL_SECRETS_DIR:-./secrets}/db_dsn
   metrics_token:
     file: ${CITADEL_SECRETS_DIR:-./secrets}/metrics_token
+  grafana_admin_password:
+    file: ${CITADEL_SECRETS_DIR:-./secrets}/grafana_admin_password
   run_token_private_key:
     file: ${CITADEL_SECRETS_DIR:-./secrets}/run_token_private_key
   console_session_key:
