@@ -816,6 +816,8 @@ class RunActivities:
             run_id=end.run_id,
             audit_id=ref.audit_id,
             outcome=end.outcome,
+            # The worker's configure() wires the DLP gate: in full mode the task and the
+            # answer are screened before export, and a refused field ships as its hash.
             inputs={**self._trace_inputs(end), "task": end.task},
             outputs=_run_outputs(end),
         )

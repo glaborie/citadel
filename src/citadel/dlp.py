@@ -30,12 +30,13 @@ layer exists to prevent. There is no permissive path.
 from __future__ import annotations
 
 import json
+import os
 import re
 import urllib.error
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from ipaddress import ip_address
-from typing import Any
+from typing import Any, Final
 from urllib.request import Request, urlopen
 
 from citadel import metrics
@@ -44,6 +45,11 @@ from citadel import metrics
 DETECTOR_VERSION = "presidio-analyzer:2.2.362"
 SCORE_THRESHOLD = 0.4
 ANALYZER_TIMEOUT_SECONDS = 30
+
+# Where the analyzer answers. Each component resolves CITADEL_DLP_URL itself;
+# trace_gate() falls back to this pair when the caller does not name a URL.
+ANALYZER_URL_ENV: Final = "CITADEL_DLP_URL"
+DEFAULT_ANALYZER_URL: Final = "http://presidio:3000"
 
 # URL and DATE_TIME are deliberately absent: redacting a PR link or a log
 # timestamp makes tool output useless without hiding anything personal. The
@@ -259,6 +265,21 @@ def gate(
         metrics.dlp_block(surface=surface, reason="dlp_blocked")
         raise DlpBlocked("dlp_blocked", report)
     return verdict.text, report
+
+
+def trace_gate(analyzer_url: str | None = None) -> Callable[[str], str]:
+    """A text gate for the trace exporter (see `citadel.telemetry.configure`).
+
+    The `record` surface, text-only: PII comes back redacted in place, a credential or
+    an unreachable detector raises - which the exporter treats as "ship the summary
+    form", never as raw text. Only exercised when CITADEL_TRACE_CONTENT=full.
+    """
+    url = analyzer_url or os.environ.get(ANALYZER_URL_ENV, DEFAULT_ANALYZER_URL)
+
+    def gate_for_trace(text: str) -> str:
+        return gate(text, surface="record", analyzer_url=url)[0]
+
+    return gate_for_trace
 
 
 def _analyze(text: str, analyzer_url: str, opener: Opener) -> Any:  # noqa: ANN401

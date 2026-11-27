@@ -32,6 +32,7 @@ import json
 import logging
 import os
 import uuid
+from collections.abc import Callable
 from typing import Any, Final
 
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -51,6 +52,7 @@ logger = logging.getLogger(__name__)
 
 _tracer: Tracer | None = None
 _provider: TracerProvider | None = None
+_text_gate: TextGate | None = None
 _current_trace: contextvars.ContextVar[int] = contextvars.ContextVar("citadel_trace", default=0)
 _current_span: contextvars.ContextVar[int] = contextvars.ContextVar("citadel_span", default=0)
 
@@ -149,9 +151,16 @@ class _WarnOnceExporter(SpanExporter):
         return self._inner.force_flush(timeout_millis)
 
 
-def configure(service_name: str) -> None:
-    """Start exporting when MLflow answers. Otherwise spans are a no-op, and it says so."""
-    global _tracer, _provider
+def configure(service_name: str, text_gate: TextGate | None = None) -> None:
+    """Start exporting when MLflow answers. Otherwise spans are a no-op, and it says so.
+
+    `text_gate` screens the root span's free-text fields (`task`, `answer`) before they
+    leave: `full` mode exports them only through it, so a process that configures no gate
+    ships the summary form even in `full` mode. The DLP `record` surface is the gate a
+    stack passes (`dlp.trace_gate`); see `_payload`.
+    """
+    global _tracer, _provider, _text_gate
+    _text_gate = text_gate
     if _tracer is not None:
         return
     tracking = os.environ.get("MLFLOW_TRACKING_URI", "").rstrip("/")
@@ -187,11 +196,12 @@ def _start(tracking: str, experiment: str, service_name: str) -> None:
 
 
 def shutdown() -> None:
-    global _tracer, _provider
+    global _tracer, _provider, _text_gate
     if _provider is not None:
         _provider.shutdown()
     _provider = None
     _tracer = None
+    _text_gate = None
 
 
 ROOT_SPAN_NAME: Final = "run"
@@ -286,35 +296,96 @@ SPAN_OUTPUTS: Final = "mlflow.spanOutputs"
 MODE_ENV: Final = "CITADEL_TRACE_CONTENT"
 TEXT_KEYS: Final = ("task", "answer")
 
+# Returns the text that may be exported (PII redacted in place on the `record`
+# DLP surface) and raises when the text may not leave at all - a credential, or
+# a detector that cannot answer.
+TextGate = Callable[[str], str]
+
 
 def content_mode() -> str:
     """How much free text a trace may carry: `full`, `summary` (default) or `none`.
 
     `summary` keeps the shape of a payload - lengths, digests, ids - and drops the text, which
     is what ADR-005 asks for (traces carry redacted payloads). `full` is an explicit opt-in for
-    a development stack, where reading the actual answer in the MLflow UI is the whole point.
-    A value nobody recognises falls back to `summary`: a typo must not widen what leaves.
+    a development stack, where reading the actual answer in the MLflow UI is the whole point -
+    and even there the free-text fields pass through the gate before export, so `full` is a
+    mode for readable traces, not an exemption from redaction. A value nobody recognises falls
+    back to `summary`: a typo must not widen what leaves.
     """
     mode = os.environ.get(MODE_ENV, "summary").strip().lower()
     return mode if mode in {"full", "summary", "none"} else "summary"
 
 
 def _payload(payload: Any) -> str | None:  # noqa: ANN401 - a dict or an already-encoded string
-    """Encode what the mode allows, and nothing else."""
+    """Encode what the mode allows, and nothing else.
+
+    In `full` mode the free-text fields go through the process's gate before they leave
+    (see `configure`). A field whose gate is missing, refuses or cannot answer drops to
+    its summary form: raw text never exports unchecked, even on an explicit opt-in (#236).
+    """
     if payload is None:
         return None
     mode = content_mode()
     if mode == "none":
         return None
-    if mode == "full" or not isinstance(payload, dict):
+    if not isinstance(payload, dict):
         return _as_json(payload)
+    if mode != "full":
+        return _as_json(_summarised(payload))
+    return _as_json(_gated_fields(payload))
+
+
+def _gated_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    """The `full`-mode payload: text fields export only what the gate lets through."""
+    kept = {key: value for key, value in payload.items() if key not in TEXT_KEYS}
+    for key in TEXT_KEYS:
+        if key not in payload:
+            continue
+        text = str(payload[key])
+        gated = _gated_text(key, text, _text_gate)
+        if gated is None:
+            kept.update(_summary_entries(key, text))
+        else:
+            kept[key] = gated
+    return kept
+
+
+def _summarised(payload: dict[str, Any]) -> dict[str, Any]:
+    """The summary form: text fields leave as lengths and digests, everything else as-is."""
     kept = {key: value for key, value in payload.items() if key not in TEXT_KEYS}
     for key in TEXT_KEYS:
         if key in payload:
-            text = str(payload[key])
-            kept[f"{key}_chars"] = len(text)
-            kept[f"{key}_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    return _as_json(kept)
+            kept.update(_summary_entries(key, str(payload[key])))
+    return kept
+
+
+def _summary_entries(key: str, text: str) -> dict[str, Any]:
+    """What stands in for a text field when the text itself stays home."""
+    return {
+        f"{key}_chars": len(text),
+        f"{key}_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+    }
+
+
+def _gated_text(key: str, text: str, text_gate: TextGate | None) -> str | None:
+    """The text that may leave, or None when the field must drop to its summary form.
+
+    Telemetry never fails a run, so a gate that refuses or cannot answer is a quiet
+    downgrade here, not an error - and a missing gate is the loudest refusal of all:
+    `full` mode with nothing screening the text ships the summary form only.
+    """
+    if not text:
+        return text
+    if text_gate is None:
+        logger.warning("trace field %r has no gate in full mode; exporting the summary form", key)
+        return None
+    try:
+        return text_gate(text)
+    except Exception as exc:  # noqa: BLE001 - a refusal must never widen what leaves
+        logger.warning(
+            "trace field %r refused by its gate (%s); exporting the summary form", key, exc
+        )
+        return None
 
 
 def _root_context(run_id: str) -> Any:  # noqa: ANN401 - opentelemetry's Context type

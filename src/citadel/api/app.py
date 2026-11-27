@@ -164,7 +164,9 @@ def create_app(
         redoc_url=None,
         openapi_url="/openapi.json" if expose_docs else None,
     )
-    telemetry.configure("citadel-api")
+    # The trace's free-text fields export only through the DLP gate: even with the
+    # explicit CITADEL_TRACE_CONTENT=full opt-in, a refused field ships as its hash.
+    telemetry.configure("citadel-api", text_gate=dlp.trace_gate(DLP_URL))
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
@@ -335,6 +337,8 @@ def create_app(
             prompt_pack_version=body.prompt_pack_version,
             model_alias=body.model_alias,
             # The text goes to the span, never to the ledger: the ledger keeps the hash.
+            # In full mode the process's gate (configure below) screens it first; a
+            # refused field ships as its hash.
             inputs={**trace_inputs, "task": body.task or ""},
         )
         if body.task:
