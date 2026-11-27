@@ -425,14 +425,32 @@ services:
     # hosted and sees only DLP-redacted text (ADR-025). The model is baked into
     # the image at a pinned revision, so there is no runtime fetch and the
     # service needs no egress (issue #148); `make up` builds it on first use.
+    # Hardened like the tool-runner (issue #227): unprivileged user, all
+    # capabilities dropped. TEI's default port 80 needs CAP_NET_BIND_SERVICE,
+    # so the server serves 8080 — CITADEL_RERANKER_URL and the healthcheck
+    # follow, and tests/test_reranker_exposure.py guards the drift.
+    # TEI also caps a /rerank batch at 32 by default, which 413s the 50
+    # candidates the retrieval path sends (measured live); 64 covers it.
     build:
       context: .
       dockerfile: docker/reranker.Dockerfile
     image: citadel-reranker:0.1.0
-    command: ["--model-id", "/models"]
+    command: ["--model-id", "/models", "--port", "8080", "--max-client-batch-size", "64"]
+    user: "10001:10001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    pids_limit: 128
+    # TEI's warmup spikes past 512m (137/OOM at 512m, measured); the steady
+    # footprint is well under this.
+    mem_limit: 1024m
     healthcheck:
       # A bash TCP probe needs nothing else in the image.
-      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/80"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080"]
       interval: 15s
       timeout: 5s
       retries: 20
@@ -615,7 +633,7 @@ services:
       # query rather than searching without its dense half.
       CITADEL_QDRANT_URL: http://qdrant:6333
       CITADEL_EMBEDDING_MODEL: ${CITADEL_EMBEDDING_MODEL:-}
-      CITADEL_RERANKER_URL: http://reranker:80
+      CITADEL_RERANKER_URL: http://reranker:8080
       CITADEL_CACHE_TTL_SECONDS: ${CITADEL_CACHE_TTL_SECONDS:-3600}
       CITADEL_CACHE_SIMILARITY: ${CITADEL_CACHE_SIMILARITY:-0.95}
     secrets:
