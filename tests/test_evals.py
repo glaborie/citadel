@@ -270,7 +270,10 @@ def test_a_scheme_prefixed_source_uri_counts_as_a_citation() -> None:
 
     def add_scheme(events: list[dict[str, Any]]) -> None:
         result = next(event for event in events if event["type"] == "retrieval.result")
-        result["source_uris"] = [f"fs:{source}" for source in result["source_uris"]]
+        result["source_uris"] = [
+            *(f"fs:{source}" for source in result["source_uris"]),
+            "fs:checkout-api.md",
+        ]
         end = next(event for event in events if event["type"] == "run.end")
         end["citation_ids"] = [
             f"fs:{citation}" if "/" in citation else citation for citation in end["citation_ids"]
@@ -279,8 +282,33 @@ def test_a_scheme_prefixed_source_uri_counts_as_a_citation() -> None:
     case = _mutate(_case("devops-001"), add_scheme)
     case = replace(
         case,
-        answer="checkout-api is unhealthy; see fs:runbooks/checkout-api.md.",
+        # One scheme with a path, one at the root: the second has no slash to match.
+        answer="checkout-api is unhealthy; see fs:runbooks/checkout-api.md and fs:checkout-api.md.",
         expectations={**case.expectations, "required_citation_sources": []},
+    )
+
+    assert _citation_grade(case).passed
+
+
+def test_a_bare_uuid_chunk_id_counts_as_a_citation() -> None:
+    """Qdrant point ids are UUIDs; a model copying one verbatim must resolve."""
+    chunk_id = "8506d70c-59d5-5c43-baf3-3d7d895f7ff3"
+
+    def use_uuid(events: list[dict[str, Any]]) -> None:
+        result = next(event for event in events if event["type"] == "retrieval.result")
+        result["chunk_ids"] = [chunk_id]
+        end = next(event for event in events if event["type"] == "run.end")
+        end["citation_ids"] = [chunk_id]
+
+    case = _mutate(_case("devops-001"), use_uuid)
+    case = replace(
+        case,
+        answer=f"checkout-api is unhealthy; see {chunk_id}.",
+        expectations={
+            **case.expectations,
+            "min_citations": 1,
+            "required_citation_sources": [],
+        },
     )
 
     assert _citation_grade(case).passed

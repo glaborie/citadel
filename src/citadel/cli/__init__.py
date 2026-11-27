@@ -10,16 +10,16 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-EXIT_OK = 0
-EXIT_FAILED = 1
-EXIT_USAGE = 2
-EXIT_REFUSED = 3
-EXIT_UNAVAILABLE = 4
+EXIT_OK: Final = 0
+EXIT_FAILED: Final = 1
+EXIT_USAGE: Final = 2
+EXIT_REFUSED: Final = 3
+EXIT_UNAVAILABLE: Final = 4
 
 
 def build_parser() -> argparse.ArgumentParser:
