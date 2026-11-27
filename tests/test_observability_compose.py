@@ -133,6 +133,27 @@ def test_the_refusal_alert_is_loaded_and_documented() -> None:
         "the metric the alert reads must stay in the documented table"
     )
 
+    # A rule nobody can see from the dashboard is only half wired: chart both the
+    # alert state and the rate that drives it, so the panel shows the approach.
+    dashboard = json.loads(DASHBOARD_PATH.read_text(encoding="utf-8"))
+    panels = {panel["title"]: panel for panel in dashboard["panels"]}
+    assert "Firing alerts" in panels, "the dashboard must show what is firing"
+    firing = [target["expr"] for target in panels["Firing alerts"]["targets"]]
+    assert firing == ['ALERTS{alertstate="firing"}'], (
+        "the alert panel must read Prometheus' own ALERTS series"
+    )
+
+    rate = panels.get("Ingress refusals per minute")
+    assert rate is not None, "the rate behind the alert belongs on the dashboard"
+    assert [target["expr"] for target in rate["targets"]] == [
+        "sum(rate(citadel_runs_refused_total[5m])) * 60"
+    ], "the panel must show what the rule evaluates, not an approximation"
+    thresholds = rate["fieldConfig"]["defaults"]["thresholds"]["steps"]
+    assert 5 in [step.get("value") for step in thresholds], (
+        "the panel's red line must sit at the alert threshold, or the two disagree"
+    )
+    assert "Firing alerts" in doc, "a panel nobody can look up is a dead end"
+
 
 def test_the_dashboard_uses_only_documented_bounded_metrics() -> None:
     documented = set(
