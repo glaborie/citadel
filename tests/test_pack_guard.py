@@ -43,16 +43,12 @@ def live_dir(tmp_path: Path) -> Path:
 
 
 def test_a_case_pending_at_the_shipped_milestone_is_a_gap() -> None:
-    gaps = harness.declaration_gaps(
-        [_case("RT-SYN-01", milestone="v0.1")], current="v0.1"
-    )
+    gaps = harness.declaration_gaps([_case("RT-SYN-01", milestone="v0.1")], current="v0.1")
     assert any("shipped milestone" in gap for gap in gaps), gaps
 
 
 def test_a_case_pending_beyond_the_shipped_milestone_needs_an_owner() -> None:
-    gaps = harness.declaration_gaps(
-        [_case("RT-SYN-01", milestone="v0.2")], current="v0.1"
-    )
+    gaps = harness.declaration_gaps([_case("RT-SYN-01", milestone="v0.2")], current="v0.1")
     assert gaps == ["RT-SYN-01: pending with no owner"]
 
 

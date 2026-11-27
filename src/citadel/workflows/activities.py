@@ -34,7 +34,7 @@ from citadel.policy.catalog import ToolSpec, load_catalog
 from citadel.research import external_flags, label_untrusted
 from citadel.research.client import ResearchError, ResearchRefused, search_web
 from citadel.research.client import fetch_page as fetch_remote_page
-from citadel.telemetry import record_span
+from citadel.telemetry import record_root_span, record_span
 from citadel.tools.bounds import DEFAULT_EVENT_LIMIT, bound
 from citadel.workflows.types import PolicyOutcome, RunEnd, ToolCall, ToolResult
 
@@ -738,6 +738,26 @@ class RunActivities:
         self._dsn = dsn
         self._audit = audit
 
+    def _trace_inputs(self, end: RunEnd) -> dict[str, Any]:
+        """What `run.start` recorded, so closing the root span does not blank the request."""
+        try:
+            with tenant_connection(self._dsn, end.tenant_id) as conn:
+                row = conn.execute(
+                    "SELECT payload->>'trace_inputs' FROM audit_events"
+                    " WHERE tenant_id = %s AND event_type = 'run.start'"
+                    " AND payload->>'run_id' = %s LIMIT 1",
+                    (end.tenant_id, end.run_id),
+                ).fetchone()
+        except Exception:  # noqa: BLE001 - telemetry must never fail a run
+            return {}
+        if not row or not row[0]:
+            return {}
+        try:
+            value = json.loads(row[0])
+        except ValueError:
+            return {}
+        return value if isinstance(value, dict) else {}
+
     @activity.defn
     def finish_run(self, end: RunEnd) -> None:
         with tenant_connection(self._dsn, end.tenant_id) as conn:
@@ -773,6 +793,20 @@ class RunActivities:
             audit_id=ref.audit_id,
             outcome=end.outcome,
             safety_flags=",".join(end.safety_flags),
+        )
+        record_root_span(
+            "run.start",
+            run_id=end.run_id,
+            audit_id=ref.audit_id,
+            outcome=end.outcome,
+            inputs={**self._trace_inputs(end), "task": end.task},
+            outputs={
+                "outcome": end.outcome,
+                "answer": end.answer[:4000],
+                "answer_chars": len(end.answer),
+                "citation_ids": list(end.citation_ids),
+                "safety_flags": list(end.safety_flags),
+            },
         )
         try:
             _offer_online_sample(end=end, dsn=self._dsn, audit=self._audit)

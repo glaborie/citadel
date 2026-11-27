@@ -153,9 +153,7 @@ def execute(request: ExecuteRequest) -> dict[str, Any]:
         with _body_file(request.tool, claims.run_id, request.arguments) as body_path:
             argv, command = build_argv(request.tool, request.arguments, body_path=body_path)
             if command.tier not in WRITABLE_TIERS:
-                raise HTTPException(
-                    status_code=403, detail=f"{command.id} is not a T1 command"
-                )
+                raise HTTPException(status_code=403, detail=f"{command.id} is not a T1 command")
             completed = executor.run(argv)
     except CommandDenied as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc

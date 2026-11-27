@@ -130,11 +130,7 @@ def test_a_rubric_with_a_gap_in_its_levels_is_rejected(tmp_path: Path) -> None:
 
 
 def test_a_threshold_outside_the_levels_is_rejected(tmp_path: Path) -> None:
-    broken = {
-        "rubrics": [
-            {"dimension": "plan", "levels": {"2": "a", "1": "b"}, "threshold": 3}
-        ]
-    }
+    broken = {"rubrics": [{"dimension": "plan", "levels": {"2": "a", "1": "b"}, "threshold": 3}]}
     path = tmp_path / "rubrics.json"
     path.write_text(json.dumps(broken), encoding="utf-8")
 
@@ -301,9 +297,7 @@ def test_a_gating_failure_changes_the_exit_code(
     )
     monkeypatch.setattr(runner, "_judge_from_env", lambda alias, url: judge)
 
-    code = runner.main(
-        [str(DATASET), "--judge", "auto/best-fast", "--rubrics", str(rubrics_path)]
-    )
+    code = runner.main([str(DATASET), "--judge", "auto/best-fast", "--rubrics", str(rubrics_path)])
 
     assert code == 1
 

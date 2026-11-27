@@ -148,4 +148,3 @@ def test_coverage_spans_the_milestones() -> None:
     by_milestone = {case["milestone"] for case in cases()}
     assert "v0.1" in by_milestone
     assert len(by_milestone) >= 3, "pack should not be a single-milestone list"
-
