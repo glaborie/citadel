@@ -14,11 +14,12 @@ from citadel import dlp
 from citadel.evals.graders import grade
 from citadel.evals.recorder import rows_to_events
 from citadel.evals.schema import Case, check_events
-from citadel.retrieval import ingest, query
-from citadel.retrieval.activities import RetrievalActivities, RetrievalRequest
+from citadel.retrieval import ingest, query, types
+from citadel.retrieval.activities import RetrievalActivities
 from citadel.retrieval.embed import OmniRouteEmbedder
 from citadel.retrieval.errors import QueryRefused, RetrievalUnavailable
 from citadel.retrieval.rerank import TeiReranker
+from citadel.retrieval.types import RetrievalRequest
 
 TENANTS = ("lab-a", "lab-b", "lab-c")
 
@@ -112,7 +113,7 @@ def test_the_acl_filter_is_in_the_request_and_fusion_is_rrf() -> None:
         assert condition.key == "acl"
         assert condition.match.any == ["tenant:lab-a"]
     assert seen["query"].fusion == models.Fusion.RRF
-    assert seen["limit"] == query.CANDIDATES
+    assert seen["limit"] == types.CANDIDATES
 
 
 def test_the_filter_set_hash_is_tenant_scoped_and_never_the_query_text() -> None:

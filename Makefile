@@ -78,6 +78,15 @@ check:  ## Run the CI gates locally before a push
 .PHONY: eval
 
 # Deterministic grading of the committed trajectory fixtures.
+doctor:  ## Report whether each dependency answers (same as `citadel doctor`)
+	@uv run --quiet citadel doctor
+
+run:  ## Start a run: make run TASK="call inspect_containers, then name one container"
+	@set -a; . ./.env; set +a; scripts/start-run.py --task "$(TASK)" --wait
+
+token:  ## Print a bearer token for the API (curl / HTTP clients)
+	@set -a; . ./.env; set +a; scripts/start-run.py --token-only
+
 eval:  ## Grade the committed trajectory fixtures
 	uv run python -m citadel.evals
 
