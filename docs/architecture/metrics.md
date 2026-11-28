@@ -177,3 +177,13 @@ above from inside the dashboard, and it carries just the alert name and state.
 The cost panel shows reported USD
 and unreported calls side by side, so a dashboard cannot repeat the "free versus
 unknown" mistake above.
+
+The two policy-drift panels read the pushed gauges directly, without a query
+(#298). "Policy drift verdict" shows `max(citadel_policy_drift)` beside
+`max(citadel_policy_drift_check_failed)`: a green `0` next to a red
+"could not compare" is the state a drift-only panel would have shown as healthy,
+and the same mistake the alert rules avoid by keeping the series separate.
+"Drift check last run age" shows
+`time() - max(citadel_policy_drift_last_run_timestamp_seconds)` with thresholds
+at one and two hourly runs, and both panels read "never reported" instead of an
+empty `0` when the timer has not pushed yet.

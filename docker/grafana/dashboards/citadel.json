@@ -194,6 +194,84 @@
           "instant": true
         }
       ]
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Policy drift verdict",
+      "description": "max(citadel_policy_drift): 1 means the last scheduled run compared the store with policy/model.fga, tools.json and the tuple set and found a difference. The second series is the run that could not compare (exit 2), which is neither drift nor clean, so a panel showing only the first would read a green 0 as healthy.",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 48},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "never reported",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(citadel_policy_drift)",
+          "legendFormat": "drift",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "expr": "max(citadel_policy_drift_check_failed)",
+          "legendFormat": "could not compare",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Drift check last run age",
+      "description": "Seconds since the last verdict the host timer pushed. The timer runs hourly and CitadelPolicyDriftStale fires at two missed runs, so anything past an hour is already a missed run; 'never reported' is a timer that has not run at all.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 48},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "noValue": "never reported",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "orange", "value": 3600},
+              {"color": "red", "value": 7200}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - max(citadel_policy_drift_last_run_timestamp_seconds)",
+          "legendFormat": "last run",
+          "instant": true
+        }
+      ]
     }
   ]
 }

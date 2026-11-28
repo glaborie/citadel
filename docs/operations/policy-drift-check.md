@@ -94,6 +94,11 @@ visible in Grafana's "Firing alerts" panel and Prometheus' `/alerts`:
 The staleness alert is the one that matters as much as the others: a timer that
 stopped is indistinguishable from a store that matches.
 
+Grafana's "Citadel controls" dashboard shows the same two answers without a query
+(#298): "Policy drift verdict" puts the drift gauge beside the check-failure one,
+and "Drift check last run age" turns the timestamp into seconds since the last
+verdict, amber after one hourly run and red after two.
+
 ## Delivery
 
 The stack ships no Alertmanager (#256), so nothing pages out of the box. Four

@@ -9,6 +9,7 @@ Compose/rule/doc wiring that makes the series visible in Grafana.
 from __future__ import annotations
 
 import importlib.util
+import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -20,6 +21,7 @@ COMPOSE = ROOT / "compose.yaml"
 SCRAPE = ROOT / "docker" / "prometheus" / "prometheus.yml"
 RULES = ROOT / "docker" / "prometheus" / "rules" / "citadel.yml"
 METRICS_DOC = ROOT / "docs" / "architecture" / "metrics.md"
+DASHBOARD = ROOT / "docker" / "grafana" / "dashboards" / "citadel.json"
 
 
 def _load() -> ModuleType:
@@ -178,6 +180,24 @@ def test_the_pushgateway_service_is_pinned_and_loopback_only() -> None:
     # exist, nothing listens, and the failure is a connection refused the check
     # logs and exits 0 past (#287). Publishing therefore needs a real network.
     assert "      - edge\n" in block, "a loopback publish needs a non-internal network"
+
+
+def test_the_dashboard_shows_the_verdict_the_check_failure_and_the_run_age() -> None:
+    """#298: a green 0 must not hide a run that could not compare, or a dead timer."""
+    dashboard = json.loads(DASHBOARD.read_text(encoding="utf-8"))
+    panels = {panel["title"]: panel for panel in dashboard["panels"]}
+    exprs = {target["expr"] for panel in panels.values() for target in panel["targets"]}
+
+    assert "max(citadel_policy_drift)" in exprs
+    assert "max(citadel_policy_drift_check_failed)" in exprs, (
+        "drift 0 beside 'could not compare' 1 is not healthy; the panel has to say so"
+    )
+    assert "time() - max(citadel_policy_drift_last_run_timestamp_seconds)" in exprs
+    ids = [panel["id"] for panel in dashboard["panels"]]
+    assert len(ids) == len(set(ids)), f"duplicate panel ids: {ids}"
+    assert "never reported" in DASHBOARD.read_text(encoding="utf-8"), (
+        "an empty panel must read as 'never reported', not as no drift"
+    )
 
 
 def test_the_metrics_doc_lists_the_gauges_and_the_alerts() -> None:
