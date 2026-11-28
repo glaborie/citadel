@@ -204,6 +204,8 @@ The researcher services are in Compose: `worker-researcher` sits on an internal 
 
 Host exposure is two layers: the loopback binds above plus host `INPUT` drops on `eth0`/`tailscale0` for the four ports that were once published on `0.0.0.0`. The policy, its persistence across a reboot, and the drill that proves it are in [operations/host-firewall.md](operations/host-firewall.md).
 
+The Keycloak admin console (`/admin/master/console/` on 18081) is the root of trust — a session there can mint tokens the API, the approval console and the workers all accept — so it gets both layers and nothing wider (#221). The console stays enabled rather than being disabled after bootstrap: realm maintenance (clients, mappers, identity providers) is not fully expressible in the `docker/keycloak` import files, and the risk was a network-reachable login, not the console itself. Remote administration goes through an authenticating hop to the loopback bind — an SSH local forward (`ssh -N -L 18081:127.0.0.1:18081 <host>`) or `tailscale serve` — never a wider bind. Day-to-day console work runs as a dedicated administrator created in the master realm, not the bootstrap `admin` user, whose credential is a bootstrap value ([security/secrets.md](security/secrets.md)).
+
 ## 11. Verification items (all resolved)
 
 1. **OmniRoute upstream and image** — resolved: pinned by digest in `compose.yaml`; the redirect and fork question is documented in `docs/implementation-notes/v0.1-verification.md` §1.
