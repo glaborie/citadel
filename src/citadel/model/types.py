@@ -66,7 +66,11 @@ class Budget:
     """Per-run ceiling. Steps are counted, tokens and cost are measured."""
 
     max_steps: int = 6
-    max_tokens: int = 8000
+    # A step re-sends the run's history, so every step is billed again: a
+    # three-step task measured 10,084 tokens, above the 8,000 ceiling that used
+    # to sit here, and six steps need about 25k (#274). The step count bounds
+    # the loop; this bounds the money, and `max_cost_usd` still caps the run.
+    max_tokens: int = 32_000
     max_cost_usd: float | None = 0.01
 
     def exceeded(self, usage: Usage, steps: int) -> str | None:

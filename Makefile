@@ -51,8 +51,10 @@ policy-model:  ## Regenerate policy/model.json from model.fga
 	docker run --rm -v "$(PWD)/policy:/w" -w /w $(POLICY_CLI) \
 		model transform --file=model.fga --output-format=json > policy/model.json
 
+# A one-shot service, not `exec api`: the Keycloak admin password is mounted for
+# this run only, and the always-on api never carries it (#273).
 policy-bootstrap:  ## Load the OpenFGA model and seed relations
-	docker compose exec -T api python -m citadel.policy.bootstrap
+	docker compose --profile tools run --rm policy-bootstrap
 
 .PHONY: migrate
 

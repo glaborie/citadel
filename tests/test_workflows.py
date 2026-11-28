@@ -19,7 +19,13 @@ from temporalio.worker import Worker
 from citadel.workflows import orchestrator
 from citadel.workflows.activities import idempotency_key
 from citadel.workflows.specialist import SpecialistWorkflow
-from citadel.workflows.types import ApprovalDecision, PolicyOutcome, ToolCall, ToolResult
+from citadel.workflows.types import (
+    ApprovalDecision,
+    PolicyOutcome,
+    RunInput,
+    ToolCall,
+    ToolResult,
+)
 
 QUEUE = "docker"
 
@@ -168,6 +174,18 @@ def test_a_fetched_page_label_survives_into_run_end_flags() -> None:
         content_flags=["untrusted_external", "prompt_injection"],
     )
     assert orchestrator._safety_flags(result) == ["prompt_injection", "untrusted_external"]
+
+
+def test_a_task_run_gets_the_documented_step_ceiling() -> None:
+    """#274: three steps ran out mid-tool-use, so the model never answered.
+
+    `Budget` and docs/security/llm-top10-mapping.md both say six; only this
+    default disagreed, and it is the one a submitted task actually gets.
+    """
+    run = RunInput(run_id="run-1", tenant_id="lab-a", user_id="u", agent_id="docker", tool="")
+    assert run.max_steps == 6, (
+        "three steps let a model call three tools and never a fourth step to answer"
+    )
 
 
 def test_a_dlp_refusal_still_adds_its_own_flag() -> None:

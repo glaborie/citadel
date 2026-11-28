@@ -443,3 +443,16 @@ def test_a_credential_blocks_even_a_ledger_prompt() -> None:
 
     with pytest.raises(dlp.DlpBlocked):
         client.complete(messages=[{"role": "user", "content": f"log tail\n{CREDENTIAL}"}])
+
+
+def test_the_default_budget_covers_a_six_step_run() -> None:
+    """#274: every step re-sends the history, so three tool calls billed 10,084
+    tokens and the old 8,000 ceiling stopped the run before the model could
+    answer. The step count is what should end a loop that never concludes."""
+    budget = Budget()
+
+    assert budget.max_steps == 6
+    assert budget.max_tokens == 32_000, (
+        "six steps measured about 25k tokens; 8,000 ended the run at three"
+    )
+    assert budget.max_cost_usd == 0.01, "the money ceiling is separate, and it stays"
