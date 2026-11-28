@@ -63,9 +63,11 @@ policy-bootstrap:  ## Load the OpenFGA model and seed relations
 # Read-only, unlike the bootstrap: it compares the store with `policy/model.fga`,
 # the catalog and the versioned tuple set, so it is safe on a live stack and in
 # cron. Exit 1 is drift, 2 is "could not compare" (#277).
+#
+# The command lives in the script because make rewrites a failed recipe to exit
+# 2; the scheduler needs the check's own code (#287).
 policy-drift:  ## Report drift between the OpenFGA store and the versioned policy
-	docker compose --profile tools run --rm policy-bootstrap \
-		python -m citadel.policy.drift
+	bash scripts/policy-drift.sh
 
 .PHONY: migrate
 

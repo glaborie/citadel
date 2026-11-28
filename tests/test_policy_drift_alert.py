@@ -73,14 +73,26 @@ def test_an_unexpected_exit_code_is_not_a_pass() -> None:
     assert "check exited 125" in alerts[0][1]
 
 
-def test_the_wrapper_runs_the_read_only_target() -> None:
-    assert cli.COMMAND[-1] == "make policy-drift", (
-        "the scheduled job must run the read-only target, never the bootstrap"
+def test_the_wrapper_runs_the_read_only_check_through_the_shared_script() -> None:
+    assert cli.COMMAND[-1] == "scripts/policy-drift.sh", (
+        "the target and the timer must not run different commands"
     )
-    assert "policy-bootstrap" not in " ".join(cli.COMMAND)
-    # sops 3.13 reads every further positional as a file, so the command stays
-    # one argument; measured: two arguments answer "missing file to decrypt".
-    assert len(cli.COMMAND) == 4
+    # make rewrites a failed recipe to exit 2: a drift verdict reached the wrapper
+    # as "could not compare" and the critical alert never fired (#287).
+    assert "make" not in " ".join(cli.COMMAND), "nothing behind make may decide the exit code"
+
+    script = (ROOT / "scripts" / "policy-drift.sh").read_text(encoding="utf-8")
+    assert "python -m citadel.policy.drift" in script
+    assert "make policy-bootstrap" not in script, "the check must never repair what it reports"
+
+
+def test_the_make_target_calls_the_shared_script() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    target = makefile.split("policy-drift:", 1)[1].split("\n\n", 1)[0]
+
+    assert "bash scripts/policy-drift.sh" in target, (
+        "the human target and the timer must run the same command"
+    )
 
 
 def test_the_service_runs_the_wrapper_as_a_user_unit() -> None:
