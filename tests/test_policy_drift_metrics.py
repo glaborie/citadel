@@ -174,6 +174,10 @@ def test_the_pushgateway_service_is_pinned_and_loopback_only() -> None:
     assert '"127.0.0.1:19091:9091"' in block
     assert "no-new-privileges:true" in block
     assert "healthcheck:" in block
+    # Docker ignores a published port on an internal-only network: the bindings
+    # exist, nothing listens, and the failure is a connection refused the check
+    # logs and exits 0 past (#287). Publishing therefore needs a real network.
+    assert "      - edge\n" in block, "a loopback publish needs a non-internal network"
 
 
 def test_the_metrics_doc_lists_the_gauges_and_the_alerts() -> None:

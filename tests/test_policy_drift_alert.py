@@ -91,6 +91,10 @@ def test_the_service_runs_the_wrapper_as_a_user_unit() -> None:
     assert "openfga" in service["execcondition"], (
         "a skipped run while the store is down is not a drift alert"
     )
+    condition = service["execcondition"]
+    assert "State.Running" in condition and "Health.Status" not in condition, (
+        "openfga has no healthcheck, so a health condition skips the unit forever (#287)"
+    )
     assert service["conditionpathexists"].endswith("scripts/policy-drift-alert.py"), (
         "a checkout without the wrapper must skip the hour, not fail it"
     )

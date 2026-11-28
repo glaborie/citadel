@@ -72,6 +72,11 @@ internal network):
 logged at `err` and changes nothing else: the exit code and the journal still
 carry the verdict, because telemetry is not a control (ADR-015).
 
+The service joins `edge` as well as `internal`: Docker **ignores a published
+port on an internal-only network**, silently, so the host job could not reach it
+and every push failed with a connection refused while the check still exited 0
+(#287). The bind is `127.0.0.1`, so nothing off-host reaches the gauges.
+
 `docker/prometheus/rules/citadel.yml` turns those series into three alerts, all
 visible in Grafana's "Firing alerts" panel and Prometheus' `/alerts`:
 

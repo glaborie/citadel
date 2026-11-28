@@ -392,6 +392,12 @@ services:
   # only scraper is Prometheus on the same network (recorded as a limit in
   # docs/operations/policy-drift-check.md). No persistence file: a restart drops
   # the last verdict, which `CitadelPolicyDriftStale` is there to notice.
+  #
+  # `edge` is here for the publish, not for reach: Docker ignores a published port
+  # on an internal-only network, and the result is silent - PortBindings is set,
+  # nothing listens, and every push fails with a connection refused while the
+  # check still exits 0 (#287). The bind stays on 127.0.0.1, so nothing off-host
+  # can reach the gauges.
   pushgateway:
     image: prom/pushgateway:v1.9.0@sha256:98a458415f8f5afcfd45622d289a0aa67063563bec0f90d598ebc76783571936
     ports:
@@ -408,6 +414,7 @@ services:
     logging: *logging
     networks:
       - internal
+      - edge
 
   grafana:
     # Operator UI for the metrics. Internal only and no published port: Docker
