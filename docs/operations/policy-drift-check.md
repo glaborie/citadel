@@ -56,11 +56,40 @@ the missing tuples and reload the committed model. An **unexpected** tuple is a
 grant no reviewed file makes — remove it deliberately rather than re-seeding
 around it, because re-seeding leaves it in place.
 
+## The gauge (#285)
+
+Every run, whatever the verdict, pushes three series to the stack's
+`pushgateway` (published on `127.0.0.1:19091`, scraped by Prometheus over the
+internal network):
+
+| Series | Value |
+|---|---|
+| `citadel_policy_drift` | 1 when the store drifted, 0 otherwise |
+| `citadel_policy_drift_check_failed` | 1 when the run could not compare (exit 2) |
+| `citadel_policy_drift_last_run_timestamp_seconds` | when the run happened |
+
+`CITADEL_PUSHGATEWAY_URL` overrides the default. A pushgateway that is down is
+logged at `err` and changes nothing else: the exit code and the journal still
+carry the verdict, because telemetry is not a control (ADR-015).
+
+`docker/prometheus/rules/citadel.yml` turns those series into three alerts, all
+visible in Grafana's "Firing alerts" panel and Prometheus' `/alerts`:
+
+| Alert | Fires when |
+|---|---|
+| `CitadelPolicyDrift` | the last run found drift (critical, 1 m) |
+| `CitadelPolicyDriftCheckFailed` | the last run could not compare (warning, 5 m) |
+| `CitadelPolicyDriftStale` | no report for two hours, or never (warning, 10 m) |
+
+The staleness alert is the one that matters as much as the others: a timer that
+stopped is indistinguishable from a store that matches.
+
 ## Delivery
 
-The stack ships no Alertmanager (#256), so nothing pages out of the box. Three
+The stack ships no Alertmanager (#256), so nothing pages out of the box. Four
 surfaces exist today:
 
+- `CitadelPolicyDrift` and its two siblings firing in Grafana (below);
 - `systemctl --user --failed` — the unit is failed on 1 and 2;
 - `journalctl --user -p crit -t citadel-policy-drift` — and any log shipper that
   reads the journal;
@@ -87,9 +116,16 @@ The wrapper sets `CITADEL_REPO_DIR` from its own location, so `cd` is a
 convenience. cron reports a non-zero exit to the owner when a mail transport
 exists; the log file carries the report either way.
 
-## Limit
+## Limits
 
 `sops exec-env` failing to unwrap the secrets exits 1, the same code as drift, so
 a broken unwrap is reported as drift. The sops error sits above the alert in the
 same log, and either way the unit fails: a scheduled check that cannot produce
 its report is a problem, never a pass.
+
+`pushgateway` has no authentication, so anything that can reach it on the
+`internal` network can replace the series — including with a `0` that hides a
+drift. It is not a control for that reason: the journal, the unit state and the
+check's own output are the record, and the gauge exists to make drift visible in
+the dashboards. The alternative, a long-running container holding the Keycloak
+admin credential to export its own metric, trades that risk for a worse one.

@@ -84,6 +84,9 @@ def test_prometheus_has_no_published_port_and_scrapes_every_endpoint() -> None:
         "worker-docker:9100",
         "worker-github:9100",
         "worker-researcher:9100",
+        # Not a Citadel process: the host-side drift check pushes its verdict
+        # here (#285), because Prometheus cannot scrape a systemd timer.
+        "pushgateway:9091",
     }, "every process exports its own registry; a missing target is a blind spot"
     assert "credentials_file: /run/secrets/metrics_token" in scrape
 

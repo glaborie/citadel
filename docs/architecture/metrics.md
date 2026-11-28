@@ -11,6 +11,7 @@ decision, and nothing here replaces the audit ledger.
 | API | `http://api:8000/metrics` | Also `http://localhost:18000/metrics` on the host, because the API is published there |
 | Orchestrator worker | `http://worker-orchestrator:9100/metrics` | Model calls, tokens, cost, cache, run outcomes |
 | Tool workers | `http://worker-docker:9100/metrics`, `http://worker-github:9100/metrics`, `http://worker-researcher:9100/metrics` | Policy denials, DLP blocks, tool calls |
+| Pushgateway | `http://pushgateway:9091/metrics` | The host-side policy drift check pushes here (#285); job `citadel_policy_drift` |
 
 Each process exports its own registry. Nothing aggregates across workers, so a
 Prometheus scrape config needs every target; `CITADEL_METRICS_PORT` sets the
@@ -74,6 +75,9 @@ request.
 | `citadel_cache_lookups_total` | counter | `result` (`exact`, `semantic`, `miss`) | `ModelActivities._cached` |
 | `citadel_approval_wait_seconds` | histogram | `decision` (`approved`, `denied`) | `close_request`, from the approval row's database clock |
 | `citadel_runs_refused_total` | counter | - | `budgeted_principal`, when `POST /runs` returns `429` |
+| `citadel_policy_drift` | gauge | - | `scripts/policy-drift-alert.py`, 1 when the last scheduled run found drift |
+| `citadel_policy_drift_check_failed` | gauge | - | the same run, 1 when it could not compare (exit 2) |
+| `citadel_policy_drift_last_run_timestamp_seconds` | gauge | - | the same run, so a job that stopped reporting is visible |
 
 A value outside its label set is recorded as `other`, so a request cannot create
 an unbounded time series. A new policy rule counts under `other` until it is
@@ -81,13 +85,23 @@ named in `metrics.POLICY_RULES`.
 
 ## Alerts
 
-Prometheus evaluates one rule from `docker/prometheus/rules/citadel.yml`
-(group `citadel-ingress`), mounted read-only at `/etc/prometheus/rules` and
-loaded by `rule_files` in `prometheus.yml`:
+Prometheus evaluates the rules in `docker/prometheus/rules/citadel.yml`
+(groups `citadel-ingress` and `citadel-policy-drift`), mounted read-only at
+`/etc/prometheus/rules` and loaded by `rule_files` in `prometheus.yml`:
 
 | Alert | Expression | For | Severity |
 |---|---|---|---|
 | `CitadelRunRefusalsSustained` | `sum(rate(citadel_runs_refused_total[5m])) * 60 > 5` | 10 m | `warning` |
+| `CitadelPolicyDrift` | `max(citadel_policy_drift) > 0` | 1 m | `critical` |
+| `CitadelPolicyDriftCheckFailed` | `max(citadel_policy_drift_check_failed) > 0` | 5 m | `warning` |
+| `CitadelPolicyDriftStale` | `time() - max(citadel_policy_drift_last_run_timestamp_seconds) > 7200 or absent(citadel_policy_drift_last_run_timestamp_seconds)` | 10 m | `warning` |
+
+The three policy-drift alerts come from a check that runs on the host, not in
+the stack (#281), so their series arrive through `pushgateway` rather than a
+scrape of a Citadel process. Drift and a check that cannot compare are separate
+series on purpose: `CitadelPolicyDriftCheckFailed` firing must never be read as
+"no drift" by a dashboard, and `CitadelPolicyDriftStale` exists because a job
+that stopped reporting looks exactly like a store that matches.
 
 That is more than five refusals per minute, averaged over five minutes, for ten
 minutes. The per-credential budget defaults to 30 runs/min

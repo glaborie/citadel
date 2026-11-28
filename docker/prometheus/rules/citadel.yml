@@ -31,3 +31,60 @@ groups:
             are not labelled, so start from the API log and the audit ledger) and
             check whether CITADEL_RUNS_PER_MINUTE is below the real workload
             rate before raising it.
+
+  # The policy drift check (#281) runs on the host and pushes its verdict to
+  # `pushgateway` (#285), because Prometheus cannot scrape a systemd timer. Three
+  # alerts, because three different things can go wrong and two of them look like
+  # health: a store that drifted, a check that cannot compare, and a check that
+  # stopped reporting at all.
+  - name: citadel-policy-drift
+    rules:
+      - alert: CitadelPolicyDrift
+        # 1 means the last run compared the store with the versioned policy and
+        # found a difference; 0 means it matched.
+        expr: max(citadel_policy_drift) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: policy
+        annotations:
+          summary: "The OpenFGA store has drifted from the versioned policy"
+          description: >-
+            Something in the store is not what policy/model.fga, tools.json and the
+            bootstrap tuple set say it should be: a tool with no tuple (denied for
+            everyone, silently), a tuple no reviewed file grants, or a model
+            edited in place. Run `make policy-drift` for the diff and
+            `make policy-bootstrap` for the missing tuples; an unexpected tuple is
+            authority nobody reviewed and has to be removed deliberately.
+
+      - alert: CitadelPolicyDriftCheckFailed
+        expr: max(citadel_policy_drift_check_failed) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: policy
+        annotations:
+          summary: "The policy drift check cannot compare"
+          description: >-
+            The check exited 2: the store, the Keycloak admin credential or the
+            stack was unavailable. This is not drift, and it is not "clean"
+            either - the store was never compared. Run `make policy-drift` and
+            read the error.
+
+      - alert: CitadelPolicyDriftStale
+        # Two missed hourly runs. `absent` covers the host whose timer never ran,
+        # because a job that stopped looks exactly like a store with no drift.
+        expr: >-
+          time() - max(citadel_policy_drift_last_run_timestamp_seconds) > 7200 or
+          absent(citadel_policy_drift_last_run_timestamp_seconds)
+        for: 10m
+        labels:
+          severity: warning
+          component: policy
+        annotations:
+          summary: "The policy drift check has not reported for two hours"
+          description: >-
+            The timer, the wrapper or the pushgateway is not working, so nothing
+            is comparing the store with the versioned policy. Check
+            `systemctl --user list-timers citadel-policy-drift.timer` and
+            `journalctl --user -u citadel-policy-drift.service`.

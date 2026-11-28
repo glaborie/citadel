@@ -385,6 +385,30 @@ services:
     networks:
       - internal
 
+  # Landing point for the host-side drift check (#285). Prometheus cannot scrape
+  # the operator's systemd timer, so the wrapper pushes one set of gauges per run.
+  # Published on loopback only - the host job is the only caller - and scraped
+  # over `internal`. No bearer token: pushgateway has no auth to offer, and the
+  # only scraper is Prometheus on the same network (recorded as a limit in
+  # docs/operations/policy-drift-check.md). No persistence file: a restart drops
+  # the last verdict, which `CitadelPolicyDriftStale` is there to notice.
+  pushgateway:
+    image: prom/pushgateway:v1.9.0@sha256:98a458415f8f5afcfd45622d289a0aa67063563bec0f90d598ebc76783571936
+    ports:
+      - "127.0.0.1:19091:9091"
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    healthcheck:
+      test: ["CMD", "/bin/wget", "-q", "--spider", "http://127.0.0.1:9091/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    logging: *logging
+    networks:
+      - internal
+
   grafana:
     # Operator UI for the metrics. Internal only and no published port: Docker
     # binds nothing on an internal network, and an unauthenticated dashboard
