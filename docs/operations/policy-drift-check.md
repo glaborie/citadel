@@ -141,27 +141,42 @@ naming the difference, then a clean run that exits 0 with every tuple present �
 so the check provably reports without repairing. The gauge goes to a closed port,
 so a test run cannot publish a verdict.
 
-### After a stack change (#294)
+### After a stack change (#294, #296)
 
-That case is the post-deploy step:
+That case is the post-deploy gate, and `make up` runs it as its last step, so the
+gate needs no memory:
 
 ```bash
-make up
+make up          # ends with "post-deploy: drift verdict path ok (drift -> 1, clean -> 0)"
+```
+
+Both `up` and `rebuild` leave the stack up when the gate fails: the point is to
+report, not to take the stack down. `make` rewrites a failed recipe to exit 2, so
+`scripts/post-deploy-check.sh` prints the reason before that happens and points
+back here.
+
+A pass means the whole path works on this host: sops unwraps, compose starts the
+one-shot, the check reads the store, and the exit code survives to the wrapper.
+The offline stand-ins stop at the process boundary, so none of that is provable
+in `make check` — which is why #287 stayed green for a day.
+
+To re-run it against a stack that is already up, or after editing `compose.yaml`
+without going through `make up`:
+
+```bash
 make policy-drift-live
 ```
 
-Run it after every `make up`, every `compose.yaml` or image change, and before
-trusting a timer that has not fired yet. A pass means the whole path works on
-this host: sops unwraps, compose starts the one-shot, the check reads the store,
-and the exit code survives to the wrapper. The offline stand-ins stop at the
-process boundary, so none of that is provable in `make check` — which is why
-#287 stayed green for a day.
-
-A worktree has no `secrets/` of its own; point the run at the checkout that does:
+A worktree has no `secrets/` of its own, and `make up` unwraps `secrets/citadel.env`
+by that relative path, so give it one (a symlink to the main checkout's is enough).
+To re-run only the gate from a worktree, point it at the checkout that has them:
 
 ```bash
 CITADEL_SECRETS_DIR="$HOME/projects/citadel/secrets" make policy-drift-live
 ```
+
+The gate refuses rather than skips when `sops` or the secrets are missing: a
+skipped case would report the path as proven without running it.
 
 ## Limits
 
