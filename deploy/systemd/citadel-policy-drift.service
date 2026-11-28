@@ -11,13 +11,16 @@ Documentation=file:%h/projects/citadel/docs/operations/policy-drift-check.md
 Type=oneshot
 WorkingDirectory=%h/projects/citadel
 Environment=CITADEL_REPO_DIR=%h/projects/citadel
-# Without a healthy store there is nothing to compare, and an hourly "could not
+# Without a running store there is nothing to compare, and an hourly "could not
 # check" against a stopped stack is the noise that teaches people to ignore the
 # unit. A skipped run is visible in `systemctl --user status` all the same.
+# `.State.Running`, not `.State.Health`: openfga is distroless and deliberately
+# has no healthcheck, so asking for a health status makes this condition fail
+# forever and the unit skip every hour (#287).
 # A checkout at a commit that predates the wrapper is skipped, not failed: the
 # timer is enabled once and survives a bisect or a rollback without paging.
 ConditionPathExists=%h/projects/citadel/scripts/policy-drift-alert.py
-ExecCondition=/bin/sh -c 'test "$(/usr/bin/docker inspect -f {{.State.Health.Status}} citadel-openfga-1 2>/dev/null)" = healthy'
+ExecCondition=/bin/sh -c 'test "$(/usr/bin/docker inspect -f {{.State.Running}} citadel-openfga-1 2>/dev/null)" = true'
 ExecStart=/usr/bin/python3 %h/projects/citadel/scripts/policy-drift-alert.py
 Nice=10
 # Exit 1 is drift and exit 2 is "could not compare"; both leave the unit failed,
