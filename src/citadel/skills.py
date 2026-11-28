@@ -28,7 +28,8 @@ from typing import Any
 
 MANIFEST = "manifest.json"
 INDEX = "SKILL.md"
-# A pack directory name comes from a request, so it is matched, never joined blind.
+# A pack directory name comes from a request, so it is matched, never joined into
+# a path: load_pack finds the directory on disk and uses the name for equality only.
 AGENT_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
 
@@ -67,18 +68,50 @@ def skills_root() -> Path:
     return Path(os.environ.get("CITADEL_SKILLS_DIR", "skills"))
 
 
+def _pack_directory(root: Path, agent: str) -> Path:
+    """Pick the pack directory off the listing of `root`, never out of the request.
+
+    `agent` arrives from a request body, so the old `root / agent` join put
+    attacker-shaped data in a path expression (code scanning alert #66): the
+    regex and the containment check made it safe, but the taint stayed. Matching
+    a real entry instead uses the request value only for equality, so no path is
+    ever built from it.
+    """
+    try:
+        entries = list(root.iterdir())
+    except OSError as exc:
+        raise SkillPackMissing(f"no skill pack for agent {agent!r} in {root}") from exc
+    for entry in entries:
+        if entry.name == agent:
+            return _contained_pack(entry, root, agent)
+    raise SkillPackMissing(f"no skill pack for agent {agent!r} in {root}")
+
+
+def _contained_pack(entry: Path, root: Path, agent: str) -> Path:
+    """The real directory behind a matched entry: no links, no escape from the root.
+
+    A symlink named like a pack is refused the way `write_manifests` refuses one,
+    and the containment check stays even after `resolve`, because a link could be
+    swapped in between the listing and the open.
+    """
+    if entry.is_symlink():
+        raise SkillPackError(f"{entry} is a symlink; packs must be real directories")
+    if not entry.is_dir():
+        raise SkillPackMissing(f"no skill pack for agent {agent!r} in {root}")
+    folder = entry.resolve()
+    try:
+        folder.relative_to(root)
+    except ValueError as exc:
+        raise SkillPackMissing(f"no skill pack for agent {agent!r}") from exc
+    return folder
+
+
 def load_pack(agent: str, directory: Path | None = None) -> SkillPack:
     """Load one agent's pack, or refuse. Never returns unverified text."""
     if not AGENT_NAME.match(agent):
         raise SkillPackMissing(f"no skill pack for agent {agent!r}")
     root = (skills_root() if directory is None else directory).resolve()
-    folder = (root / agent).resolve()
-    try:
-        folder.relative_to(root)
-    except ValueError as exc:
-        raise SkillPackMissing(f"no skill pack for agent {agent!r}") from exc
-    if not folder.is_dir():
-        raise SkillPackMissing(f"no skill pack for agent {agent!r} in {folder.parent}")
+    folder = _pack_directory(root, agent)
     manifest = _manifest(folder, agent)
 
     references = MappingProxyType(
