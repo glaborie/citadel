@@ -48,16 +48,12 @@ UNKNOWN: Final = (
     "credential absent, or the stack is down). This is not 'no drift'."
 )
 
-# `make policy-drift` needs the compose project and the Keycloak admin password,
-# and both come from the SOPS file the Makefile targets already use. The command
-# is ONE argv element on purpose: sops 3.13 reads every further positional as
-# another file to decrypt and answers `error: missing file to decrypt`.
-COMMAND: Final[tuple[str, ...]] = (
-    "sops",
-    "exec-env",
-    "secrets/citadel.env",
-    "make policy-drift",
-)
+# One script, shared with `make policy-drift`, because make is lossy here: it
+# turns a failed recipe into exit 2, so a real drift verdict arrived as "could not
+# compare" and the critical alert never fired (#287). The script keeps the
+# check's own codes and holds the sops/compose invocation, including the reason
+# its command is a single sops argument.
+COMMAND: Final[tuple[str, ...]] = ("bash", "scripts/policy-drift.sh")
 
 # The loopback publish of `pushgateway` in compose.yaml. Prometheus cannot scrape
 # a host timer, so the verdict travels the other way (see docs/architecture/metrics.md).

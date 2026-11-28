@@ -38,6 +38,11 @@ Exit 0 prints `policy drift: none` and sends nothing. Exit 1 logs a `crit` line
 naming the repair and leaves the unit failed. Exit 2 logs at `err`: the stack is
 down, the credential is missing, or the check itself is broken.
 
+`make policy-drift` and the timer both run `scripts/policy-drift.sh`. That is not
+cosmetic: GNU make rewrites a failed recipe to exit 2, so a target in this path
+made a real drift verdict arrive as "could not compare" and fired the warning
+alert instead of the critical one (#287).
+
 If the store container is not healthy the unit is **skipped**, not failed
 (`ExecCondition` in the service): "the stack is off" is not drift, and an hourly
 false alarm is how a unit gets muted.
