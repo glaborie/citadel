@@ -210,3 +210,20 @@ def test_the_guard_notices_a_credential_and_its_sanctioned_shapes() -> None:
     assert credential_entries(found) == ["keycloak: KC_BOOTSTRAP_ADMIN_PASSWORD"], (
         "a bare password is flagged; *_FILE pointers and public keys are exempt"
     )
+
+
+def test_the_policy_bootstrap_credential_is_mounted_for_one_shot_runs_only() -> None:
+    """#273: `make policy-bootstrap` needs the Keycloak admin password, and the
+    api it used to run in has none by design. The one-shot mounts it; the api —
+    reachable from the internal network — must keep not having it."""
+    texts = service_texts(COMPOSE.read_text(encoding="utf-8"))
+    one_shot = texts["policy-bootstrap"]
+
+    assert "- keycloak_admin_password" in one_shot, "the one-shot must mount the credential"
+    assert "/run/secrets/keycloak_admin_password" in one_shot, (
+        "the password is read through its mounted path, never the environment"
+    )
+    assert "profiles:" in one_shot, "`up` must not start it: a refresh is deliberate"
+    assert "keycloak_admin_password" not in texts["api"], (
+        "the always-on api must not mount the Keycloak admin credential"
+    )

@@ -1007,6 +1007,32 @@ services:
       - internal
       - sandbox
 
+  # One-shot policy load: `make policy-bootstrap`. The Keycloak admin password is
+  # mounted for this run only, so the api -- reachable from inside the network --
+  # never holds the credential that can mint identities (#273). Idempotent, and
+  # `up` does not start it: a refresh is a deliberate action.
+  policy-bootstrap:
+    <<: *app
+    profiles: ["tools"]
+    restart: "no"
+    command: ["python", "-m", "citadel.policy.bootstrap"]
+    environment:
+      OPENFGA_API_URL: http://openfga:8080
+      OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-citadel}
+      KEYCLOAK_ADMIN_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-citadel}
+      KEYCLOAK_ADMIN_USER: ${KEYCLOAK_ADMIN_USER}
+      KEYCLOAK_ADMIN_PASSWORD_FILE: /run/secrets/keycloak_admin_password
+    secrets:
+      - keycloak_admin_password
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      openfga-migrate:
+        condition: service_completed_successfully
+    networks:
+      - internal
+
 
 volumes:
   postgres-data:

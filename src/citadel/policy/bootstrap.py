@@ -1,8 +1,11 @@
 """Load the versioned OpenFGA model and its dev tuples. Idempotent.
 
-Run inside the api container, which has network access to OpenFGA and Keycloak:
+    make policy-bootstrap
 
-    docker compose exec -T api python -m citadel.policy.bootstrap
+That runs the `policy-bootstrap` one-shot, which mounts the Keycloak admin
+password for the length of the run. Reading it from the environment stopped
+working when credentials left `Config.Env` (#221, #273), and the always-on api
+must not hold a credential that can mint identities.
 
 `policy/model.json` is generated from `policy/model.fga` by `make policy-model`
 and committed, so the container never needs the OpenFGA CLI.
@@ -14,6 +17,7 @@ import json
 import os
 import urllib.parse
 import urllib.request
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +26,7 @@ from openfga_sdk.models.create_store_request import CreateStoreRequest
 from openfga_sdk.models.write_authorization_model_request import WriteAuthorizationModelRequest
 from openfga_sdk.sync import OpenFgaClient
 
+from citadel.env import secret
 from citadel.net import open_url
 from citadel.policy import PolicyError, load_catalog
 from citadel.policy.openfga import configuration, resolve_store_id
@@ -58,7 +63,9 @@ def admin_token() -> str:
             "grant_type": "password",
             "client_id": "admin-cli",
             "username": os.environ["KEYCLOAK_ADMIN_USER"],
-            "password": os.environ["KEYCLOAK_ADMIN_PASSWORD"],
+            # Mounted as a file and named by KEYCLOAK_ADMIN_PASSWORD_FILE: a
+            # password in Config.Env is readable through the socket proxy.
+            "password": secret("KEYCLOAK_ADMIN_PASSWORD"),
         },
     )
     del realm
@@ -99,6 +106,47 @@ def tuples_for(sub_ids: dict[str, str]) -> list[ClientTuple]:
     return out
 
 
+def tuple_keys(page: dict[str, Any]) -> set[tuple[str, str, str]]:
+    """The (user, relation, object) triples in one `/read` page."""
+    return {
+        (item["key"]["user"], item["key"]["relation"], item["key"]["object"])
+        for item in page.get("tuples", [])
+    }
+
+
+def new_tuples(
+    desired: Iterable[ClientTuple], existing: set[tuple[str, str, str]]
+) -> list[ClientTuple]:
+    """The tuples the store does not hold yet.
+
+    OpenFGA refuses a write that repeats an existing tuple, so an idempotent
+    bootstrap has to ask rather than assume (#273).
+    """
+    return [t for t in desired if (t.user, t.relation, t.object) not in existing]
+
+
+def existing_tuples(api_url: str, store_id: str) -> set[tuple[str, str, str]]:
+    """Every tuple in the store, following the continuation token."""
+    found: set[tuple[str, str, str]] = set()
+    token = ""
+    while True:
+        body: dict[str, Any] = {"page_size": 100}
+        if token:
+            body["continuation_token"] = token
+        req = urllib.request.Request(
+            f"{api_url}/stores/{store_id}/read",
+            data=json.dumps(body).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with open_url(req, timeout=20) as r:
+            page: dict[str, Any] = json.loads(r.read())
+        found |= tuple_keys(page)
+        token = page.get("continuation_token") or ""
+        if not token:
+            return found
+
+
 def main() -> int:
     api_url = os.environ.get("OPENFGA_API_URL", "http://openfga:8080")
     store_name = os.environ.get("OPENFGA_STORE_NAME", "citadel")
@@ -127,8 +175,14 @@ def main() -> int:
     )
     print(f"wrote authorization model {written.authorization_model_id}")
 
-    client.write_tuples(tuples_for(sub_ids))
-    print(f"wrote {len(tuples_for(sub_ids))} tuples")
+    desired = tuples_for(sub_ids)
+    missing = new_tuples(desired, existing_tuples(api_url, store_id))
+    if missing:
+        client.write_tuples(missing)
+    print(
+        f"wrote {len(missing)} tuples "
+        f"({len(desired) - len(missing)} of {len(desired)} already present)"
+    )
 
     print(f"OPENFGA_STORE_ID={store_id}")
     return 0
