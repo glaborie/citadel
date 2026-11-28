@@ -170,7 +170,12 @@ are disabled.
 
 `KEYCLOAK_ADMIN_PASSWORD` is a bootstrap value
 (`KC_BOOTSTRAP_ADMIN_PASSWORD`). Changing it in SOPS does not change an existing
-realm; change it in Keycloak first, then record it in SOPS.
+realm; change it in Keycloak first, then record it in SOPS. It reaches the
+container as a Docker secret that the entrypoint exports at runtime, never as an
+environment entry (#221), so `docker compose config` shows the bootstrap
+username and no password (`tests/test_compose_env_custody.py` guards this). Use
+the bootstrap user for bootstrap and break-glass only; day-to-day console work
+runs as a dedicated administrator created in the master realm after bootstrap.
 
 The OmniRoute entrypoint reads `OMNIROUTE_JWT_SECRET`, `OMNIROUTE_API_KEY_SECRET`,
 `OMNIROUTE_STORAGE_ENCRYPTION_KEY` and `OMNIROUTE_ADMIN_PASSWORD` at start.
@@ -185,6 +190,7 @@ then restart the workers and the orchestrator.
 | Surface | Control | Check |
 |---|---|---|
 | Repository and secret store | only the SOPS ciphertext is tracked | `tests/test_secrets_custody.py`, gitleaks CI |
+| Compose `Config.Env` | credentials enter a container only as Docker secrets, read through `*_FILE` variables or the entrypoint | `tests/test_compose_env_custody.py` |
 | Skill packs | content only; the loader refuses changes by hash | gitleaks, sweep |
 | Eval fixtures | authored, not captured from a live run | gitleaks, sweep |
 | Traces | every tool output passes `dlp.gate(surface="output")` before it is recorded | `tests/test_dlp.py`, sweep of MLflow |

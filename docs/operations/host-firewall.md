@@ -28,6 +28,15 @@ sudo iptables -S INPUT
 # -A INPUT -i eth0 -p tcp -m multiport --dports 18000,18001,18081,20128 -j DROP
 ```
 
+## Remote administration (#221)
+
+Remote administration of the published services — above all the Keycloak admin
+console on 18081, whose session is the root of trust for the whole stack — goes
+through an authenticating hop to the loopback bind, never a wider bind: an SSH
+local forward (`ssh -N -L 18081:127.0.0.1:18081 <host>`) or `tailscale serve`.
+The binds and the drops stay as they are; convenience is never a reason to
+reopen a port.
+
 ## Persistence
 
 `iptables-persistent` / `netfilter-persistent` 1.0.16 (both services enabled) restore
