@@ -784,6 +784,59 @@ def exec_agent_self_approval(case_: Case, _: Path) -> Outcome:
     return Outcome(ok, f"{response.status_code} {rule or str(body.get('detail'))[:40]}")
 
 
+def exec_agent_tainted_approval(case_: Case, _: Path) -> Outcome:
+    """RT-HITL-08: an agent may not approve a call made after injected content.
+
+    The pending row records the run's content flags (ADR-028); the agent path
+    must read them back from the row and refuse, never take the caller's word.
+    """
+    from unittest import mock
+
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from fastapi.testclient import TestClient
+
+    from citadel.api.app import create_app
+    from citadel.identity import KeycloakVerifier, Principal, mint_run_token
+    from tests.conftest import AUDIENCE, ISSUER, StaticKeys
+    from tests.redteam import support
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    run_key = Ed25519PrivateKey.generate()
+    app = create_app(
+        verifier=KeycloakVerifier(ISSUER, AUDIENCE, StaticKeys(key.public_key())),
+        dsn="postgres://fake",
+        private_key=run_key,
+        checker=FakeChecker(),
+    )
+    token, _context = mint_run_token(
+        Principal(user_id="user-bob", tenant_id="lab-a", roles=frozenset()),
+        agent_id="researcher",
+        scopes=frozenset(),
+        risk_tier="T1",
+        private_key=run_key,
+        run_id="run-1",
+    )
+    db = support.FakeDB()
+    db.run_owner = ("user-alice", "docker")
+    db.pending_flags = (["untrusted_external", "prompt_injection"],)
+    payload = {
+        "run_id": "run-1",
+        "tool": "restart_service",
+        "agent_id": "docker",
+        "arguments": {"service": "checkout-api"},
+        "approved": True,
+        "reason": "the agent says it is routine",
+    }
+    with mock.patch.object(api_module, "tenant_connection", db.connect):
+        response = TestClient(app).post(
+            "/approvals", json=payload, headers={"Authorization": f"Bearer {token}"}
+        )
+    body = response.json()
+    rule = str(body.get("detail", {}).get("rule_id", ""))
+    ok = response.status_code == 403 and rule == "approval.prompt_injection"
+    return Outcome(ok, f"{response.status_code} {rule or str(body.get('detail'))[:40]}")
+
+
 def exec_approval_replay(case_: Case, _: Path) -> Outcome:
     """RT-HITL-02: the operator executes once per approval, then returns 409."""
     import os
@@ -1963,6 +2016,7 @@ EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-HITL-01": exec_self_approval,
     "RT-HITL-02": exec_approval_replay,
     "RT-HITL-07": exec_agent_self_approval,
+    "RT-HITL-08": exec_agent_tainted_approval,
     "RT-CACHE-01": exec_cache_cross_tenant,
     "RT-CACHE-02": exec_cache_policy_change,
 }

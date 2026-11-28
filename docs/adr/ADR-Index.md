@@ -29,7 +29,9 @@ Citadel records one ADR per architectural decision. Numbers are sequential; ADR-
 | 023 | CLI access from the sandbox, never from a worker | Accepted |
 | 024 | Approvals travel as a single-use reference, not a token in history | Accepted |
 | 025 | Hosted embedding may see DLP-redacted text; reranking stays in-stack | Accepted |
+| 026 | One CLI for humans and agents | Accepted |
 | 027 | Workers and tool services verify the run token and bind the payload to its claims | Accepted |
+| 028 | Content taint travels with the tool call and refuses an agent approver | Accepted |
 
 ## ADR-008 evolution roadmap
 

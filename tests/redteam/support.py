@@ -43,6 +43,9 @@ class FakeDB:
         self.run_owner: tuple[str, ...] = ("user-alice", "docker")
         # The workflow id the pending row records; the API must signal exactly this.
         self.pending_workflow: tuple[str, ...] | None = ("run-run-1-0-restart_service",)
+        # The content flags the pending row records (ADR-028); the API must read
+        # the taint back from here, never from the request body.
+        self.pending_flags: tuple[list[str], ...] | None = ([],)
 
     @contextmanager
     def connect(self, _dsn: str, _tenant: str) -> Iterator[FakeConn]:
@@ -85,6 +88,9 @@ class FakeConn:
 
         if statement.startswith("SELECT workflow_id FROM approval_requests"):
             return Cursor(self._db.pending_workflow)
+
+        if statement.startswith("SELECT content_flags FROM approval_requests"):
+            return Cursor(self._db.pending_flags)
 
         if statement.startswith("UPDATE approval_requests"):
             self._db.approvals.append(params)

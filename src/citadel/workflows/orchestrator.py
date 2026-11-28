@@ -178,7 +178,8 @@ class RunWorkflow:
         usage = Usage.zero()
         history: list[dict[str, Any]] = []
         # A label earned by one fetched page describes the run, not just that
-        # step: the answer that follows must still carry it to run.end.
+        # step: the answer that follows must still carry it to run.end, and the
+        # tool call that follows must show it to the approver (ADR-028).
         flags: set[str] = set()
         tool_name = item.tool or "model"
         # One search before the first step: the evidence joins the task, so every
@@ -267,6 +268,7 @@ class RunWorkflow:
                 agent_id=item.agent_id,
                 tool=step.tool,
                 arguments=step.arguments,
+                content_flags=sorted(flags),
                 run_token=item.run_token,
             )
             tool_result = await workflow.execute_child_workflow(

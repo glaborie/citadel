@@ -308,6 +308,9 @@ class ToolActivities:
                 "decision": decision.outcome,
                 "rule_id": decision.rule_id,
                 "tier": decision.tier,
+                # The taint the run carried when it asked (ADR-028): the ledger
+                # shows it at decision time, not only at run.end.
+                "content_flags": list(call.content_flags),
             },
         )
         record_span(

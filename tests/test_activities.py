@@ -616,9 +616,18 @@ def test_a_t1_request_is_recorded_for_the_console(monkeypatch: pytest.MonkeyPatc
 
     assert outcome.outcome == "requires_approval"
     assert len(db.approvals) == 1
-    tenant, run_id, tool, agent, arguments, tier, rule_id, requested_by, workflow_id = db.approvals[
-        0
-    ]
+    (
+        tenant,
+        run_id,
+        tool,
+        agent,
+        arguments,
+        content_flags,
+        tier,
+        rule_id,
+        requested_by,
+        workflow_id,
+    ) = db.approvals[0]
     assert (tenant, run_id, tool, agent, tier, rule_id, requested_by) == (
         "lab-a",
         call("restart_service").run_id,
@@ -630,6 +639,29 @@ def test_a_t1_request_is_recorded_for_the_console(monkeypatch: pytest.MonkeyPatc
     )
     assert workflow_id == item.workflow_id, "the row must carry the child's own id"
     assert json.loads(arguments) == {"service": "checkout-api"}
+    assert json.loads(content_flags) == []
+
+
+def test_a_t1_request_after_a_flagged_observation_persists_the_flags(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The row is what the approver reads, so the taint must be on it (ADR-028)."""
+    db = FakeDB()
+    ledger = FakeAudit()
+    impl = build(monkeypatch, db, recorder([]), ledger)
+    decision = Decision("requires_approval", "policy.tier_requires_approval", "approve it", "T1")
+    monkeypatch.setattr(activities, "authorize", lambda *args, **kwargs: decision)
+    _detector(monkeypatch)
+    item = replace(
+        call("restart_service"), content_flags=["untrusted_external", "prompt_injection"]
+    )
+
+    outcome = impl.authorize_tool(item)
+
+    assert outcome.outcome == "requires_approval"
+    assert json.loads(db.approvals[0][5]) == ["untrusted_external", "prompt_injection"]
+    decided = [event for event in ledger.events if event["event_type"] == "policy.decision"]
+    assert decided[0]["payload"]["content_flags"] == ["untrusted_external", "prompt_injection"]
 
 
 def test_a_secret_in_t1_arguments_denies_before_recording(

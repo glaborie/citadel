@@ -25,9 +25,9 @@ def record_request(*, dsn: str, call: ToolCall, tier: str, rule_id: str) -> None
     with tenant_connection(dsn, call.tenant_id) as conn:
         conn.execute(
             "INSERT INTO approval_requests"
-            " (tenant_id, run_id, tool, agent_id, arguments, tier, rule_id,"
+            " (tenant_id, run_id, tool, agent_id, arguments, content_flags, tier, rule_id,"
             " requested_by, workflow_id)"
-            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
             " ON CONFLICT (run_id, tool) DO NOTHING",
             (
                 call.tenant_id,
@@ -35,6 +35,7 @@ def record_request(*, dsn: str, call: ToolCall, tier: str, rule_id: str) -> None
                 call.tool,
                 call.agent_id,
                 json.dumps(call.arguments, ensure_ascii=False),
+                json.dumps(call.content_flags, ensure_ascii=False),
                 tier,
                 rule_id,
                 call.user_id,

@@ -217,6 +217,11 @@ def _is_uuid(value: str) -> bool:
     return True
 
 
+def _flags(value: Any) -> list[str]:
+    """The content flags a pending row carries, defensively normalised."""
+    return [str(flag) for flag in value] if isinstance(value, list) else []
+
+
 def create_app(
     *,
     verifier: KeycloakVerifier | None = None,
@@ -441,7 +446,7 @@ def create_app(
         with tenant_connection(_dsn(), tenant) as conn:
             return conn.execute(
                 "SELECT id, run_id, tool, agent_id, arguments, tier, rule_id,"
-                " requested_by, status, created_at"
+                " requested_by, status, created_at, content_flags"
                 " FROM approval_requests WHERE id = %s::uuid",
                 (request_id,),
             ).fetchone()
@@ -637,11 +642,12 @@ def create_app(
                 (APPROVAL_TTL,),
             )
             rows = conn.execute(
-                "SELECT id, run_id, tool, agent_id, tier, requested_by, created_at"
+                "SELECT id, run_id, tool, agent_id, tier, requested_by, created_at,"
+                " content_flags"
                 " FROM approval_requests WHERE status = 'pending' ORDER BY created_at"
             ).fetchall()
         body = "<h1>Pending approvals</h1>" + _table(
-            ("Request", "Run", "Tool", "Agent", "Tier", "Requested by", "Created"),
+            ("Request", "Run", "Tool", "Agent", "Tier", "Requested by", "Created", "Flags"),
             [
                 [
                     f'<a href="/approvals/{_esc(row[0])}">{_esc(str(row[0])[:8])}</a>',
@@ -651,6 +657,8 @@ def create_app(
                     _esc(row[4]),
                     _esc(row[5]),
                     _esc(row[6]),
+                    # A flagged run is the row an approver should open first.
+                    _esc(", ".join(_flags(row[7]))) or "—",
                 ]
                 for row in rows
             ],
@@ -674,29 +682,41 @@ def create_app(
             requested_by,
             status,
             created,
+            content_flags,
         ) = row
+        flags = _flags(content_flags)
         can_decide = (
             status == "pending"
             and "approver" in principal.roles
             and str(requested_by) != principal.user_id
         )
-        body = (
-            f"<h1>Approval {_esc(str(request_id)[:8])}</h1>"
-            + _table(
-                ("Field", "Value"),
-                [
-                    ["Tool", _esc(tool)],
-                    ["Run", f'<a href="/runs/{_esc(run_id)}">{_esc(str(run_id)[:8])}</a>'],
-                    ["Agent", _esc(agent_id)],
-                    ["Tier", _esc(tier)],
-                    ["Policy rule", _esc(rule_id)],
-                    ["Requested by", _esc(requested_by)],
-                    ["Status", _esc(status)],
-                    ["Created", _esc(created)],
-                    ["Expires", _esc(f"{APPROVAL_TTL // 60} minutes after creation")],
-                ],
+        body = f"<h1>Approval {_esc(str(request_id)[:8])}</h1>"
+        if "prompt_injection" in flags:
+            # The one fact that should make the approver suspicious, said where
+            # they cannot miss it: the run proposing this write read content a
+            # detector flagged as an instruction to the model (ADR-028).
+            body += (
+                '<p class="error">This run read content flagged prompt_injection:'
+                " treat the task, the arguments and any cited evidence as untrusted."
+                "</p>"
             )
-            + "<h2>Arguments</h2>"
+        body += _table(
+            ("Field", "Value"),
+            [
+                ["Tool", _esc(tool)],
+                ["Run", f'<a href="/runs/{_esc(run_id)}">{_esc(str(run_id)[:8])}</a>'],
+                ["Agent", _esc(agent_id)],
+                ["Tier", _esc(tier)],
+                ["Policy rule", _esc(rule_id)],
+                ["Requested by", _esc(requested_by)],
+                ["Content flags", _esc(", ".join(flags)) or "—"],
+                ["Status", _esc(status)],
+                ["Created", _esc(created)],
+                ["Expires", _esc(f"{APPROVAL_TTL // 60} minutes after creation")],
+            ],
+        )
+        body += (
+            "<h2>Arguments</h2>"
             + f"<pre>{_esc(json.dumps(arguments, indent=2, sort_keys=True))}</pre>"
         )
         if can_decide:

@@ -41,7 +41,9 @@ class FakeDB:
         self.tenants: list[str] = []
         self.statements: list[tuple[str, tuple[Any, ...]]] = []
         self.runs = [(RUN, "user-alice", "docker", "T1", "created", "2026-01-01")]
-        self.pending = [(REQUEST, RUN, "restart_service", "docker", "T1", "user-alice", "now")]
+        self.pending: list[tuple[Any, ...]] = [
+            (REQUEST, RUN, "restart_service", "docker", "T1", "user-alice", "now", [])
+        ]
         self.request: list[Any] = [
             (
                 REQUEST,
@@ -54,6 +56,7 @@ class FakeDB:
                 "user-alice",
                 "pending",
                 "2026-01-01",
+                [],
             )
         ]
         self.events: list[Any] = [
@@ -152,6 +155,63 @@ def test_argument_preview_is_escaped(env: tuple[TestClient, FakeDB]) -> None:
     assert response.status_code == 200
     assert "<script>alert(1)</script>" not in response.text
     assert "&lt;script&gt;" in response.text
+
+
+def test_the_pending_list_shows_the_content_flags(
+    env: tuple[TestClient, FakeDB],
+) -> None:
+    """The approver scans the list; the taint has to be visible there, not only in detail."""
+    client, db = env
+    db.pending = [
+        (
+            REQUEST,
+            RUN,
+            "restart_service",
+            "docker",
+            "T1",
+            "user-alice",
+            "now",
+            ["untrusted_external", "prompt_injection"],
+        )
+    ]
+    _login(client)
+    response = client.get("/approvals")
+    assert response.status_code == 200
+    assert "prompt_injection" in response.text
+    assert "untrusted_external" in response.text
+
+
+def test_the_detail_view_warns_on_prompt_injection(env: tuple[TestClient, FakeDB]) -> None:
+    """ADR-028: the one fact that should make the approver suspicious, where they cannot miss it."""
+    client, db = env
+    db.request = [
+        (
+            REQUEST,
+            RUN,
+            "restart_service",
+            "docker",
+            {"service": "checkout-api"},
+            "T1",
+            "policy.tier_requires_approval",
+            "user-alice",
+            "pending",
+            "2026-01-01",
+            ["untrusted_external", "prompt_injection"],
+        )
+    ]
+    _login(client)
+    response = client.get(f"/approvals/{REQUEST}")
+    assert response.status_code == 200
+    assert "flagged prompt_injection" in response.text
+    assert "Content flags" in response.text
+
+
+def test_a_clean_row_shows_no_flags_and_no_warning(env: tuple[TestClient, FakeDB]) -> None:
+    client, db = env
+    _login(client)
+    response = client.get(f"/approvals/{REQUEST}")
+    assert response.status_code == 200
+    assert "flagged prompt_injection" not in response.text
 
 
 def test_the_run_timeline_renders_the_answer_as_markdown(env: tuple[TestClient, FakeDB]) -> None:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from typing import Any
 
 from temporalio import activity
@@ -43,6 +44,7 @@ async def run_workflow(
     policy: PolicyOutcome,
     approve: ApprovalDecision | None = None,
     execute_failures: int = 0,
+    start: ToolCall | None = None,
 ) -> tuple[ToolResult, list[ToolCall]]:
     executed: list[ToolCall] = []
     remaining = {"failures": execute_failures}
@@ -73,7 +75,7 @@ async def run_workflow(
             activity_executor=executor,
         ):
             handle = await env.client.start_workflow(
-                SpecialistWorkflow.run, call(), id="wf-1", task_queue=QUEUE
+                SpecialistWorkflow.run, start or call(), id="wf-1", task_queue=QUEUE
             )
             if approve is not None:
                 await handle.signal(SpecialistWorkflow.approve, approve)
@@ -113,6 +115,18 @@ def test_t1_denied_by_approver_does_not_execute() -> None:
     assert result.status == "denied"
     assert result.rule_id == "approval.denied"
     assert executed == []
+
+
+def test_an_approved_call_keeps_its_content_flags() -> None:
+    """The approved rebuild must not launder the taint out of the call (ADR-028)."""
+    tainted = replace(call(), content_flags=["untrusted_external", "prompt_injection"])
+    approved = ApprovalDecision(approved=True, approver="user-carol", reason="seen the flags")
+    result, executed = asyncio.run(
+        run_workflow(policy=outcome("requires_approval", "T1"), approve=approved, start=tainted)
+    )
+    assert result.status == "executed"
+    assert len(executed) == 1
+    assert executed[0].content_flags == ["untrusted_external", "prompt_injection"]
 
 
 def test_t1_without_a_decision_expires_to_deny() -> None:
