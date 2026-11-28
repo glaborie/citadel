@@ -65,6 +65,26 @@ def test_a_traversing_agent_name_is_not_joined_into_a_path() -> None:
         skills.load_pack("../../etc", directory=ROOT)
 
 
+def test_a_symlinked_pack_directory_is_refused(tmp_path: Path) -> None:
+    """The directory is picked off the listing of the root, and a link is not real.
+
+    A link named like a pack could point at content anywhere on disk; refusing it
+    keeps the request from naming a path at all (issue #289, code scanning alert #66).
+    """
+    outside = tmp_path / "elsewhere"
+    shutil.copytree(ROOT / "docker", outside)
+    os.symlink(outside, tmp_path / "docker")
+    with pytest.raises(skills.SkillPackError, match="real directories"):
+        skills.load_pack("docker", directory=tmp_path)
+
+
+def test_a_file_named_like_a_pack_is_not_a_pack(tmp_path: Path) -> None:
+    """Exact match on the listing, then still only directories: a file is no pack."""
+    (tmp_path / "docker").write_text("not a pack\n", encoding="utf-8")
+    with pytest.raises(skills.SkillPackMissing):
+        skills.load_pack("docker", directory=tmp_path)
+
+
 def test_an_edited_file_is_refused_until_the_manifest_is_rewritten(tmp_path: Path) -> None:
     shutil.copytree(ROOT / "docker", tmp_path / "docker")
     target = tmp_path / "docker" / "references" / "triage.md"
