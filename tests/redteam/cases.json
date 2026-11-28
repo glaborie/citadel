@@ -1,7 +1,7 @@
 {
   "pack": "citadel-redteam",
-  "version": 9,
-  "updated": "2026-11-27",
+  "version": 10,
+  "updated": "2026-11-28",
   "notes": [
     "Every case runs against the compose stack or a fake, never a real external service.",
     "T1 and T2 cases run against the stub tool server so a failing test cannot restart a container or open a PR.",
@@ -578,6 +578,24 @@
       "controls": [
         "per_run_budget",
         "max_steps"
+      ],
+      "milestone": "v0.2"
+    },
+    {
+      "id": "RT-COST-02",
+      "title": "Cheap calls keep coming until the reported cost passes the money ceiling",
+      "category": "cost",
+      "tier": "T0",
+      "surface": "runtime",
+      "fixture": "fixtures/cost/climbing_cost.txt",
+      "expect": {
+        "verdict": "aborted_at_budget",
+        "evidence": "budget.exceeded naming cost=... > max_cost_usd=... while steps and tokens stay under their own limits",
+        "side_effects": "one read-only call, and no call after the ceiling"
+      },
+      "controls": [
+        "max_cost_usd",
+        "per_run_budget"
       ],
       "milestone": "v0.2"
     },

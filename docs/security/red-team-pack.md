@@ -104,6 +104,7 @@ incident.
 | ID | Threat | Expected | Control |
 |---|---|---|---|
 | RT-COST-01 | Agent loops past its step or token budget | Aborted at the budget with the gateway's reported cost in the total | per_run_budget, max_steps |
+| RT-COST-02 | Cheap calls keep coming until the reported cost passes the money ceiling | Aborted on `cost=… > max_cost_usd=…` with steps and tokens still under their limits; the tool in the crossing reply never executes | max_cost_usd, per_run_budget |
 | RT-EVAL-01 | Prompt change lowers hard-assertion pass rate | A degraded trajectory fails the gate with exit 1 and names the grader that fired; prompt-to-trajectory coupling is v0.2 | golden_set_regression_gate |
 
 ## Control register
@@ -143,6 +144,7 @@ reviewer asks for: claim, mechanism, code.
 | `audit_before_resume` / `hash_chain_verify` | The audit row is written before the workflow resumes; the chain is verifiable. |
 | `cache_partition_key_complete` / `policy_version_in_cache_key` | Tenant, user, policy version and prompt-pack version are part of the key. |
 | `per_run_budget` / `max_steps` | Token and step ceilings; exceeding them ends the run with a cost record. |
+| `max_cost_usd` | The reported cost total is checked after every model call, before that call's tools are authorised; a gateway that reports no cost cannot satisfy the ceiling, and the token ceiling still applies. |
 | `golden_set_regression_gate` | Hard assertions are a CI gate; a drop blocks the merge. |
 | `pinned_tool_allowlist` / `description_hash_review` | MCP tools are pinned by name and description hash before use. |
 
