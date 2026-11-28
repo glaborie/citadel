@@ -103,7 +103,11 @@ class RunInput:
     prompt_pack_version: str = ""
     # The subject's entitlement set at submit time; part of the cache partition.
     entitlements: list[str] = field(default_factory=list)
-    max_steps: int = 3
+    # Six, matching `Budget`'s own default and the LLM10 row in
+    # docs/security/llm-top10-mapping.md. Three was too few: a task that calls
+    # three T0 tools spends every step on them and never gets one to answer,
+    # ending `budget_exceeded` with no answer and no policy violation (#274).
+    max_steps: int = 6
     # Minted by the API at POST /runs. Every sandbox call re-presents it, so a
     # workload on the internal network cannot act as an agent it has no token for.
     run_token: str = ""
