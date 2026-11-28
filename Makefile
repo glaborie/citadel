@@ -69,6 +69,13 @@ policy-bootstrap:  ## Load the OpenFGA model and seed relations
 policy-drift:  ## Report drift between the OpenFGA store and the versioned policy
 	bash scripts/policy-drift.sh
 
+# The half of that guard no offline test reaches (#294): the check, sops and
+# compose against the running stack. A compose.yaml or image change can break the
+# verdict path while `make check` stays green, which is how #287 survived; this is
+# the post-deploy step in docs/operations/policy-drift-check.md.
+policy-drift-live:  ## Prove the drift verdict on the running stack (after `make up`)
+	CITADEL_LIVE_TESTS=1 uv run pytest tests/test_policy_drift_live.py -v
+
 .PHONY: migrate
 
 # Migrations are applied by the postgres init scripts on a fresh volume; this

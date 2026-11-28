@@ -136,15 +136,32 @@ of #287 stayed hidden: every existing check asserted the command's shape, none
 asserted the code that came back.
 
 `tests/test_policy_drift_live.py` does it on the stack, with a mutated copy of
-`policy/model.json` mounted over the image's own:
+`policy/model.json` mounted over the image's own. It asserts exit 1 and a report
+naming the difference, then a clean run that exits 0 with every tuple present —
+so the check provably reports without repairing. The gauge goes to a closed port,
+so a test run cannot publish a verdict.
+
+### After a stack change (#294)
+
+That case is the post-deploy step:
 
 ```bash
-CITADEL_LIVE_TESTS=1 uv run pytest tests/test_policy_drift_live.py -v
+make up
+make policy-drift-live
 ```
 
-It asserts exit 1 and a report naming the difference, then a clean run that exits
-0 with every tuple present — so the check provably reports without repairing. The
-gauge goes to a closed port, so a test run cannot publish a verdict.
+Run it after every `make up`, every `compose.yaml` or image change, and before
+trusting a timer that has not fired yet. A pass means the whole path works on
+this host: sops unwraps, compose starts the one-shot, the check reads the store,
+and the exit code survives to the wrapper. The offline stand-ins stop at the
+process boundary, so none of that is provable in `make check` — which is why
+#287 stayed green for a day.
+
+A worktree has no `secrets/` of its own; point the run at the checkout that does:
+
+```bash
+CITADEL_SECRETS_DIR="$HOME/projects/citadel/secrets" make policy-drift-live
+```
 
 ## Limits
 
