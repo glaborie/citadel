@@ -10,11 +10,12 @@ help:  ## List the targets and what they do
 # exist in the compose process environment (see docs/security/secrets.md).
 .PHONY: up
 
-up:  ## Start the stack, unwrapping secrets through sops
+up:  ## Start the stack, unwrapping secrets, then verify the drift verdict path
 	chmod +x scripts/provision-secrets.sh scripts/reconcile-mounts.py
 	sops exec-env secrets/citadel.env 'scripts/provision-secrets.sh \
 		&& scripts/reconcile-mounts.py \
 		&& docker compose up -d --wait --wait-timeout 300'
+	bash scripts/post-deploy-check.sh
 
 .PHONY: rebuild
 
@@ -27,12 +28,13 @@ up:  ## Start the stack, unwrapping secrets through sops
 # `--wait` is what makes the target honest (#280): `up -d` returns 0 once the
 # containers exist, so a service whose healthcheck never passes (the reranker OOM
 # in #269) left a half-up stack behind a green `make up`.
-rebuild:  ## Rebuild images from scratch (no cache), then restart the stack
+rebuild:  ## Rebuild images, restart the stack, then verify the drift verdict path
 	chmod +x scripts/provision-secrets.sh scripts/reconcile-mounts.py
 	sops exec-env secrets/citadel.env 'scripts/provision-secrets.sh \
 		&& scripts/reconcile-mounts.py \
 		&& docker compose build --no-cache \
 		&& docker compose up -d --wait --wait-timeout 300'
+	bash scripts/post-deploy-check.sh
 
 # The smell gate's version lives with its hashes, so `make check` and the smell-check
 # job cannot drift apart (#41). Blank if the requirements file is malformed, which is a
@@ -73,8 +75,8 @@ policy-drift:  ## Report drift between the OpenFGA store and the versioned polic
 # compose against the running stack. A compose.yaml or image change can break the
 # verdict path while `make check` stays green, which is how #287 survived; this is
 # the post-deploy step in docs/operations/policy-drift-check.md.
-policy-drift-live:  ## Prove the drift verdict on the running stack (after `make up`)
-	CITADEL_LIVE_TESTS=1 uv run pytest tests/test_policy_drift_live.py -v
+policy-drift-live:  ## Re-run the drift gate on a stack that is already up
+	bash scripts/post-deploy-check.sh
 
 .PHONY: migrate
 

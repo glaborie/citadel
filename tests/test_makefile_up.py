@@ -44,3 +44,26 @@ def test_no_target_starts_the_stack_without_waiting() -> None:
     ]
 
     assert not offenders, f"a target still starts the stack without --wait: {offenders}"
+
+
+def test_up_and_rebuild_end_with_the_drift_gate() -> None:
+    """#296: the live case is the only proof of the verdict path, so run it here."""
+    for target in ("up", "rebuild"):
+        recipe = _recipe(target)
+
+        assert "bash scripts/post-deploy-check.sh" in recipe, (
+            f"`make {target}` leaves the stack up without proving the drift verdict path"
+        )
+        assert recipe.rstrip().endswith("bash scripts/post-deploy-check.sh"), (
+            f"`make {target}` has to run the gate last, once the stack is up"
+        )
+
+
+def test_the_gate_runs_the_live_case() -> None:
+    script = (Path(__file__).parents[1] / "scripts" / "post-deploy-check.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "CITADEL_LIVE_TESTS=1" in script, "the case skips itself without the opt-in"
+    assert "tests/test_policy_drift_live.py" in script
+    assert "exit 1" in script, "a failed gate has to fail the make target"

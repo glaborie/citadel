@@ -38,7 +38,9 @@ gitignored Docker-secret files under `secrets/` (never into a container
 environment). It builds the reranker image on first use, because the model is
 baked in at a pinned revision and never fetched at runtime. It does not build
 the other images: use `make rebuild` after a pull, or the old image keeps
-running. 22 services are long-running, 20 declare health checks and all 20 are
+running. Both targets end with `scripts/post-deploy-check.sh`, the live case that
+proves a real drift report still reaches the alert wrapper on this host; a broken
+path fails the target and points at `docs/operations/policy-drift-check.md`. 22 services are long-running, 20 declare health checks and all 20 are
 healthy; `openfga-migrate` and `mlflow-bootstrap` are one-shot. The offline suite
 collects 800 tests: 765 pass and 35 skip as live-network or live-model cases. A
 fresh clone installs and runs that suite; the live cases opt in with
