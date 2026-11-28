@@ -11,8 +11,10 @@ help:  ## List the targets and what they do
 .PHONY: up
 
 up:  ## Start the stack, unwrapping secrets through sops
-	chmod +x scripts/provision-secrets.sh
-	sops exec-env secrets/citadel.env 'scripts/provision-secrets.sh && docker compose up -d'
+	chmod +x scripts/provision-secrets.sh scripts/reconcile-mounts.py
+	sops exec-env secrets/citadel.env 'scripts/provision-secrets.sh \
+		&& scripts/reconcile-mounts.py \
+		&& docker compose up -d'
 
 .PHONY: rebuild
 
@@ -22,8 +24,9 @@ up:  ## Start the stack, unwrapping secrets through sops
 # running the previous code, which reads exactly like a fix that did not work. `up` has no
 # `--no-cache` of its own, so the build is its own step.
 rebuild:  ## Rebuild images from scratch (no cache), then restart the stack
-	chmod +x scripts/provision-secrets.sh
+	chmod +x scripts/provision-secrets.sh scripts/reconcile-mounts.py
 	sops exec-env secrets/citadel.env 'scripts/provision-secrets.sh \
+		&& scripts/reconcile-mounts.py \
 		&& docker compose build --no-cache \
 		&& docker compose up -d'
 
