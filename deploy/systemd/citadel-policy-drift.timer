@@ -1,0 +1,14 @@
+# Hourly Citadel policy drift check (#281).
+[Unit]
+Description=Run the Citadel policy drift check hourly
+
+[Timer]
+# Drift appears between changes, not at a fixed minute. Persistent catches up
+# after a suspend, and the spread keeps a fleet off the store at :00.
+OnCalendar=hourly
+RandomizedDelaySec=120
+Persistent=true
+Unit=citadel-policy-drift.service
+
+[Install]
+WantedBy=timers.target

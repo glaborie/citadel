@@ -1,0 +1,25 @@
+# Citadel policy drift check (#281).
+#
+# A user unit, not a system one: the check runs `make policy-drift`, which unwraps
+# secrets/citadel.env with the operator's SOPS age key, and that key belongs to the
+# operator rather than to root. Install with `systemctl --user link`.
+[Unit]
+Description=Citadel policy drift check (read-only)
+Documentation=file:%h/projects/citadel/docs/operations/policy-drift-check.md
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/citadel
+Environment=CITADEL_REPO_DIR=%h/projects/citadel
+# Without a healthy store there is nothing to compare, and an hourly "could not
+# check" against a stopped stack is the noise that teaches people to ignore the
+# unit. A skipped run is visible in `systemctl --user status` all the same.
+# A checkout at a commit that predates the wrapper is skipped, not failed: the
+# timer is enabled once and survives a bisect or a rollback without paging.
+ConditionPathExists=%h/projects/citadel/scripts/policy-drift-alert.py
+ExecCondition=/bin/sh -c 'test "$(/usr/bin/docker inspect -f {{.State.Health.Status}} citadel-openfga-1 2>/dev/null)" = healthy'
+ExecStart=/usr/bin/python3 %h/projects/citadel/scripts/policy-drift-alert.py
+Nice=10
+# Exit 1 is drift and exit 2 is "could not compare"; both leave the unit failed,
+# which is what `systemctl --user --failed` and any OnFailure= unit see.
+TimeoutStartSec=300
