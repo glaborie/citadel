@@ -6,7 +6,9 @@ a skill without re-running `make skills-lock` — which is the point.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -88,6 +90,68 @@ def test_an_unpinned_file_cannot_be_loaded(tmp_path: Path) -> None:
         skills.load_pack("docker", directory=tmp_path)
 
 
+def test_a_symlinked_reference_is_refused_even_when_its_hash_is_pinned(tmp_path: Path) -> None:
+    """Hash-matching does not legitimise a link: the pack may only read its own files."""
+    shutil.copytree(ROOT / "docker", tmp_path / "docker")
+    outside = tmp_path / "outside.md"
+    outside.write_text("SECRET-OUTSIDE\n", encoding="utf-8")
+    target = tmp_path / "docker" / "references" / "triage.md"
+    target.unlink()
+    os.symlink(outside, target)
+    manifest = json.loads((tmp_path / "docker" / "manifest.json").read_text())
+    pinned = hashlib.sha256(outside.read_bytes()).hexdigest()
+    manifest["files"]["references/triage.md"] = f"sha256:{pinned}"
+    (tmp_path / "docker" / "manifest.json").write_text(json.dumps(manifest))
+
+    with pytest.raises(skills.SkillPackError, match="symlink"):
+        skills.load_pack("docker", directory=tmp_path)
+
+
+def test_a_manifest_key_may_not_traverse_out_of_the_pack(tmp_path: Path) -> None:
+    shutil.copytree(ROOT / "docker", tmp_path / "docker")
+    outside = tmp_path / "outside.md"
+    outside.write_text("SECRET-OUTSIDE\n", encoding="utf-8")
+    manifest = json.loads((tmp_path / "docker" / "manifest.json").read_text())
+    pinned = hashlib.sha256(outside.read_bytes()).hexdigest()
+    manifest["files"]["../outside.md"] = f"sha256:{pinned}"
+    (tmp_path / "docker" / "manifest.json").write_text(json.dumps(manifest))
+
+    with pytest.raises(skills.SkillPackError, match="not a plain relative path"):
+        skills.load_pack("docker", directory=tmp_path)
+
+
+def test_an_absolute_manifest_key_is_refused(tmp_path: Path) -> None:
+    shutil.copytree(ROOT / "docker", tmp_path / "docker")
+    manifest = json.loads((tmp_path / "docker" / "manifest.json").read_text())
+    manifest["files"]["/etc/hostname"] = "sha256:" + "0" * 64
+    (tmp_path / "docker" / "manifest.json").write_text(json.dumps(manifest))
+
+    with pytest.raises(skills.SkillPackError, match="not a plain relative path"):
+        skills.load_pack("docker", directory=tmp_path)
+
+
+def test_a_symlinked_directory_cannot_hide_unpinned_files(tmp_path: Path) -> None:
+    shutil.copytree(ROOT / "docker", tmp_path / "docker")
+    hideout = tmp_path / "hideout"
+    hideout.mkdir()
+    (hideout / "secret.md").write_text("unreviewed\n", encoding="utf-8")
+    os.symlink(hideout, tmp_path / "docker" / "docs")
+
+    with pytest.raises(skills.SkillPackError, match="symlinked directory"):
+        skills.load_pack("docker", directory=tmp_path)
+
+
+def test_a_symlinked_manifest_is_refused(tmp_path: Path) -> None:
+    shutil.copytree(ROOT / "docker", tmp_path / "docker")
+    forged = tmp_path / "forged.json"
+    forged.write_text("{}", encoding="utf-8")
+    (tmp_path / "docker" / "manifest.json").unlink()
+    os.symlink(forged, tmp_path / "docker" / "manifest.json")
+
+    with pytest.raises(skills.SkillPackError, match="symlink"):
+        skills.load_pack("docker", directory=tmp_path)
+
+
 def test_a_pack_may_not_claim_another_agent(tmp_path: Path) -> None:
     shutil.copytree(ROOT / "docker", tmp_path / "docker")
     manifest = json.loads((tmp_path / "docker" / "manifest.json").read_text())
@@ -120,6 +184,19 @@ def test_the_lock_round_trips(tmp_path: Path) -> None:
     assert after == before, "the committed manifests are stale: run `make skills-lock`"
     for agent in AGENTS:
         assert skills.load_pack(agent, directory=tmp_path).name == f"{agent}-{PACK_VERSIONS[agent]}"
+
+
+def test_the_lock_never_pins_a_symlink(tmp_path: Path) -> None:
+    shutil.copytree(ROOT / "docker", tmp_path / "docker")
+    outside = tmp_path / "outside.md"
+    outside.write_text("authored elsewhere\n", encoding="utf-8")
+    os.symlink(outside, tmp_path / "docker" / "references" / "shortcuts.md")
+
+    with pytest.raises(skills.SkillPackError, match="symlinked file"):
+        skills.write_manifests(tmp_path)
+
+    manifest = json.loads((tmp_path / "docker" / "manifest.json").read_text())
+    assert "references/shortcuts.md" not in manifest["files"], "the lock pinned a link's target"
 
 
 @pytest.mark.parametrize("agent", ("docker", "github"))

@@ -4,7 +4,9 @@ ADR-011. A pack is a directory under `skills/` with an index (`SKILL.md`),
 optional references, and a `manifest.json` that pins the SHA-256 of every file.
 Loading recomputes the hashes, so a pack that changed on disk without a version
 bump is refused instead of served, and a file the manifest does not list cannot
-be loaded at all.
+be loaded at all. Manifest names are contained to the pack folder and symlinks
+are refused outright: a pack is a closed artefact, so nothing in it may point
+at content elsewhere on disk.
 
 Nothing here can grant a tool. Permissions live in `policy/tools.json` and
 OpenFGA, and the loop still asks `authorize` for every call; the pack is text
@@ -13,13 +15,14 @@ that becomes a system message, and system messages are DLP-gated like prompts.
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any
 
@@ -101,7 +104,11 @@ def write_manifests(root: Path | None = None) -> list[Path]:
     base = skills_root() if root is None else root
     written: list[Path] = []
     for folder in sorted(path for path in base.iterdir() if path.is_dir()):
+        if folder.is_symlink():
+            raise SkillPackError(f"{folder} is a symlink; packs must be real directories")
         path = folder / MANIFEST
+        if path.is_symlink():
+            raise SkillPackError(f"{path} is a symlink; refusing to lock through it")
         current = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
         manifest = {
             "agent": folder.name,
@@ -109,7 +116,7 @@ def write_manifests(root: Path | None = None) -> list[Path]:
             "version": current.get("version", "1.0.0"),
             "requires_tool": current.get("requires_tool", False),
             "files": {
-                name: f"sha256:{_digest((folder / name).read_bytes())}"
+                name: f"sha256:{_digest(_read_nofollow(folder / name))}"
                 for name in sorted(_files(folder))
             },
         }
@@ -120,10 +127,18 @@ def write_manifests(root: Path | None = None) -> list[Path]:
 
 def _manifest(folder: Path, agent: str) -> dict[str, Any]:
     path = folder / MANIFEST
+    if path.is_symlink():
+        # A link here would let the whole pin set come from outside the pack.
+        raise SkillPackError(f"{path} is a symlink; the manifest must be a real file")
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise SkillPackError(f"{path} is unreadable: {exc}") from exc
+    return _check_manifest(raw, path, agent)
+
+
+def _check_manifest(raw: Any, path: Path, agent: str) -> dict[str, Any]:
+    """The manifest contract: identity, string pack/version, boolean flag, pinned index."""
     if not isinstance(raw, dict):
         raise SkillPackError(f"{path} is not an object")
     if raw.get("agent") != agent:
@@ -142,14 +157,60 @@ def _manifest(folder: Path, agent: str) -> dict[str, Any]:
 
 
 def _verified(folder: Path, name: str, expected: str) -> str:
-    path = folder / name
+    path = _pinned_path(folder, name)
     try:
-        data = path.read_bytes()
+        data = _read_nofollow(path)
     except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise SkillPackError(f"{name} reads through a symlink") from exc
         raise SkillPackError(f"{name} is pinned but missing from {folder}") from exc
     if expected != f"sha256:{_digest(data)}":
         raise SkillPackError(f"{name} does not match its pinned hash; bump the pack version")
     return data.decode("utf-8")
+
+
+def _pinned_path(folder: Path, name: str) -> Path:
+    """The real path a manifest key may name, refusing escapes and links.
+
+    A manifest key is data, not a path: an absolute, `..` or empty name is
+    refused, no component below the folder may be a symlink, and the resolved
+    file must stay inside the pack (issue #242) - a link would let the pack
+    read content it does not pin, from anywhere the link points.
+    """
+    relative = PurePosixPath(name)
+    if not name or not relative.parts:
+        raise SkillPackError(f"manifest name {name!r} names no file inside the pack")
+    if relative.is_absolute() or ".." in relative.parts:
+        raise SkillPackError(f"manifest name {name!r} is not a plain relative path")
+    if "\x00" in name:
+        raise SkillPackError(f"manifest name {name!r} contains a NUL byte")
+    _refuse_links(folder, name)
+    path = folder / name
+    try:
+        path.resolve().relative_to(folder.resolve())
+    except ValueError as exc:
+        raise SkillPackError(f"manifest name {name!r} escapes the pack folder") from exc
+    return path
+
+
+def _refuse_links(folder: Path, name: str) -> None:
+    """No component of the pinned name may be a symlink, final or mid-path."""
+    current = folder.resolve()
+    for part in PurePosixPath(name).parts:
+        current = current / part
+        if current.is_symlink():
+            raise SkillPackError(f"manifest name {name!r} reads through a symlink")
+
+
+def _read_nofollow(path: Path) -> bytes:
+    """Read a file without following a last-component symlink, where available.
+
+    The component walk in `_pinned_path` closes the manifest holes; this closes
+    the gap between that check and the open on platforms with `O_NOFOLLOW`.
+    """
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    with os.fdopen(fd, "rb") as handle:
+        return handle.read()
 
 
 def _refuse_unpinned(folder: Path, pinned: Mapping[str, str]) -> None:
@@ -159,11 +220,30 @@ def _refuse_unpinned(folder: Path, pinned: Mapping[str, str]) -> None:
 
 
 def _files(folder: Path) -> set[str]:
-    return {
-        str(path.relative_to(folder)).replace(os.sep, "/")
-        for path in folder.rglob("*")
-        if path.is_file() and path.name != MANIFEST
-    }
+    """Every file in the pack, relative to it, with any symlink refused.
+
+    `rglob` skipped links silently: a symlinked directory hid unpinned files
+    from this enumeration, and a symlinked file got pinned to whatever its
+    target held when the pack was locked (issue #242). A link is an error
+    wherever it sits, even if it points back inside the pack.
+    """
+
+    def _unreadable(error: OSError) -> None:
+        raise SkillPackError(f"{folder} is not fully walkable: {error}")
+
+    names: set[str] = set()
+    for dirpath, dirnames, filenames in os.walk(folder, followlinks=False, onerror=_unreadable):
+        here = Path(dirpath)
+        for entry in dirnames:
+            if (here / entry).is_symlink():
+                raise SkillPackError(f"{folder} contains a symlinked directory: {here / entry}")
+        for entry in filenames:
+            path = here / entry
+            if path.is_symlink():
+                raise SkillPackError(f"{folder} contains a symlinked file: {path}")
+            if entry != MANIFEST:
+                names.add(path.relative_to(folder).as_posix())
+    return names
 
 
 def _digest(data: bytes) -> str:
