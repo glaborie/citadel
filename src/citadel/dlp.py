@@ -397,8 +397,33 @@ def _is_name(candidate: str) -> bool:
     Compose` (0.85) as confidently as `Alice Smith`. Single names are kept:
     `alice approved` is a person too.
     """
+    if _is_metadata_token(candidate):
+        return False
     words = re.split(r"[^\w'-]+", candidate)
     return not any(word.casefold() in TECHNICAL_NOUNS for word in words if word)
+
+
+def _is_metadata_token(candidate: str) -> bool:
+    """A provenance pair, not a person: `score=0.000`.
+
+    `_evidence` writes `score=<score:.3f>` into the retrieved-evidence header, so
+    a chunk scoring `0.000305` renders as `score=0.000`, and presidio-analyzer:
+    2.2.362 answers PERSON 0.85 for exactly that string. Gated on the input
+    surface it denied a run whose task contained no PII at all (issue #267).
+
+    A name contains no `=` and never has a numeric right-hand side, so the shape
+    settles it without knowing the key. Narrow on purpose: `owner=Alice Smith`
+    is a person and still has to be redacted, and a space disqualifies the span.
+    No pattern is involved: this text is whatever the detector just returned.
+    """
+    key, separator, rendered = candidate.partition("=")
+    if not separator or not key or " " in candidate:
+        return False
+    try:
+        float(rendered)
+    except ValueError:
+        return False
+    return key.replace("_", "").replace(".", "").replace("-", "").isalpha()
 
 
 def _is_public_ip(candidate: str) -> bool:
