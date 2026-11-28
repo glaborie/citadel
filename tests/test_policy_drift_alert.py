@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import configparser
 import importlib.util
+import os
 from pathlib import Path
 from types import ModuleType
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "policy-drift-alert.py"
@@ -93,6 +96,73 @@ def test_the_make_target_calls_the_shared_script() -> None:
     assert "bash scripts/policy-drift.sh" in target, (
         "the human target and the timer must run the same command"
     )
+
+
+def _stand_ins(tmp_path: Path, status: str) -> tuple[Path, Path]:
+    """A `sops` that execs its single command argument, and a `docker` that exits `status`.
+
+    These are the only two things between the real script and the real verdict, so
+    the test keeps the production path and replaces decryption and Docker. `shift
+    2` is deliberate: `sops exec-env <file> '<command>'` is the shape the script
+    relies on, and a change to it should break this loudly rather than quietly.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    argv_log = tmp_path / "sops.argv"
+    sops = bin_dir / "sops"
+    sops.write_text(
+        "#!/bin/sh\n"
+        f'printf "%s\\n" "$#" >> "{argv_log}"\n'
+        f'for arg in "$@"; do printf "%s\\n" "$arg" >> "{argv_log}"; done\n'
+        "shift 2\n"
+        'exec sh -c "$1"\n',
+        encoding="utf-8",
+    )
+    docker = bin_dir / "docker"
+    docker.write_text(f"#!/bin/sh\nexit {status}\n", encoding="utf-8")
+    sops.chmod(0o755)
+    docker.chmod(0o755)
+    return bin_dir, argv_log
+
+
+@pytest.mark.parametrize(
+    ("stand_in_status", "expected_code", "expected_alert"),
+    [("0", 0, None), ("1", 1, "crit"), ("2", 2, "err")],
+)
+def test_every_exit_code_reaches_its_alert(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    stand_in_status: str,
+    expected_code: int,
+    expected_alert: str | None,
+) -> None:
+    """The bug of #287: a layer between the check and the wrapper rewrote the code.
+
+    `make` turned the check's 1 into 2, so real drift raised the warning alert and
+    never the critical one. Nothing asserted the code that came back, only the
+    shape of the command. Here the real script and the real `run_check` run end to
+    end; whatever the check returns is what the wrapper has to classify.
+    """
+    bin_dir, argv_log = _stand_ins(tmp_path, stand_in_status)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    alerts: list[tuple[str, str]] = []
+
+    code = cli.main(
+        check=lambda: cli.run_check(ROOT),
+        notify=lambda priority, message: alerts.append((priority, message)),
+        push_metrics=lambda _code: None,
+    )
+
+    assert code == expected_code, f"the check said {stand_in_status}, the wrapper returned {code}"
+    assert [priority for priority, _ in alerts] == (
+        [] if expected_alert is None else [expected_alert]
+    )
+
+    argv = argv_log.read_text(encoding="utf-8").splitlines()
+    assert argv[0] == "3", "sops takes exec-env, the file and ONE command argument"
+    assert argv[1] == "exec-env" and argv[2] == "secrets/citadel.env"
+    assert "python -m citadel.policy.drift" in argv[3]
+    assert "make" not in argv[3], "no make in the path, or the code is not the check's"
 
 
 def test_the_service_runs_the_wrapper_as_a_user_unit() -> None:

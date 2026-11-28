@@ -126,6 +126,26 @@ The wrapper sets `CITADEL_REPO_DIR` from its own location, so `cd` is a
 convenience. cron reports a non-zero exit to the owner when a mail transport
 exists; the log file carries the report either way.
 
+## Tests
+
+`tests/test_policy_drift_alert.py` runs the real script against a stand-in `sops`
+(which execs its single command argument) and a stand-in `docker` (which exits
+with a chosen status), then asserts 0 is quiet, 1 is `crit` and 2 is `err`. That
+is the guard against a layer rewriting the verdict, which is how the make defect
+of #287 stayed hidden: every existing check asserted the command's shape, none
+asserted the code that came back.
+
+`tests/test_policy_drift_live.py` does it on the stack, with a mutated copy of
+`policy/model.json` mounted over the image's own:
+
+```bash
+CITADEL_LIVE_TESTS=1 uv run pytest tests/test_policy_drift_live.py -v
+```
+
+It asserts exit 1 and a report naming the difference, then a clean run that exits
+0 with every tuple present — so the check provably reports without repairing. The
+gauge goes to a closed port, so a test run cannot publish a verdict.
+
 ## Limits
 
 `sops exec-env` failing to unwrap the secrets exits 1, the same code as drift, so
