@@ -34,6 +34,14 @@ Secrets files are mode 0644 because Compose mounts them as bind files and the
 container user is uid 10001. This is a single-user host; the `secrets/`
 directory stays out of git.
 
+Compose resolves those files against the directory it runs in and stores the
+resolved path in each container, so a stack started from a worktree keeps that
+worktree's paths. Once the worktree is pruned, a stopped container cannot start
+at all: the daemon fails the bind mount before the process exists and
+`docker compose up` aborts, taking the rest of the stack with it. `make up` and
+`make rebuild` retire those containers first (`scripts/reconcile-mounts.py`,
+issue #271) so compose recreates them from the checkout you invoked from.
+
 Check the invariant:
 
 ```bash
