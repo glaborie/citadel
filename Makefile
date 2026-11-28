@@ -14,7 +14,7 @@ up:  ## Start the stack, unwrapping secrets through sops
 	chmod +x scripts/provision-secrets.sh scripts/reconcile-mounts.py
 	sops exec-env secrets/citadel.env 'scripts/provision-secrets.sh \
 		&& scripts/reconcile-mounts.py \
-		&& docker compose up -d'
+		&& docker compose up -d --wait --wait-timeout 300'
 
 .PHONY: rebuild
 
@@ -23,12 +23,16 @@ up:  ## Start the stack, unwrapping secrets through sops
 # `--build` alone trusts the layer cache: it reported "Built" while the containers kept
 # running the previous code, which reads exactly like a fix that did not work. `up` has no
 # `--no-cache` of its own, so the build is its own step.
+#
+# `--wait` is what makes the target honest (#280): `up -d` returns 0 once the
+# containers exist, so a service whose healthcheck never passes (the reranker OOM
+# in #269) left a half-up stack behind a green `make up`.
 rebuild:  ## Rebuild images from scratch (no cache), then restart the stack
 	chmod +x scripts/provision-secrets.sh scripts/reconcile-mounts.py
 	sops exec-env secrets/citadel.env 'scripts/provision-secrets.sh \
 		&& scripts/reconcile-mounts.py \
 		&& docker compose build --no-cache \
-		&& docker compose up -d'
+		&& docker compose up -d --wait --wait-timeout 300'
 
 # The smell gate's version lives with its hashes, so `make check` and the smell-check
 # job cannot drift apart (#41). Blank if the requirements file is malformed, which is a
