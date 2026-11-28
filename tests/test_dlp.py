@@ -220,6 +220,81 @@ def test_technical_nouns_are_not_redacted(text: str, name: str) -> None:
     assert verdict.text == text
 
 
+def evidence_header(score: str) -> str:
+    return (
+        "[retrieved evidence - cite a chunk_id or source_uri you rely on]\n"
+        "chunk_id=9270c385-3bf3-5a61-b563-8c3ecadaac8b "
+        "source_uri=fs:runbooks/name-a-running-container.md "
+        f"revision=1 score={score}"
+    )
+
+
+def test_a_provenance_token_is_not_a_person() -> None:
+    """Issue #267: the detector scores `score=0.000` as a name at 0.85.
+
+    This is the header `_evidence` writes for a chunk whose score rounds to
+    `0.000`. Gated at the input surface it denied run 647222ee-… before any
+    model call, so the exact live payload is replayed here.
+    """
+    text = evidence_header("0.000")
+    verdict = dlp.inspect(
+        text, surface="input", analyzer_url=URL, opener=detector(person(text, "score=0.000"))
+    )
+
+    assert verdict.action == "pass"
+    assert verdict.findings == ()
+    assert verdict.text == text
+
+
+@pytest.mark.parametrize("token", ["revision=1", "step=3", "attempt=12", "score=0.000"])
+def test_a_numeric_key_value_pair_is_not_a_person(token: str) -> None:
+    text = f"header {token}"
+    verdict = dlp.inspect(
+        text, surface="input", analyzer_url=URL, opener=detector(person(text, token))
+    )
+    assert verdict.action == "pass"
+
+
+def test_a_name_after_an_equals_sign_is_still_a_person() -> None:
+    """The filter is the numeric shape, not `=`: a form value can be PII.
+
+    `owner=`, not `name=`: `name` is already a TECHNICAL_NOUNS entry, so that
+    key would pass for a reason unrelated to this filter.
+    """
+    text = "approved by owner=Alice Smith"
+    verdict = dlp.inspect(
+        text,
+        surface="output",
+        analyzer_url=URL,
+        opener=detector(person(text, "owner=Alice Smith")),
+    )
+
+    assert verdict.action == "redact"
+    assert verdict.text == "approved by <PERSON>"
+
+
+def test_a_key_value_address_still_blocks_at_input() -> None:
+    text = "recipient=alice@example.ch"
+    verdict = dlp.inspect(
+        text,
+        surface="input",
+        analyzer_url=URL,
+        opener=detector([{"entity_type": "EMAIL_ADDRESS", "start": 10, "end": 26, "score": 1}]),
+    )
+    assert verdict.action == "block"
+
+
+def test_a_credential_in_a_key_value_pair_is_still_blocked() -> None:
+    """Red team: the PERSON filter must not reach the hard rules."""
+    text = f"token={token()}"
+    verdict = dlp.inspect(
+        text, surface="output", analyzer_url=URL, opener=detector(person(text, text))
+    )
+
+    assert verdict.action == "block"
+    assert [finding.category for finding in verdict.findings] == ["GITHUB_TOKEN"]
+
+
 def test_overlapping_hits_are_redacted_once() -> None:
     text = "contact a@example.ch now"
     verdict = dlp.inspect(

@@ -114,6 +114,15 @@ TECHNICAL_NOUNS: frozenset[str] = frozenset(
     }
 )
 
+# Provenance metadata, not a person. `_evidence` in the orchestrator writes
+# `score=0.000` into the retrieved-evidence header (score `0.000305` at three
+# decimals) and presidio-analyzer:2.2.362 scores that exact literal PERSON 0.85,
+# which blocked the whole input surface: run 647222ee-… in lab-a, issue #267.
+# A name contains no `=` and never has a numeric right-hand side, so the shape
+# alone is enough. Narrow on purpose - `name=Alice Smith` is still a person and
+# has to be redacted - and separate from TECHNICAL_NOUNS, which filters words.
+METADATA_TOKEN: Final = re.compile(r"[A-Za-z_][\w.\-]*\s*=\s*[-+]?\d[\w.]*")
+
 # Credentials: no NER model will find these, so they are matched exactly.
 SECRET_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("GITHUB_TOKEN", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}")),
@@ -397,6 +406,8 @@ def _is_name(candidate: str) -> bool:
     Compose` (0.85) as confidently as `Alice Smith`. Single names are kept:
     `alice approved` is a person too.
     """
+    if METADATA_TOKEN.fullmatch(candidate):
+        return False
     words = re.split(r"[^\w'-]+", candidate)
     return not any(word.casefold() in TECHNICAL_NOUNS for word in words if word)
 
