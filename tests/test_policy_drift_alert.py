@@ -38,14 +38,16 @@ def _unit(path: Path) -> configparser.ConfigParser:
 def test_a_clean_store_is_quiet(capsys: object) -> None:
     alerts: list[tuple[str, str]] = []
 
-    assert cli.main(check=lambda: 0, notify=lambda p, m: alerts.append((p, m))) == 0
+    assert cli.main(check=lambda: 0, notify=lambda p, m: alerts.append((p, m)),
+             push_metrics=lambda _c: None) == 0
     assert alerts == [], "a passing hourly job must not send anything"
 
 
 def test_drift_alerts_at_crit_and_exits_one(capsys: object) -> None:
     alerts: list[tuple[str, str]] = []
 
-    assert cli.main(check=lambda: 1, notify=lambda p, m: alerts.append((p, m))) == 1
+    assert cli.main(check=lambda: 1, notify=lambda p, m: alerts.append((p, m)),
+             push_metrics=lambda _c: None) == 1
     assert [priority for priority, _ in alerts] == ["crit"]
     message = alerts[0][1]
     assert "POLICY DRIFT" in message
@@ -56,7 +58,8 @@ def test_could_not_compare_is_its_own_alert() -> None:
     """Exit 2 is a broken check, not a drifted store; conflating them gets the unit muted."""
     alerts: list[tuple[str, str]] = []
 
-    assert cli.main(check=lambda: 2, notify=lambda p, m: alerts.append((p, m))) == 2
+    assert cli.main(check=lambda: 2, notify=lambda p, m: alerts.append((p, m)),
+             push_metrics=lambda _c: None) == 2
     assert [priority for priority, _ in alerts] == ["err"]
     assert "could not compare" in alerts[0][1]
     assert "POLICY DRIFT:" not in alerts[0][1]
@@ -65,7 +68,8 @@ def test_could_not_compare_is_its_own_alert() -> None:
 def test_an_unexpected_exit_code_is_not_a_pass() -> None:
     alerts: list[tuple[str, str]] = []
 
-    assert cli.main(check=lambda: 125, notify=lambda p, m: alerts.append((p, m))) == 2
+    assert cli.main(check=lambda: 125, notify=lambda p, m: alerts.append((p, m)),
+             push_metrics=lambda _c: None) == 2
     assert "check exited 125" in alerts[0][1]
 
 

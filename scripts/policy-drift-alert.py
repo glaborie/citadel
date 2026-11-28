@@ -23,12 +23,15 @@ Nothing here writes to the store: the wrapper runs the read-only target.
 
 from __future__ import annotations
 
+import http.client
 import os
 import subprocess
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Final
+from urllib.parse import urlsplit
 
 TAG: Final = "citadel-policy-drift"
 
@@ -56,8 +59,14 @@ COMMAND: Final[tuple[str, ...]] = (
     "make policy-drift",
 )
 
+# The loopback publish of `pushgateway` in compose.yaml. Prometheus cannot scrape
+# a host timer, so the verdict travels the other way (see docs/architecture/metrics.md).
+PUSH_DEFAULT: Final = "http://127.0.0.1:19091"
+JOB: Final = "citadel_policy_drift"
+
 Check = Callable[[], int]
 Notify = Callable[[str, str], None]
+Push = Callable[[int], None]
 
 
 def repo_root() -> Path:
@@ -85,11 +94,65 @@ def syslog(priority: str, message: str) -> None:
         print(f"{TAG}: {message}", file=sys.stderr)
 
 
-def main(check: Check | None = None, notify: Notify | None = None) -> int:
+def payload(code: int, now: float) -> str:
+    """The gauges one run leaves behind, whatever the verdict.
+
+    The verdict is numeric so the alert is `max(...) > 0` rather than a label
+    comparison, and drift and "could not run" are different series so the second
+    can never satisfy the first.
+    """
+    drift = 1 if code == 1 else 0
+    failed = 0 if code in (0, 1) else 1
+    return (
+        "# TYPE citadel_policy_drift gauge\n"
+        f"citadel_policy_drift {drift}\n"
+        "# TYPE citadel_policy_drift_check_failed gauge\n"
+        f"citadel_policy_drift_check_failed {failed}\n"
+        "# TYPE citadel_policy_drift_last_run_timestamp_seconds gauge\n"
+        f"citadel_policy_drift_last_run_timestamp_seconds {now:.0f}\n"
+    )
+
+
+def push(code: int, url: str | None = None) -> None:
+    """Replace this job's series in the pushgateway. Raises on any failure."""
+    base = url or os.environ.get("CITADEL_PUSHGATEWAY_URL") or PUSH_DEFAULT
+    parts = urlsplit(base)
+    if parts.scheme != "http" or not parts.hostname:
+        raise ValueError(f"pushgateway URL must be http://host[:port], got {base!r}")
+    connection = http.client.HTTPConnection(parts.hostname, parts.port or 80, timeout=5)
+    try:
+        connection.request(
+            "POST",
+            f"/metrics/job/{JOB}",
+            body=payload(code, time.time()).encode(),
+            headers={"Content-Type": "text/plain"},
+        )
+        response = connection.getresponse()
+        response.read()
+        if response.status >= 300:
+            raise OSError(f"pushgateway answered {response.status}")
+    finally:
+        connection.close()
+
+
+def main(
+    check: Check | None = None,
+    notify: Notify | None = None,
+    push_metrics: Push | None = None,
+) -> int:
     runner = check if check is not None else (lambda: run_check(repo_root()))
     send = notify if notify is not None else syslog
+    publish = push_metrics if push_metrics is not None else push
 
     code = runner()
+    try:
+        publish(code)
+    except (OSError, ValueError) as exc:
+        # Telemetry is not a control (ADR-015): a pushgateway that is down must not
+        # turn a clean check into a failure, nor a drift into silence - the journal
+        # line and the unit state still carry the verdict.
+        send("err", f"policy drift metrics not pushed: {exc}")
+
     if code == 0:
         print("policy drift: none")
         return 0
