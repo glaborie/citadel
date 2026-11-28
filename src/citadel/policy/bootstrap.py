@@ -81,6 +81,17 @@ def user_id(username: str, token: str) -> str:
     return str(users[0]["id"])
 
 
+def sub_ids() -> dict[str, str]:
+    """Every dev username's Keycloak sub, which is what a tuple names.
+
+    Shared with `citadel.policy.drift`, so the expected tuple set is built one
+    way whether it is written (`make policy-bootstrap`) or compared
+    (`make policy-drift`).
+    """
+    token = admin_token()
+    return {user: user_id(user, token) for members in TENANTS.values() for user in members}
+
+
 def tuples_for(sub_ids: dict[str, str]) -> list[ClientTuple]:
     tools = load_catalog()
     out: list[ClientTuple] = []
@@ -153,8 +164,7 @@ def main() -> int:
 
     model = json.loads(MODEL_PATH.read_text(encoding="utf-8"))
 
-    token = admin_token()
-    sub_ids = {u: user_id(u, token) for members in TENANTS.values() for u in members}
+    subs = sub_ids()
 
     bootstrap = OpenFgaClient(configuration(api_url))
     try:
@@ -175,7 +185,7 @@ def main() -> int:
     )
     print(f"wrote authorization model {written.authorization_model_id}")
 
-    desired = tuples_for(sub_ids)
+    desired = tuples_for(subs)
     missing = new_tuples(desired, existing_tuples(api_url, store_id))
     if missing:
         client.write_tuples(missing)

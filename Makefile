@@ -43,7 +43,7 @@ POLICY_CLI = openfga/cli:latest@sha256:7a7f9fb0a27a788a0fa7907eb5fc751c3134ca077
 skills-lock:  ## Re-hash the skill packs after editing (bump their version too)
 	uv run python -m citadel.skills
 
-.PHONY: policy-model policy-bootstrap
+.PHONY: policy-model policy-bootstrap policy-drift
 
 # model.fga is the source of truth; model.json is the generated artifact the
 # container loads, so the api image never needs the OpenFGA CLI.
@@ -55,6 +55,13 @@ policy-model:  ## Regenerate policy/model.json from model.fga
 # this run only, and the always-on api never carries it (#273).
 policy-bootstrap:  ## Load the OpenFGA model and seed relations
 	docker compose --profile tools run --rm policy-bootstrap
+
+# Read-only, unlike the bootstrap: it compares the store with `policy/model.fga`,
+# the catalog and the versioned tuple set, so it is safe on a live stack and in
+# cron. Exit 1 is drift, 2 is "could not compare" (#277).
+policy-drift:  ## Report drift between the OpenFGA store and the versioned policy
+	docker compose --profile tools run --rm policy-bootstrap \
+		python -m citadel.policy.drift
 
 .PHONY: migrate
 
