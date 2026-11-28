@@ -1351,11 +1351,12 @@ def _model_reply(
     tools: tuple[RequestedTool, ...] = (),
     text: str = "",
     tokens: int = 240,
+    cost_usd: float = 2e-05,
 ) -> Reply:
     return Reply(
         content=text,
         tools=tools,
-        usage=_reported(prompt_tokens=tokens - 40),
+        usage=_reported(prompt_tokens=tokens - 40, cost_usd=cost_usd),
         model="scripted",
         latency_ms=4,
     )
@@ -1635,6 +1636,56 @@ def exec_run_budget(case_: Case, _: Path) -> Outcome:
     total_cost = trajectory.usage.cost_usd
     cost = "unreported" if total_cost is None else f"${total_cost:.6f}"
     return Outcome(ok, f"{trajectory.outcome} tokens={trajectory.usage.total} cost={cost}")
+
+
+def exec_cost_ceiling(case_: Case, _: Path) -> Outcome:
+    """RT-COST-02: the money ceiling stops a run that steps and tokens do not.
+
+    Two calls at $0.004 each cross a $0.005 ceiling while 800 tokens sit far
+    under a 100,000-token limit and two steps under a six-step limit, so the only
+    branch that can stop the run is `max_cost_usd`. The tool requested in the
+    crossing reply must not execute: the ceiling is checked before that reply's
+    calls are authorised, and the stop has to name the money, not just the
+    outcome.
+    """
+    budget = Budget(max_steps=6, max_tokens=100_000, max_cost_usd=0.005)
+    model = ScriptedClient(
+        [
+            _model_reply(
+                tools=(RequestedTool("read_logs", {"service": "checkout-api"}, f"c{index}"),),
+                tokens=400,
+                cost_usd=0.004,
+            )
+            for index in range(6)
+        ]
+    )
+    trajectory = run_agent(
+        complete=model.complete,
+        messages=[{"role": "user", "content": fixture_text("cost/climbing_cost.txt")}],
+        authorize=lambda tool: decision_of(tool=tool),
+        execute=lambda name, arguments: "unchanged",
+        gate=_gate_with([]),
+        budget=budget,
+    )
+
+    ceilings = [step for step in trajectory.steps if step.kind == "budget.exceeded"]
+    detail = ceilings[0].detail if ceilings else "no budget.exceeded step"
+    total = trajectory.usage.cost_usd
+    ok = (
+        trajectory.outcome == "budget_exceeded"
+        and len(ceilings) == 1
+        and detail.startswith("cost=")
+        and "max_cost_usd=" in detail
+        and trajectory.usage.total <= budget.max_tokens
+        and model.calls == 2
+        and model.calls < budget.max_steps
+        and total is not None
+        and budget.max_cost_usd is not None
+        and total > budget.max_cost_usd
+        and trajectory.tools_executed() == ("read_logs",)
+    )
+    cost = "unreported" if total is None else f"${total:.6f}"
+    return Outcome(ok, f"{trajectory.outcome} calls={model.calls} cost={cost} {detail}")
 
 
 def exec_eval_gate(case_: Case, _: Path) -> Outcome:
@@ -2012,6 +2063,7 @@ EXECUTORS: dict[str, Callable[[Case, Path], Outcome]] = {
     "RT-INJ-03": exec_tool_output_injection,
     "RT-INJ-05": exec_pr_body_override,
     "RT-COST-01": exec_run_budget,
+    "RT-COST-02": exec_cost_ceiling,
     "RT-DUR-01": exec_duplicate_side_effect,
     "RT-HITL-01": exec_self_approval,
     "RT-HITL-02": exec_approval_replay,
