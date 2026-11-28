@@ -115,6 +115,7 @@ async def run_task(
     next_step: Callable[[ModelStepRequest], ModelStepResult] | None = None,
     policy: PolicyOutcome | None = None,
     tool_status: str = "executed",
+    tool_flags: dict[str, list[str]] | None = None,
 ) -> tuple[ToolResult, list[ModelStepRequest], list[ToolCall], list[RunEnd]]:
     """Model step answers are taken in order; the last one repeats."""
     seen_requests: list[ModelStepRequest] = []
@@ -148,7 +149,11 @@ async def run_task(
     def stub_execute(item: ToolCall) -> ToolResult:
         seen_calls.append(item)
         return ToolResult(
-            status=tool_status, tool=item.tool, rule_id="tool.executed", detail="stub"
+            status=tool_status,
+            tool=item.tool,
+            rule_id="tool.executed",
+            detail="stub",
+            content_flags=(tool_flags or {}).get(item.tool, []),
         )
 
     env = await WorkflowEnvironment.start_time_skipping()
@@ -209,6 +214,26 @@ def test_the_specialist_reports_the_child_id_the_orchestrator_minted() -> None:
     _, _, calls, _ = asyncio.run(run_task([wants("restart_service"), answered()]))
 
     assert calls[0].workflow_id == child_workflow_id(task_input().run_id, "restart_service", 1)
+
+
+def test_a_flagged_observation_taints_every_later_tool_call() -> None:
+    """A write proposed after flagged content carries the flags to the approver (ADR-028).
+
+    The fetch is the observation; the restart the model asks for next is the
+    call a human must judge, so the taint has to ride on the ToolCall itself.
+    """
+    result, _requests, calls, ends = asyncio.run(
+        run_task(
+            [wants("fetch_page"), wants("restart_service"), answered("restarted it")],
+            tool_flags={"fetch_page": ["untrusted_external", "prompt_injection"]},
+        )
+    )
+
+    assert [call.tool for call in calls] == ["fetch_page", "restart_service"]
+    assert calls[0].content_flags == [], "the taint only exists after the fetch returns"
+    assert calls[1].content_flags == ["prompt_injection", "untrusted_external"]
+    assert result.content_flags == ["prompt_injection", "untrusted_external"]
+    assert ends[0].safety_flags == ["prompt_injection", "untrusted_external"]
 
 
 def test_a_denied_tool_is_fed_back_not_hidden() -> None:

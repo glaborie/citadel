@@ -30,6 +30,12 @@ class ToolCall:
     agent_id: str
     tool: str
     arguments: dict[str, Any] = field(default_factory=dict)
+    # Content labels the run accumulated from what it has read so far
+    # (untrusted_external, prompt_injection). The orchestrator fills them from
+    # every earlier observation, so an approval request can show the approver
+    # the taint the run carries, and the agent-approval path (ADR-028) can
+    # refuse a call flagged prompt_injection.
+    content_flags: list[str] = field(default_factory=list)
     approval_ref: str | None = None
     # The API-minted run token the sandbox verifies. Identity comes from it, so
     # the body's agent string is a claim the runner checks, never trusts.

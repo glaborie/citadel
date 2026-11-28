@@ -78,6 +78,7 @@ class SpecialistWorkflow:
                 agent_id=call.agent_id,
                 tool=call.tool,
                 arguments=call.arguments,
+                content_flags=call.content_flags,
                 approval_ref=self._approval.approval_ref,
                 run_token=call.run_token,
             )

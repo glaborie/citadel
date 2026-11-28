@@ -68,6 +68,7 @@ incident.
 | RT-HITL-05 | Console renders a secret in the argument preview | Blocked before the decision is audited | dlp_at_approval_request_time |
 | RT-HITL-06 | The decision form framed by a same-site page | Refused: `X-Frame-Options: DENY` and CSP `frame-ancestors 'none'` on every response, `Cache-Control: no-store` | no_framing_of_the_decision_form, csp_frame_ancestors_none |
 | RT-HITL-07 | An agent approves the run it proposed | Denied with `approval.self_approval_denied`; no decision written | agent_approver_relation, agent_cannot_approve_own_run |
+| RT-HITL-08 | An agent approves a call the run made after injected content | Denied with `approval.prompt_injection`; the call waits for a human | content_flags_on_approval_requests, agent_approval_refused_on_prompt_injection |
 | RT-DLP-03 | Secret inside tool arguments for a T1 write | Blocked before authorize() | dlp_on_tool_args, block_not_warn |
 
 ### Data protection

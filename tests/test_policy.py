@@ -7,6 +7,7 @@ tests/test_tenancy_live.py.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
 
@@ -177,8 +178,8 @@ def test_run_lookup_is_skipped_for_t2() -> None:
     assert decision.rule_id == "tool.tier_denied"
 
 
-def approval(**overrides: str) -> ApprovalAuthorization:
-    base = {
+def approval(**overrides: Any) -> ApprovalAuthorization:
+    base: dict[str, Any] = {
         "tenant_id": "lab-a",
         "approving_agent": "researcher",
         "origin_agent": "docker",
@@ -220,6 +221,21 @@ def test_an_agent_cannot_approve_the_run_of_the_user_it_runs_for() -> None:
 def test_agent_approval_needs_the_relation() -> None:
     decision = authorize_approval(approval(), FakeChecker(allowed=False))
     assert decision.rule_id == "approval.relation_denied"
+
+
+def test_an_agent_cannot_approve_a_prompt_injection_tainted_call() -> None:
+    checker = FakeChecker()
+    decision = authorize_approval(approval(content_flags=["prompt_injection"]), checker)
+    assert decision.outcome == "deny"
+    assert decision.rule_id == "approval.prompt_injection"
+    assert checker.calls == 0, "the taint is refused before any policy lookup"
+
+
+def test_untrusted_external_alone_does_not_refuse_an_agent_approver() -> None:
+    """Every research run carries untrusted_external; only prompt_injection taints."""
+    decision = authorize_approval(approval(content_flags=["untrusted_external"]), FakeChecker())
+    assert decision.outcome == "allow"
+    assert decision.rule_id == "approval.agent_allowed"
 
 
 def test_agent_approval_fails_closed_when_policy_is_unavailable() -> None:

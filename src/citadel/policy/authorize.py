@@ -18,7 +18,7 @@ Fail-closed rules, in the order they are enforced (docs/security/tool-tiers.md):
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 from citadel import metrics
@@ -51,6 +51,10 @@ class ApprovalAuthorization:
     approving_user: str
     origin_user: str
     tool: str
+    # The content flags the pending row records, read back by the API - never
+    # taken from the approver's request body. A call flagged prompt_injection
+    # is refused to an agent approver (ADR-028).
+    content_flags: list[str] = field(default_factory=list)
 
 
 def agent_object(tenant_id: str, agent_id: str) -> str:
@@ -155,8 +159,9 @@ def authorize_approval(
     """Decide whether an agent may approve a T1 call.
 
     Fail-closed at every step, in this order: identity present, tool known, tier is
-    T1, the two agents differ, the policy service answers, and the answer is yes.
-    T0 needs no approval; T2 is human-only.
+    T1, the two agents differ, the call is not injection-tainted, the policy
+    service answers, and the answer is yes. T0 needs no approval; T2 is
+    human-only.
     """
     tools = catalog if catalog is not None else load_catalog()
     denial = _denial(request, tools, checker)
@@ -185,6 +190,7 @@ def _denial(
         _identity_denial(request)
         or _catalog_denial(request, tools)
         or _four_eyes_denial(request, tools)
+        or _taint_denial(request, tools)
         or _policy_denial(request, checker, tools[request.tool])
     )
 
@@ -229,6 +235,25 @@ def _four_eyes_denial(
         return _deny(
             "approval.self_approval_denied",
             "an agent cannot approve a run it or its user proposed",
+            tools[request.tool].tier,
+        )
+    return None
+
+
+def _taint_denial(
+    request: ApprovalAuthorization, tools: dict[str, ToolSpec]
+) -> Decision | None:
+    """Rule: a call flagged prompt_injection is never an agent's decision (ADR-028).
+
+    The agent approver is exactly the component injected content is trying to
+    steer, so its authority collapses on the taint; the call stays pending and a
+    human decides it. `untrusted_external` alone does not refuse: it is the
+    steady state of every research run.
+    """
+    if "prompt_injection" in request.content_flags:
+        return _deny(
+            "approval.prompt_injection",
+            "the run read prompt-injection-flagged content; only a human may approve",
             tools[request.tool].tier,
         )
     return None

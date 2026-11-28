@@ -115,7 +115,7 @@ sequenceDiagram
         S->>S: execute in sandboxed runner
     else T1 write tool
         S->>T: request approval gate (wait)
-        T->>U: pending approval in console
+        T->>U: pending approval in console, with the run's content flags
         U->>T: approve/deny + reason (by reference, TTL)
         T->>A: approval event before resume
         T-->>S: resume with decision
@@ -181,7 +181,7 @@ MLflow stores versioned eval datasets and `mlflow.genai.evaluate()` results. Sco
 | Cross-tenant read | Mandatory tenant claim, RLS, per-tenant Qdrant collections, cache partition + red-team test |
 | Tool authority escalation | OpenFGA chokepoint; skills cannot grant tools; deny by default |
 | Unauthenticated tool call | Workers, `tool-runner` and the operator require a signed run token and authorise on its claims, so a network peer cannot write a policy decision, run a T0 command or drive the T1 writer as a tenant it holds no token for (ADR-027) |
-| Prompt injection via retrieved/web content | Untrusted labelling, guardrail checks, Researcher cannot call infra tools |
+| Prompt injection via retrieved/web content | Untrusted labelling, guardrail checks, Researcher cannot call infra tools; the labels travel on the tool call into the approval request and an agent approver is refused for a call flagged `prompt_injection` (ADR-028) |
 | Secret exfiltration to hosted model | Local fail-closed DLP, credential masking, no secrets in sandboxes |
 | Secret in a refusal message | The raw arguments are inspected before `build_argv`, so a rejected argument still meets the detector; refusals name the position and the class, never the value |
 | Duplicate side effects on retry | Durable idempotency keys + Postgres unique constraint; documented crash window |

@@ -52,6 +52,9 @@ one (ADR-020).
 - The text is prefixed `untrusted_external` before it reaches a model. A lexical
   detector adds `prompt_injection` when the page instructs the reader; the run
   continues read-only and both labels reach `tool.call` and `run.end`.
+- The labels accumulate on the run and ride on every tool call the orchestrator
+  delegates afterwards (`ToolCall.content_flags`), so a T1 request made after a
+  flagged observation carries the taint to the approval.
 - A T1 call suggested by a page still needs a human approval, and the Researcher
   has no T1 tool to call in the first place.
 
@@ -66,7 +69,7 @@ v0.1 allowlist contains exactly two tools:
 | `restart_service` | Docker | Restarts one named container/service | Service returns to previous running state |
 | `open_remediation_pr` | GitHub | Opens a draft PR with proposed change | PR can be closed without merge |
 
-Controls: T0 controls plus — full argument preview with rendered diff, policy rule that triggered the gate, retrieved evidence/citations, single approver, configurable TTL (default 5 minutes, `CITADEL_APPROVAL_TTL_SECONDS`) with **auto-deny**, mandatory reason, durable idempotency key, audit event written before Temporal resume. User cannot approve a run they requested. An agent approver is opt-in per tenant/tool through the `can_approve` relation and may approve only a run another agent proposed (ADR-022).
+Controls: T0 controls plus — full argument preview with rendered diff, policy rule that triggered the gate, retrieved evidence/citations, `content_flags_on_approval_requests` (the run's accumulated labels persist on the pending row and the console renders them, with a refusal-styled warning for `prompt_injection`), single approver, configurable TTL (default 5 minutes, `CITADEL_APPROVAL_TTL_SECONDS`) with **auto-deny**, mandatory reason, durable idempotency key, audit event written before Temporal resume. User cannot approve a run they requested. An agent approver is opt-in per tenant/tool through the `can_approve` relation and may approve only a run another agent proposed (ADR-022); `agent_approval_refused_on_prompt_injection` — a call the run proposed after reading content flagged `prompt_injection` is refused to an agent approver and waits for a human (ADR-028).
 
 ## T2 — Destructive / irreversible
 
@@ -79,8 +82,8 @@ If enabled in a later milestone: two distinct approvers, hardware/second-channel
 ## Approval workflow
 
 1. Specialist requests tool execution; policy returns `requires_approval` with tier and rule ID.
-2. The specialist records a pending approval row (arguments DLP-checked first) and the workflow waits.
-3. Approver authenticates via Keycloak; UI shows tool, canonical args, diff, evidence, risk and TTL.
+2. The specialist records a pending approval row (arguments DLP-checked first, content flags persisted) and the workflow waits.
+3. Approver authenticates via Keycloak; UI shows tool, canonical args, diff, evidence, risk, content flags and TTL.
 4. Approve/deny with reason is authorised server-side; event is hash-chained into audit **before** the workflow resumes.
 5. On approve, tool executes once with idempotency key. On deny/expiry, run records denial and stops that branch.
 

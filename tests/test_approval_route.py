@@ -328,7 +328,7 @@ def agent_env(
     rsa_key: rsa.RSAPrivateKey,
     run_private_key: Ed25519PrivateKey,
     analyzer: dict[str, list[dict[str, Any]]],
-) -> tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any]:
+) -> tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any, FakeDB]:
     db = FakeDB()
     db.run_owner = ("user-alice", "docker")
     events: list[dict[str, Any]] = []
@@ -365,13 +365,13 @@ def agent_env(
         )
         return token
 
-    return client, events, checker, token_for
+    return client, events, checker, token_for, db
 
 
 def test_an_agent_approval_is_audited_as_agent(
-    agent_env: tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any],
+    agent_env: tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any, FakeDB],
 ) -> None:
-    client, events, checker, token_for = agent_env
+    client, events, checker, token_for, _db = agent_env
     with mock.patch("citadel.api.app.asyncio.run", lambda coro: coro.close()):
         response = _post(client, token_for("researcher"), {"service": "checkout-api"})
 
@@ -388,9 +388,9 @@ def test_an_agent_approval_is_audited_as_agent(
 
 
 def test_an_agent_cannot_approve_the_run_it_proposed(
-    agent_env: tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any],
+    agent_env: tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any, FakeDB],
 ) -> None:
-    client, events, checker, token_for = agent_env
+    client, events, checker, token_for, _db = agent_env
     response = _post(client, token_for("docker"), {"service": "checkout-api"})
 
     assert response.status_code == 403
@@ -400,9 +400,9 @@ def test_an_agent_cannot_approve_the_run_it_proposed(
 
 
 def test_an_agent_cannot_approve_a_run_for_its_own_user(
-    agent_env: tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any],
+    agent_env: tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any, FakeDB],
 ) -> None:
-    client, events, checker, token_for = agent_env
+    client, events, checker, token_for, _db = agent_env
     response = _post(
         client,
         token_for("researcher", "user-alice"),
@@ -415,12 +415,39 @@ def test_an_agent_cannot_approve_a_run_for_its_own_user(
 
 
 def test_an_agent_without_the_relation_cannot_approve(
-    agent_env: tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any],
+    agent_env: tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any, FakeDB],
 ) -> None:
-    client, events, checker, token_for = agent_env
+    client, events, checker, token_for, _db = agent_env
     checker.allowed = False
     response = _post(client, token_for("researcher"), {"service": "checkout-api"})
 
     assert response.status_code == 403
     assert response.json()["detail"]["rule_id"] == "approval.relation_denied"
     assert events == []
+
+
+def test_an_agent_cannot_approve_a_prompt_injection_tainted_call(
+    agent_env: tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any, FakeDB],
+) -> None:
+    """The taint is the pending row's; the agent path collapses on it (ADR-028)."""
+    client, events, checker, token_for, db = agent_env
+    db.pending_flags = (["untrusted_external", "prompt_injection"],)
+    response = _post(client, token_for("researcher"), {"service": "checkout-api"})
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["rule_id"] == "approval.prompt_injection"
+    assert events == []
+    assert checker.agents == [], "the taint is refused before any policy lookup"
+
+
+def test_an_agent_may_approve_a_call_only_marked_untrusted(
+    agent_env: tuple[TestClient, list[dict[str, Any]], _ApprovalChecker, Any, FakeDB],
+) -> None:
+    """untrusted_external is the steady state of a research run, not a refusal."""
+    client, events, checker, token_for, db = agent_env
+    db.pending_flags = (["untrusted_external"],)
+    with mock.patch("citadel.api.app.asyncio.run", lambda coro: coro.close()):
+        response = _post(client, token_for("researcher"), {"service": "checkout-api"})
+
+    assert response.status_code == 200
+    assert [event["event_type"] for event in events] == ["approval.decision"]

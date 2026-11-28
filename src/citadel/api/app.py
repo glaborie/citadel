@@ -513,6 +513,14 @@ def create_app(
                         "rule_id": "approval.run_mismatch",
                     },
                 )
+            # The taint is what the pending row records (ADR-028), read back
+            # here: the caller's body never gets to claim the call is clean.
+            with tenant_connection(_dsn(), approver.tenant_id) as conn:
+                pending = conn.execute(
+                    "SELECT content_flags FROM approval_requests"
+                    " WHERE run_id = %s AND tool = %s AND status = 'pending'",
+                    (body.run_id, body.tool),
+                ).fetchone()
             verdict = authorize_approval(
                 ApprovalAuthorization(
                     tenant_id=approver.tenant_id,
@@ -521,6 +529,7 @@ def create_app(
                     approving_user=approver.on_behalf_of or "",
                     origin_user=run_user,
                     tool=body.tool,
+                    content_flags=list(pending[0]) if pending else [],
                 ),
                 _checker(),
             )
