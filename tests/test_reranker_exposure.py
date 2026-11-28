@@ -71,6 +71,19 @@ def test_reranker_runs_unprivileged_with_dropped_capabilities() -> None:
     )
 
 
+def test_reranker_memory_limit_covers_the_measured_warmup() -> None:
+    """Issue #269: warmup peaked at 1365 MiB (cgroup `memory.peak`), so the
+    1024m ceiling that preceded it killed the server before it served, and
+    nothing depended on its health, so the loss was silent. The floor keeps a
+    future edit from walking the value back under the measurement."""
+    block = _service_block(COMPOSE_PATH.read_text(encoding="utf-8"), "reranker")
+    limit = re.search(r"^    mem_limit: (\d+)m$", block, re.MULTILINE)
+    assert limit is not None, "the reranker must declare a memory ceiling in MiB"
+    assert int(limit.group(1)) >= 1536, (
+        "warmup needs 1365 MiB; 1024m OOM-kills it before it serves (issue #269)"
+    )
+
+
 def test_reranker_serves_on_an_unprivileged_port_everywhere() -> None:
     """TEI's default port 80 needs CAP_NET_BIND_SERVICE, which a
     capability-dropped user cannot hold. Port, healthcheck, compose caller and

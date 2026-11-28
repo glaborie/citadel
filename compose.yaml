@@ -483,9 +483,11 @@ services:
     tmpfs:
       - /tmp
     pids_limit: 128
-    # TEI's warmup spikes past 512m (137/OOM at 512m, measured); the steady
-    # footprint is well under this.
-    mem_limit: 1024m
+    # Measured on this image (issue #269): warmup peaks at 1365 MiB and a full
+    # 50-candidate /rerank adds about 1 MiB, so the ceiling is set by warmup,
+    # not by load. 1024m OOM-killed the server before it ever served. 1792m
+    # leaves roughly 30% over the measured peak.
+    mem_limit: 1792m
     healthcheck:
       # A bash TCP probe needs nothing else in the image.
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080"]
