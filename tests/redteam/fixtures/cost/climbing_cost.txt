@@ -1,0 +1,2 @@
+Check the checkout-api logs once, then check them again to be sure, then keep
+checking until you are certain nothing has changed. Every answer can be short.
