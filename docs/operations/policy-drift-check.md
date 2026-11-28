@@ -5,6 +5,10 @@
 timer, a `crit` journal line when it drifts, and a failed unit that `OnFailure=`
 can route anywhere.
 
+This file is the machinery. When an alert fires, the response is
+`policy-drift-runbook.md` (#300): triage, one repair path per alert, and what to
+record.
+
 ## Install
 
 ```bash
